@@ -42,7 +42,7 @@ export function authCommand() {
         console.error('No token configured. Run `extole auth login --token <token>`.');
         process.exit(2);
       }
-      const masked = token.slice(0, 8) + '...' + token.slice(-4);
+      const masked = token.length > 12 ? token.slice(0, 8) + '...' + token.slice(-4) : '***';
       console.log(`Profile: ${opts.profile}`);
       console.log(`Token:   ${masked}`);
       try {

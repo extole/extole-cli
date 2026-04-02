@@ -2,6 +2,9 @@ import { Command } from 'commander';
 import { resolveToken } from '../config.js';
 import { apiJson, apiFetch } from '../api.js';
 import { printJson, printJsonText } from '../output.js';
+import { collect, sleep } from '../utils.js';
+
+const REPORT_POLL_MAX = 240; // 6 minutes at 1.5s intervals
 
 export function reportsCommand() {
   const reports = new Command('reports').description('List report types and run on-demand reports');
@@ -76,8 +79,13 @@ export function reportsCommand() {
         parameters[kv.slice(0, idx)] = kv.slice(idx + 1);
       }
       if (opts.days && !parameters.time_range) {
+        const days = parseInt(opts.days, 10);
+        if (isNaN(days) || days <= 0) {
+          console.error('--days must be a positive integer');
+          process.exit(2);
+        }
         const end = new Date();
-        const start = new Date(end.getTime() - parseInt(opts.days) * 86400 * 1000);
+        const start = new Date(end.getTime() - days * 86400 * 1000);
         parameters.time_range = `${start.toISOString()}/${end.toISOString()}`;
       }
 
@@ -92,7 +100,13 @@ export function reportsCommand() {
         console.error(`Create failed ${createRes.status}: ${createText.slice(0, 300)}`);
         process.exit(1);
       }
-      const report = JSON.parse(createText);
+      let report;
+      try {
+        report = JSON.parse(createText);
+      } catch {
+        console.error(`Non-JSON response from report creation: ${createText.slice(0, 200)}`);
+        process.exit(1);
+      }
       const reportId = report.report_id;
       console.error(`Created report ${reportId}  status=${report.status}`);
 
@@ -102,7 +116,13 @@ export function reportsCommand() {
       const frames = ['⠋','⠙','⠹','⠸','⠼','⠴','⠦','⠧','⠇','⠏'];
       let frame = 0;
       let status = report.status;
+      let pollAttempts = 0;
       while (status !== 'DONE' && status !== 'FAILED') {
+        if (++pollAttempts > REPORT_POLL_MAX) {
+          process.stderr.write('\r\x1b[K');
+          console.error(`Report did not complete after ${REPORT_POLL_MAX} attempts. Last status: ${status}`);
+          process.exit(1);
+        }
         await sleep(1500);
         const poll = await apiJson(`/v4/reports/${reportId}`, token);
         status = poll.status;
@@ -128,12 +148,4 @@ export function reportsCommand() {
     });
 
   return reports;
-}
-
-function collect(val, prev) {
-  return prev.concat([val]);
-}
-
-function sleep(ms) {
-  return new Promise(r => setTimeout(r, ms));
 }

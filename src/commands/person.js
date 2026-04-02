@@ -1,21 +1,38 @@
 import { Command } from 'commander';
-import { resolveToken } from '../config.js';
-import { apiJson } from '../api.js';
+import { resolveToken, PERSON_BASE } from '../config.js';
 import { printJson } from '../output.js';
 
-const PERSON_BASE = 'https://api.extole.io';
+const REQUEST_TIMEOUT_MS = 30_000;
+const MAX_POLL_ERRORS = 10;
+const SEEN_MAX_SIZE = 5000;
+const SEEN_KEEP_SIZE = 4000;
 
 async function personApiFetch(path, token) {
   const { default: fetch } = await import('node-fetch');
-  const res = await fetch(`${PERSON_BASE}${path}`, {
-    headers: {
-      'Authorization': `Bearer ${token}`,
-      'Accept': 'application/json',
-    },
-  });
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS);
+  let res;
+  try {
+    res = await fetch(`${PERSON_BASE}${path}`, {
+      signal: controller.signal,
+      headers: {
+        'Authorization': `Bearer ${token}`,
+        'Accept': 'application/json',
+      },
+    });
+  } catch (e) {
+    if (e.name === 'AbortError') throw new Error(`Request timed out after ${REQUEST_TIMEOUT_MS / 1000}s`);
+    throw e;
+  } finally {
+    clearTimeout(timer);
+  }
   const text = await res.text();
   if (!res.ok) throw new Error(`API error ${res.status}: ${text.slice(0, 300)}`);
-  return JSON.parse(text);
+  try {
+    return JSON.parse(text);
+  } catch {
+    throw new Error(`Non-JSON response (${res.status}): ${text.slice(0, 200)}`);
+  }
 }
 
 export async function findPerson(email, token) {
@@ -70,21 +87,33 @@ export function personCommand() {
       const personId = match.id;
 
       if (!opts.watch) {
-        const steps = await personApiFetch(`/v5/persons/${personId}/steps?limit=${opts.limit}`, token);
+        const limit = parseInt(opts.limit, 10);
+        if (isNaN(limit) || limit <= 0) {
+          console.error('--limit must be a positive integer');
+          process.exit(2);
+        }
+        const steps = await personApiFetch(`/v5/persons/${personId}/steps?limit=${limit}`, token);
         printJson(steps, opts);
         return;
       }
 
       // Watch mode — poll for new steps
       const seen = new Set();
+      let errorCount = 0;
       if (!opts.json) console.error(`Watching steps for ${opts.email} — Ctrl+C to stop\n`);
 
       async function poll() {
         try {
           const steps = await personApiFetch(`/v5/persons/${personId}/steps?limit=50`, token);
+          errorCount = 0;
           for (const step of steps.reverse()) {
             if (!seen.has(step.id)) {
               seen.add(step.id);
+              if (seen.size > SEEN_MAX_SIZE) {
+                const arr = [...seen];
+                seen.clear();
+                arr.slice(-SEEN_KEEP_SIZE).forEach(id => seen.add(id));
+              }
               if (opts.json) {
                 printJson(step, opts);
               } else {
@@ -98,6 +127,10 @@ export function personCommand() {
           }
         } catch (e) {
           console.error(`poll error: ${e.message}`);
+          if (++errorCount >= MAX_POLL_ERRORS) {
+            console.error('Too many consecutive poll errors, stopping.');
+            process.exit(1);
+          }
         }
       }
 

@@ -1,23 +1,43 @@
 import { Command } from 'commander';
-import { resolveToken } from '../config.js';
+import { resolveToken, PERSON_BASE } from '../config.js';
 import { printJson } from '../output.js';
+import { collect } from '../utils.js';
+import { findPerson } from './person.js';
 
-const STREAM_BASE = 'https://api.extole.io';
+const REQUEST_TIMEOUT_MS = 30_000;
+const MAX_POLL_ERRORS = 10;
+const SEEN_MAX_SIZE = 5000;
+const SEEN_KEEP_SIZE = 4000;
 
 async function streamFetch(path, token, options = {}) {
   const { default: fetch } = await import('node-fetch');
-  const res = await fetch(`${STREAM_BASE}${path}`, {
-    ...options,
-    headers: {
-      'Authorization': `Bearer ${token}`,
-      'Content-Type': 'application/json',
-      'Accept': 'application/json',
-      ...(options.headers || {}),
-    },
-  });
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS);
+  let res;
+  try {
+    res = await fetch(`${PERSON_BASE}${path}`, {
+      ...options,
+      signal: controller.signal,
+      headers: {
+        'Authorization': `Bearer ${token}`,
+        'Content-Type': 'application/json',
+        'Accept': 'application/json',
+        ...(options.headers || {}),
+      },
+    });
+  } catch (e) {
+    if (e.name === 'AbortError') throw new Error(`Request timed out after ${REQUEST_TIMEOUT_MS / 1000}s`);
+    throw e;
+  } finally {
+    clearTimeout(timer);
+  }
   const text = await res.text();
   if (!res.ok) throw new Error(`API error ${res.status}: ${text.slice(0, 300)}`);
-  return JSON.parse(text);
+  try {
+    return JSON.parse(text);
+  } catch {
+    throw new Error(`Non-JSON response (${res.status}): ${text.slice(0, 200)}`);
+  }
 }
 
 async function createStream(token) {
@@ -38,7 +58,9 @@ async function addFilter(streamId, filter, token) {
 async function deleteStream(streamId, token) {
   try {
     await streamFetch(`/v6/event-streams/${streamId}/delete`, token, { method: 'POST' });
-  } catch { /* best effort */ }
+  } catch (e) {
+    process.stderr.write(`Warning: stream cleanup failed: ${e.message}\n`);
+  }
 }
 
 async function readEvents(streamId, token, since) {
@@ -109,15 +131,10 @@ export function streamCommand() {
         filterPromises.push(addFilter(streamId, { type: 'SANDBOX', sandboxes: [opts.sandbox] }, token));
       }
       if (opts.email) {
-        // Look up person ID for PERSON_ID filter
         try {
-          const { default: fetch } = await import('node-fetch');
-          const res = await fetch(`https://api.extole.io/v5/persons?identity_key_value=${encodeURIComponent(opts.email)}&limit=1`, {
-            headers: { 'Authorization': `Bearer ${token}`, 'Accept': 'application/json' },
-          });
-          const people = await res.json();
-          if (Array.isArray(people) && people.length > 0) {
-            filterPromises.push(addFilter(streamId, { type: 'PERSON_ID', person_ids: [people[0].id] }, token));
+          const match = await findPerson(opts.email, token);
+          if (match) {
+            filterPromises.push(addFilter(streamId, { type: 'PERSON_ID', person_ids: [match.id] }, token));
           } else {
             process.stderr.write(`Warning: no person found for ${opts.email}, streaming without person filter\n`);
           }
@@ -133,14 +150,21 @@ export function streamCommand() {
       // Poll for events
       const seen = new Set();
       let since = new Date().toISOString();
+      let errorCount = 0;
 
       async function poll() {
         try {
           const items = await readEvents(streamId, token, since);
+          errorCount = 0;
           for (const item of items) {
             const id = item.event_id || JSON.stringify(item);
             if (!seen.has(id)) {
               seen.add(id);
+              if (seen.size > SEEN_MAX_SIZE) {
+                const arr = [...seen];
+                seen.clear();
+                arr.slice(-SEEN_KEEP_SIZE).forEach(i => seen.add(i));
+              }
               // Skip internal stream management events
               const evName = item.event?.name || '';
               if (evName === 'config_change') continue;
@@ -152,14 +176,14 @@ export function streamCommand() {
           }
         } catch (e) {
           process.stderr.write(`poll error: ${e.message}\n`);
+          if (++errorCount >= MAX_POLL_ERRORS) {
+            process.stderr.write('Too many consecutive poll errors, stopping.\n');
+            process.exit(1);
+          }
         }
       }
 
       await poll();
       setInterval(poll, 2500);
     });
-}
-
-function collect(val, prev) {
-  return prev.concat([val]);
 }

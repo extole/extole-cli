@@ -2,6 +2,7 @@ import { Command } from 'commander';
 import { resolveToken } from '../config.js';
 import { apiJson, apiFetch } from '../api.js';
 import { printJson } from '../output.js';
+import { collect, sleep } from '../utils.js';
 import { findPerson, getPersonSteps } from './person.js';
 
 
@@ -81,17 +82,22 @@ export function eventsCommand() {
         process.exit(2);
       }
 
+      const watchTimeout = parseInt(opts.watchTimeout, 10);
+      if (isNaN(watchTimeout) || watchTimeout <= 0) {
+        console.error('--watch-timeout must be a positive integer');
+        process.exit(2);
+      }
+
       const match = await findPerson(email, token);
       if (!match) {
         console.error(`No person found for ${email} — cannot watch`);
         process.exit(1);
       }
 
-      const timeoutMs = parseInt(opts.watchTimeout) * 1000;
-      const deadline = Date.now() + timeoutMs;
+      const deadline = Date.now() + watchTimeout * 1000;
       const seen = new Set();
 
-      console.error(`\nWatching steps for ${email} for ${opts.watchTimeout}s...\n`);
+      console.error(`\nWatching steps for ${email} for ${watchTimeout}s...\n`);
 
       while (Date.now() < deadline) {
         await sleep(2000);
@@ -119,27 +125,8 @@ export function eventsCommand() {
         }
       }
 
-      console.error(`\nDone watching (${opts.watchTimeout}s).`);
+      console.error(`\nDone watching (${watchTimeout}s).`);
     });
 
   return events;
-}
-
-function collect(val, prev) {
-  return prev.concat([val]);
-}
-
-function sleep(ms) {
-  return new Promise(r => setTimeout(r, ms));
-}
-
-function parseDuration(s) {
-  if (!s) return null;
-  const m = s.match(/^(\d+)(m|h|d)$/);
-  if (!m) return null;
-  const n = parseInt(m[1]);
-  if (m[2] === 'm') return n * 60 * 1000;
-  if (m[2] === 'h') return n * 3600 * 1000;
-  if (m[2] === 'd') return n * 86400 * 1000;
-  return null;
 }
