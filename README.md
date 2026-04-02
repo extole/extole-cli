@@ -30,16 +30,22 @@ Verifies connectivity. Exit 0 = OK, exit 1 = failure.
 ## Events
 
 ```
-extole events stream                          # tail live events (polls every 2.5s)
-extole events stream --filter lead_created    # filter by event name
-extole events stream --since 10m             # start window (10m, 1h, 2h, etc.)
-extole events stream --source salesforce_crm  # filter by app_type
-extole events stream --json                   # newline-delimited JSON output
-
 extole events fire <event_name>               # fire a single event
 extole events fire lead_created --email jane@example.com --advocate_code ABC123
 extole events fire <event_name> --param key=value [--param key=value ...]
 extole events fire <event_name> --dry-run     # print payload without sending
+extole events fire <event_name> --watch       # fire then tail steps for --email for 15s
+extole events fire <event_name> --watch --watch-timeout 30
+```
+
+## Person
+
+```
+extole person get --email jane@example.com         # profile data
+extole person steps --email jane@example.com       # step history (default 25)
+extole person steps --email jane@example.com --limit 100
+extole person steps --email jane@example.com --watch   # tail live steps (Ctrl+C to stop)
+extole person steps --email jane@example.com --watch --json
 ```
 
 ## Reports
@@ -53,7 +59,7 @@ extole reports run --type <report_type> [options]
   -p key=value         report parameter (repeatable)
   --wait               poll until complete
   --download           download and print result (implies --wait)
-  --json               emit raw API response
+  --compact            strip nulls and empty fields
 ```
 
 Examples:
@@ -77,6 +83,7 @@ extole reports run --type summary_per_program --days 365 \
 ## Output conventions
 
 - Human-readable by default; `--json` on all commands
+- `--compact` strips nulls and empty fields (useful for piping to agents)
 - Exit 0 = success, 1 = API error, 2 = auth/config error
 - Data goes to stdout, status/progress goes to stderr (pipeable)
 
