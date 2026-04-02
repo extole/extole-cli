@@ -11,11 +11,10 @@ export function pingCommand() {
       const token = resolveToken(opts);
       try {
         const start = Date.now();
-        const res = await apiFetch('/v4/me', token);
+        const res = await apiFetch('/v4/report-types?limit=1', token);
         const ms = Date.now() - start;
         if (res.ok) {
-          const data = await res.json();
-          console.log(`OK  ${ms}ms  client=${data.client_id || data.id || '(unknown)'}`);
+          console.log(`OK  ${ms}ms`);
           process.exit(0);
         } else {
           console.error(`FAIL  ${res.status}  ${ms}ms`);

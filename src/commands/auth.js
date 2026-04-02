@@ -47,9 +47,8 @@ export function authCommand() {
       console.log(`Token:   ${masked}`);
       try {
         const start = Date.now();
-        const data = await apiJson('/v4/me', token);
+        await apiJson('/v4/report-types?limit=1', token);
         const ms = Date.now() - start;
-        console.log(`Client:  ${data.client_id || data.id || '(unknown)'}`);
         console.log(`Ping:    ${ms}ms — OK`);
       } catch (e) {
         console.error(`Ping failed: ${e.message}`);

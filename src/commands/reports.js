@@ -13,7 +13,7 @@ export function reportsCommand() {
     .option('--profile <profile>', 'Profile name', 'default')
     .action(async (opts) => {
       const token = resolveToken(opts);
-      const data = await apiJson('/v4/report-runners', token);
+      const data = await apiJson('/v7/report-runners', token);
       const runners = Array.isArray(data) ? data : (data.runners || []);
       if (opts.json) {
         process.stdout.write(JSON.stringify(runners, null, 2) + '\n');
@@ -58,6 +58,7 @@ export function reportsCommand() {
     .description('Create an on-demand report')
     .requiredOption('--type <report_type>', 'Report type (e.g. summary, summary_per_program)')
     .option('-p, --param <kv>', 'key=value parameter (repeatable)', collect, [])
+    .option('--days <n>', 'Shortcut: set time_range to last N days')
     .option('--wait', 'Poll until report is complete')
     .option('--download', 'Download and print result (implies --wait)')
     .option('--json', 'Emit raw API response')
@@ -70,6 +71,11 @@ export function reportsCommand() {
         const idx = kv.indexOf('=');
         if (idx < 0) { console.error(`Invalid param (expected key=value): ${kv}`); process.exit(2); }
         parameters[kv.slice(0, idx)] = kv.slice(idx + 1);
+      }
+      if (opts.days && !parameters.time_range) {
+        const end = new Date();
+        const start = new Date(end.getTime() - parseInt(opts.days) * 86400 * 1000);
+        parameters.time_range = `${start.toISOString()}/${end.toISOString()}`;
       }
 
       // Create report
@@ -91,14 +97,16 @@ export function reportsCommand() {
       if (!opts.wait && !opts.download) return;
 
       // Poll until done
+      const frames = ['⠋','⠙','⠹','⠸','⠼','⠴','⠦','⠧','⠇','⠏'];
+      let frame = 0;
       let status = report.status;
       while (status !== 'DONE' && status !== 'FAILED') {
-        await sleep(2000);
+        await sleep(1500);
         const poll = await apiJson(`/v4/reports/${reportId}`, token);
         status = poll.status;
-        if (!opts.json) process.stderr.write(`  polling... ${status}\r`);
+        if (!opts.json) process.stderr.write(`\r${frames[frame++ % frames.length]}  ${status}    `);
       }
-      if (!opts.json) process.stderr.write('\n');
+      if (!opts.json) process.stderr.write('\r\x1b[K');
 
       if (status === 'FAILED') {
         console.error('Report failed.');
