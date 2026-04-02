@@ -40,3 +40,4 @@ export function resolveToken(options) {
 
 export const BASE_URL = 'https://my.extole.com';
 export const PERSON_BASE = 'https://api.extole.io';
+export const PLURIBUS_BASE = 'https://pluribus.extole.io';
