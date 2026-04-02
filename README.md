@@ -53,19 +53,19 @@ extole stream --app-type salesforce_crm              # only events from Salesfor
 
 | Type | What it is |
 |---|---|
-| `INPUT` | Business events fired by integrations (lead_created, opportunity_closedwon, etc.) — usually the right starting point |
+| `INPUT` | Business events fired by integrations (lead_created, opportunity_closedwon, etc.) |
 | `REWARD` | Reward state transitions (issued, fulfilled, redeemed) |
-| `STEP` | Internal Extole processing steps triggered by input events — plumbing, usually noisy |
+| `STEP` | Processing steps triggered by input events |
 | `SHARE` | Share link clicks and share actions |
 | `REFERRED` / `REFERRED_BY` | Friend-side referral events |
 | `IDENTIFIED` | Identity resolution events |
 | `REDEEMED` | Redemption events |
 | `MESSAGE` | Email/message delivery events |
 | `SEND_REWARD` | Reward send attempts |
-| `INTERNAL` | Internal system events — almost always noise |
+| `INTERNAL` | Internal system events |
 | `DATA_INTELLIGENCE` | Fraud/quality scoring events |
 | `AUDIENCE_MEMBERSHIP_*` | Audience list membership changes |
-| `ACTION` | UI-confirmed type, not in Java enum — treat as legacy |
+| `ACTION` | Legacy action events |
 
 ## Events
 
