@@ -2,26 +2,8 @@ import { Command } from 'commander';
 import { resolveToken } from '../config.js';
 import { apiJson, apiFetch } from '../api.js';
 import { printJson } from '../output.js';
+import { findPerson, getPersonSteps } from './person.js';
 
-const PERSON_BASE = 'https://api.extole.io';
-
-async function findPersonId(email, token) {
-  const { default: fetch } = await import('node-fetch');
-  const res = await fetch(`${PERSON_BASE}/v5/persons?identity_key_value=${encodeURIComponent(email)}&limit=1`, {
-    headers: { 'Authorization': `Bearer ${token}`, 'Accept': 'application/json' },
-  });
-  const data = await res.json();
-  return Array.isArray(data) && data.length > 0 ? data[0].id : null;
-}
-
-async function getPersonSteps(personId, token, limit = 50) {
-  const { default: fetch } = await import('node-fetch');
-  const res = await fetch(`${PERSON_BASE}/v5/persons/${personId}/steps?limit=${limit}`, {
-    headers: { 'Authorization': `Bearer ${token}`, 'Accept': 'application/json' },
-  });
-  const data = await res.json();
-  return Array.isArray(data) ? data : [];
-}
 
 function formatEvent(ev, opts) {
   if (opts.json) {
@@ -38,52 +20,6 @@ function formatEvent(ev, opts) {
 export function eventsCommand() {
   const events = new Command('events');
 
-  events
-    .command('steps')
-    .description('Tail live steps for a person (polls every 2.5s)')
-    .requiredOption('--email <email>', 'Person to watch')
-    .option('--filter <event_name>', 'Only show steps matching this name')
-    .option('--since <duration>', 'Start window (e.g. 10m, 1h)', '10m')
-    .option('--json', 'Emit one JSON object per line')
-    .option('--compact', 'Strip nulls and empty fields from JSON output')
-    .option('--token <token>', 'Override token')
-    .option('--profile <profile>', 'Profile name', 'default')
-    .action(async (opts) => {
-      const token = resolveToken(opts);
-      const sinceMs = parseDuration(opts.since);
-      const sinceDate = sinceMs ? new Date(Date.now() - sinceMs) : new Date(opts.since);
-
-      const personId = await findPersonId(opts.email, token);
-      if (!personId) {
-        console.error(`No person found for ${opts.email}`);
-        process.exit(1);
-      }
-
-      if (!opts.json) console.error(`Streaming events for ${opts.email} since ${sinceDate.toISOString()} — Ctrl+C to stop`);
-
-      const seen = new Set();
-
-      async function poll() {
-        try {
-          const steps = await getPersonSteps(personId, token, 50);
-          const matching = steps.filter(s => {
-            if (seen.has(s.id)) return false;
-            if (new Date(s.event_date || s.created_date) < sinceDate) return false;
-            if (opts.filter && s.name !== opts.filter) return false;
-            return true;
-          });
-          for (const step of matching.reverse()) {
-            seen.add(step.id);
-            formatEvent(step, opts);
-          }
-        } catch (e) {
-          if (!opts.json) console.error(`poll error: ${e.message}`);
-        }
-      }
-
-      await poll();
-      setInterval(poll, 2500);
-    });
 
   events
     .command('fire <event_name>')
@@ -94,8 +30,8 @@ export function eventsCommand() {
     .option('--amount <amount>', 'amount param shortcut')
     .option('-p, --param <kv>', 'key=value param (repeatable)', collect, [])
     .option('--dry-run', 'Print request payload without sending')
-    .option('--follow', 'After firing, tail the event stream for this email for 15s')
-    .option('--follow-timeout <seconds>', 'How long to tail when using --follow', '15')
+    .option('--watch', 'After firing, tail the event stream for this email for 15s')
+    .option('--watch-timeout <seconds>', 'How long to tail when using --watch', '15')
     .option('--json', 'Emit raw API response')
     .option('--compact', 'Strip nulls and empty fields from JSON output')
     .option('--token <token>', 'Override token')
@@ -136,31 +72,31 @@ export function eventsCommand() {
         console.error(`OK  ${res.status}  fired ${eventName}`);
       }
 
-      if (!opts.follow) return;
+      if (!opts.watch) return;
 
       // Tail person steps for this email for N seconds
       const email = opts.email || data.email;
       if (!email) {
-        console.error('--follow requires --email to be set');
+        console.error('--watch requires --email to be set');
         process.exit(2);
       }
 
-      const personId = await findPersonId(email, token);
-      if (!personId) {
-        console.error(`No person found for ${email} — cannot follow`);
+      const match = await findPerson(email, token);
+      if (!match) {
+        console.error(`No person found for ${email} — cannot watch`);
         process.exit(1);
       }
 
-      const timeoutMs = parseInt(opts.followTimeout) * 1000;
+      const timeoutMs = parseInt(opts.watchTimeout) * 1000;
       const deadline = Date.now() + timeoutMs;
       const seen = new Set();
 
-      console.error(`\nFollowing events for ${email} for ${opts.followTimeout}s...\n`);
+      console.error(`\nWatching steps for ${email} for ${opts.watchTimeout}s...\n`);
 
       while (Date.now() < deadline) {
         await sleep(2000);
         try {
-          const steps = await getPersonSteps(personId, token, 25);
+          const steps = await getPersonSteps(match.id, token, 25);
           const newSteps = steps.filter(s => {
             if (seen.has(s.id)) return false;
             const stepTime = new Date(s.event_date || s.created_date).getTime();
@@ -183,7 +119,7 @@ export function eventsCommand() {
         }
       }
 
-      console.error(`\nDone following (${opts.followTimeout}s).`);
+      console.error(`\nDone watching (${opts.watchTimeout}s).`);
     });
 
   return events;

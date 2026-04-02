@@ -18,10 +18,14 @@ async function personApiFetch(path, token) {
   return JSON.parse(text);
 }
 
-async function findPerson(email, token) {
+export async function findPerson(email, token) {
   const results = await personApiFetch(`/v5/persons?identity_key_value=${encodeURIComponent(email)}&limit=1`, token);
   if (!results || results.length === 0) return null;
   return results[0];
+}
+
+export async function getPersonSteps(personId, token, limit = 50) {
+  return personApiFetch(`/v5/persons/${personId}/steps?limit=${limit}`, token);
 }
 
 export function personCommand() {
@@ -48,10 +52,12 @@ export function personCommand() {
 
   person
     .command('steps')
-    .description('Show steps for a person')
+    .description('Show steps for a person; --watch to tail live')
     .requiredOption('--email <email>', 'Email address to look up')
-    .option('--limit <n>', 'Number of steps to return', '25')
+    .option('--limit <n>', 'Number of steps to return (one-shot)', '25')
+    .option('--watch', 'Poll for new steps until Ctrl+C')
     .option('--compact', 'Strip nulls and empty fields')
+    .option('--json', 'Emit one JSON object per line (with --watch)')
     .option('--token <token>', 'Override token')
     .option('--profile <profile>', 'Profile name', 'default')
     .action(async (opts) => {
@@ -61,8 +67,42 @@ export function personCommand() {
         console.error(`No person found for ${opts.email}`);
         process.exit(1);
       }
-      const steps = await personApiFetch(`/v5/persons/${match.id}/steps?limit=${opts.limit}`, token);
-      printJson(steps, opts);
+      const personId = match.id;
+
+      if (!opts.watch) {
+        const steps = await personApiFetch(`/v5/persons/${personId}/steps?limit=${opts.limit}`, token);
+        printJson(steps, opts);
+        return;
+      }
+
+      // Watch mode — poll for new steps
+      const seen = new Set();
+      if (!opts.json) console.error(`Watching steps for ${opts.email} — Ctrl+C to stop\n`);
+
+      async function poll() {
+        try {
+          const steps = await personApiFetch(`/v5/persons/${personId}/steps?limit=50`, token);
+          for (const step of steps.reverse()) {
+            if (!seen.has(step.id)) {
+              seen.add(step.id);
+              if (opts.json) {
+                printJson(step, opts);
+              } else {
+                const time = new Date(step.event_date || step.created_date)
+                  .toLocaleTimeString('en-US', { hour12: false });
+                const name = (step.name || '').padEnd(35);
+                const program = step.program || '';
+                console.log(`${time}  ${name}  ${program}`);
+              }
+            }
+          }
+        } catch (e) {
+          console.error(`poll error: ${e.message}`);
+        }
+      }
+
+      await poll();
+      setInterval(poll, 2500);
     });
 
   return person;
