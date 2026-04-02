@@ -89,13 +89,3 @@ extole reports run --type summary_per_program --days 365 \
   "staging": { "token": "..." }
 }
 ```
-
-## What's not built yet
-
-The CLI currently covers auth, ping, events, and reports. It does not yet have commands for:
-- Consumer/person lookup (people search, profile data, event history by person)
-- Audience management (list, create, add members)
-- Campaign/program management
-- Reward lookup
-- Webhook inspection
-</thinking>
