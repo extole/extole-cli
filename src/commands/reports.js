@@ -1,6 +1,7 @@
 import { Command } from 'commander';
 import { resolveToken } from '../config.js';
 import { apiJson, apiFetch } from '../api.js';
+import { printJson, printJsonText } from '../output.js';
 
 export function reportsCommand() {
   const reports = new Command('reports');
@@ -8,7 +9,8 @@ export function reportsCommand() {
   reports
     .command('list')
     .description('List available report runners')
-    .option('--json', 'Emit raw JSON')
+    .option('--json', 'Emit JSON')
+    .option('--verbose', 'Full JSON output (no compaction)')
     .option('--token <token>', 'Override token')
     .option('--profile <profile>', 'Profile name', 'default')
     .action(async (opts) => {
@@ -16,7 +18,7 @@ export function reportsCommand() {
       const data = await apiJson('/v7/report-runners', token);
       const runners = Array.isArray(data) ? data : (data.runners || []);
       if (opts.json) {
-        process.stdout.write(JSON.stringify(runners, null, 2) + '\n');
+        printJson(runners, opts);
         return;
       }
       const col1 = Math.max(20, ...runners.map(r => (r.runner_id || r.id || '').length)) + 2;
@@ -31,7 +33,8 @@ export function reportsCommand() {
   reports
     .command('types')
     .description('List available report types')
-    .option('--json', 'Emit raw JSON')
+    .option('--json', 'Emit JSON')
+    .option('--verbose', 'Full JSON output (no compaction)')
     .option('--token <token>', 'Override token')
     .option('--profile <profile>', 'Profile name', 'default')
     .action(async (opts) => {
@@ -39,7 +42,7 @@ export function reportsCommand() {
       const data = await apiJson('/v4/report-types', token);
       const types = Array.isArray(data) ? data : (data.report_types || []);
       if (opts.json) {
-        process.stdout.write(JSON.stringify(types, null, 2) + '\n');
+        printJson(types, opts);
         return;
       }
       const col1 = Math.max(20, ...types.map(t => (t.report_type || t.name || '').length)) + 2;
@@ -61,7 +64,7 @@ export function reportsCommand() {
     .option('--days <n>', 'Shortcut: set time_range to last N days')
     .option('--wait', 'Poll until report is complete')
     .option('--download', 'Download and print result (implies --wait)')
-    .option('--json', 'Emit raw API response')
+    .option('--verbose', 'Full output without compaction')
     .option('--token <token>', 'Override token')
     .option('--profile <profile>', 'Profile name', 'default')
     .action(async (opts) => {
@@ -91,8 +94,7 @@ export function reportsCommand() {
       }
       const report = JSON.parse(createText);
       const reportId = report.report_id;
-      if (!opts.json) console.error(`Created report ${reportId}  status=${report.status}`);
-      else process.stderr.write(JSON.stringify(report) + '\n');
+      console.error(`Created report ${reportId}  status=${report.status}`);
 
       if (!opts.wait && !opts.download) return;
 
@@ -104,9 +106,9 @@ export function reportsCommand() {
         await sleep(1500);
         const poll = await apiJson(`/v4/reports/${reportId}`, token);
         status = poll.status;
-        if (!opts.json) process.stderr.write(`\r${frames[frame++ % frames.length]}  ${status}    `);
+        process.stderr.write(`\r${frames[frame++ % frames.length]}  ${status}    `);
       }
-      if (!opts.json) process.stderr.write('\r\x1b[K');
+      process.stderr.write('\r\x1b[K');
 
       if (status === 'FAILED') {
         console.error('Report failed.');
@@ -122,7 +124,7 @@ export function reportsCommand() {
         process.exit(1);
       }
       const text = await dl.text();
-      process.stdout.write(text + '\n');
+      printJsonText(text, opts);
     });
 
   return reports;

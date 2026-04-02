@@ -1,10 +1,11 @@
 import { Command } from 'commander';
 import { resolveToken } from '../config.js';
 import { apiJson, apiFetch } from '../api.js';
+import { printJson } from '../output.js';
 
-function formatEvent(ev, jsonMode) {
-  if (jsonMode) {
-    process.stdout.write(JSON.stringify(ev) + '\n');
+function formatEvent(ev, opts) {
+  if (opts.json) {
+    printJson(ev, opts);
     return;
   }
   const time = new Date(ev.event_time || ev.created_at || Date.now())
@@ -27,6 +28,7 @@ export function eventsCommand() {
     .option('--since <duration>', 'Start window (e.g. 10m, 1h, or ISO timestamp)', '10m')
     .option('--source <app_type>', 'Filter by app_type/source')
     .option('--json', 'Emit one JSON object per line')
+    .option('--verbose', 'Full JSON output (no compaction)')
     .option('--token <token>', 'Override token')
     .option('--profile <profile>', 'Profile name', 'default')
     .action(async (opts) => {
@@ -48,7 +50,7 @@ export function eventsCommand() {
             const id = ev.event_id || ev.id || JSON.stringify(ev);
             if (!seen.has(id)) {
               seen.add(id);
-              formatEvent(ev, opts.json);
+              formatEvent(ev, opts);
             }
           }
           if (items.length > 0) {
@@ -74,6 +76,7 @@ export function eventsCommand() {
     .option('-p, --param <kv>', 'key=value param (repeatable)', collect, [])
     .option('--dry-run', 'Print request payload without sending')
     .option('--json', 'Emit raw API response')
+    .option('--verbose', 'Full JSON output (no compaction)')
     .option('--token <token>', 'Override token')
     .option('--profile <profile>', 'Profile name', 'default')
     .action(async (eventName, opts) => {
@@ -101,10 +104,10 @@ export function eventsCommand() {
       });
       const text = await res.text();
       if (opts.json) {
-        process.stdout.write(text + '\n');
+        try { printJson(JSON.parse(text), opts); } catch { process.stdout.write(text + '\n'); }
       } else if (res.ok) {
         console.log(`OK  ${res.status}`);
-        try { console.log(JSON.stringify(JSON.parse(text), null, 2)); } catch { console.log(text); }
+        try { printJson(JSON.parse(text), opts); } catch { console.log(text); }
       } else {
         console.error(`Error ${res.status}: ${text.slice(0, 300)}`);
         process.exit(1);
