@@ -39,8 +39,8 @@ export function eventsCommand() {
   const events = new Command('events');
 
   events
-    .command('stream')
-    .description('Tail live events for a person (polls every 2.5s)')
+    .command('steps')
+    .description('Tail live steps for a person (polls every 2.5s)')
     .requiredOption('--email <email>', 'Person to watch')
     .option('--filter <event_name>', 'Only show steps matching this name')
     .option('--since <duration>', 'Start window (e.g. 10m, 1h)', '10m')
