@@ -42,7 +42,30 @@ extole stream --json                                  # newline-delimited JSON
 
 Creates an ephemeral `/v6/event-streams` session, applies filters, polls every 2.5s, and deletes the stream on Ctrl+C.
 
-Event types: `INPUT`, `REWARD`, `STEP`, `SHARE`, `MESSAGE`, `REFERRED`, `REFERRED_BY`, `IDENTIFIED`, `REDEEMED`, `INTERNAL`, `DATA_INTELLIGENCE`, `SEND_REWARD`, `AUDIENCE_MEMBERSHIP_CREATED/UPDATED/REMOVED`, `ASSET`, `SHAREABLE`, `ADD_SHAREABLE`, `INCENTIVIZED`, `ACTION`
+**Recommended starting filters for production clients** (unfiltered streams are very noisy):
+```
+extole stream --event-type INPUT                     # business events fired by integrations
+extole stream --event-type INPUT --event-type REWARD # business events + reward issuance
+extole stream --app-type salesforce_crm              # only events from Salesforce integration
+```
+
+**Event type reference:**
+
+| Type | What it is |
+|---|---|
+| `INPUT` | Business events fired by integrations (lead_created, opportunity_closedwon, etc.) — usually the right starting point |
+| `REWARD` | Reward state transitions (issued, fulfilled, redeemed) |
+| `STEP` | Internal Extole processing steps triggered by input events — plumbing, usually noisy |
+| `SHARE` | Share link clicks and share actions |
+| `REFERRED` / `REFERRED_BY` | Friend-side referral events |
+| `IDENTIFIED` | Identity resolution events |
+| `REDEEMED` | Redemption events |
+| `MESSAGE` | Email/message delivery events |
+| `SEND_REWARD` | Reward send attempts |
+| `INTERNAL` | Internal system events — almost always noise |
+| `DATA_INTELLIGENCE` | Fraud/quality scoring events |
+| `AUDIENCE_MEMBERSHIP_*` | Audience list membership changes |
+| `ACTION` | UI-confirmed type, not in Java enum — treat as legacy |
 
 ## Events
 
