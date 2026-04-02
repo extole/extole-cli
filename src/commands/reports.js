@@ -10,7 +10,7 @@ export function reportsCommand() {
     .command('list')
     .description('List available report runners')
     .option('--json', 'Emit JSON')
-    .option('--verbose', 'Full JSON output (no compaction)')
+    .option('--compact', 'Strip nulls and empty fields from JSON output')
     .option('--token <token>', 'Override token')
     .option('--profile <profile>', 'Profile name', 'default')
     .action(async (opts) => {
@@ -34,7 +34,7 @@ export function reportsCommand() {
     .command('types')
     .description('List available report types')
     .option('--json', 'Emit JSON')
-    .option('--verbose', 'Full JSON output (no compaction)')
+    .option('--compact', 'Strip nulls and empty fields from JSON output')
     .option('--token <token>', 'Override token')
     .option('--profile <profile>', 'Profile name', 'default')
     .action(async (opts) => {

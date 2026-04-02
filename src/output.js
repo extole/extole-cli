@@ -19,8 +19,7 @@ function compact(value) {
 }
 
 export function printJson(data, opts = {}) {
-  const verbose = opts.verbose || opts.raw;
-  const out = verbose ? data : compact(data);
+  const out = opts.compact ? compact(data) : data;
   process.stdout.write(JSON.stringify(out, null, 2) + '\n');
 }
 

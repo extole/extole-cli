@@ -28,7 +28,7 @@ export function eventsCommand() {
     .option('--since <duration>', 'Start window (e.g. 10m, 1h, or ISO timestamp)', '10m')
     .option('--source <app_type>', 'Filter by app_type/source')
     .option('--json', 'Emit one JSON object per line')
-    .option('--verbose', 'Full JSON output (no compaction)')
+    .option('--compact', 'Strip nulls and empty fields from JSON output')
     .option('--token <token>', 'Override token')
     .option('--profile <profile>', 'Profile name', 'default')
     .action(async (opts) => {
@@ -76,7 +76,7 @@ export function eventsCommand() {
     .option('-p, --param <kv>', 'key=value param (repeatable)', collect, [])
     .option('--dry-run', 'Print request payload without sending')
     .option('--json', 'Emit raw API response')
-    .option('--verbose', 'Full JSON output (no compaction)')
+    .option('--compact', 'Strip nulls and empty fields from JSON output')
     .option('--token <token>', 'Override token')
     .option('--profile <profile>', 'Profile name', 'default')
     .action(async (eventName, opts) => {
