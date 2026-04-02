@@ -47,10 +47,10 @@ export function personCommand() {
     });
 
   person
-    .command('events')
-    .description('Show event history for a person')
+    .command('steps')
+    .description('Show steps for a person')
     .requiredOption('--email <email>', 'Email address to look up')
-    .option('--limit <n>', 'Number of events to return', '25')
+    .option('--limit <n>', 'Number of steps to return', '25')
     .option('--compact', 'Strip nulls and empty fields')
     .option('--token <token>', 'Override token')
     .option('--profile <profile>', 'Profile name', 'default')
