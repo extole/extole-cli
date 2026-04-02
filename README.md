@@ -27,6 +27,23 @@ extole ping
 
 Verifies connectivity. Exit 0 = OK, exit 1 = failure.
 
+## Stream
+
+```
+extole stream                                         # all events (noisy on prod)
+extole stream --event-type INPUT                      # filter by event type (repeatable)
+extole stream --event-type INPUT --event-type REWARD
+extole stream --filter lead_created                   # filter by event name (repeatable)
+extole stream --email jane@example.com                # filter to one person
+extole stream --app-type salesforce_crm               # filter by source (repeatable)
+extole stream --sandbox container-test                # filter by sandbox/container
+extole stream --json                                  # newline-delimited JSON
+```
+
+Creates an ephemeral `/v6/event-streams` session, applies filters, polls every 2.5s, and deletes the stream on Ctrl+C.
+
+Event types: `INPUT`, `REWARD`, `STEP`, `SHARE`, `MESSAGE`, `REFERRED`, `REFERRED_BY`, `IDENTIFIED`, `REDEEMED`, `INTERNAL`, `DATA_INTELLIGENCE`, `SEND_REWARD`, `AUDIENCE_MEMBERSHIP_CREATED/UPDATED/REMOVED`, `ASSET`, `SHAREABLE`, `ADD_SHAREABLE`, `INCENTIVIZED`, `ACTION`
+
 ## Events
 
 ```

@@ -69,8 +69,9 @@ export function streamCommand() {
     .description('Tail live Extole events in real time')
     .option('--filter <name>', 'Filter by event name (repeatable)', collect, [])
     .option('--email <email>', 'Filter to a specific person by email')
-    .option('--event-type <type>', 'Filter by event type (e.g. INPUT, REWARD, STEP)')
-    .option('--app-type <type>', 'Filter by app/source type (e.g. salesforce_crm)')
+    .option('--event-type <type>', 'Filter by event type, repeatable (INPUT, REWARD, STEP, SHARE...)', collect, [])
+    .option('--app-type <type>', 'Filter by app/source type, repeatable (e.g. salesforce_crm)', collect, [])
+    .option('--sandbox <name>', 'Filter by sandbox/container name')
     .option('--json', 'Emit one JSON object per line')
     .option('--compact', 'Strip nulls and empty fields')
     .option('--token <token>', 'Override token')
@@ -98,11 +99,14 @@ export function streamCommand() {
       if (opts.filter.length > 0) {
         filterPromises.push(addFilter(streamId, { type: 'EVENT_NAME', event_names: opts.filter }, token));
       }
-      if (opts.eventType) {
-        filterPromises.push(addFilter(streamId, { type: 'EVENT_TYPE', event_types: [opts.eventType] }, token));
+      if (opts.eventType.length > 0) {
+        filterPromises.push(addFilter(streamId, { type: 'EVENT_TYPE', event_types: opts.eventType }, token));
       }
-      if (opts.appType) {
-        filterPromises.push(addFilter(streamId, { type: 'APPLICATION_TYPE', app_types: [opts.appType] }, token));
+      if (opts.appType.length > 0) {
+        filterPromises.push(addFilter(streamId, { type: 'APPLICATION_TYPE', app_types: opts.appType }, token));
+      }
+      if (opts.sandbox) {
+        filterPromises.push(addFilter(streamId, { type: 'SANDBOX', sandboxes: [opts.sandbox] }, token));
       }
       if (opts.email) {
         // Look up person ID for PERSON_ID filter
