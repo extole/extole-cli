@@ -3,19 +3,36 @@ import { resolveToken } from '../config.js';
 import { apiJson, apiFetch } from '../api.js';
 import { printJson } from '../output.js';
 
+const PERSON_BASE = 'https://api.extole.io';
+
+async function findPersonId(email, token) {
+  const { default: fetch } = await import('node-fetch');
+  const res = await fetch(`${PERSON_BASE}/v5/persons?identity_key_value=${encodeURIComponent(email)}&limit=1`, {
+    headers: { 'Authorization': `Bearer ${token}`, 'Accept': 'application/json' },
+  });
+  const data = await res.json();
+  return Array.isArray(data) && data.length > 0 ? data[0].id : null;
+}
+
+async function getPersonSteps(personId, token, limit = 50) {
+  const { default: fetch } = await import('node-fetch');
+  const res = await fetch(`${PERSON_BASE}/v5/persons/${personId}/steps?limit=${limit}`, {
+    headers: { 'Authorization': `Bearer ${token}`, 'Accept': 'application/json' },
+  });
+  const data = await res.json();
+  return Array.isArray(data) ? data : [];
+}
+
 function formatEvent(ev, opts) {
   if (opts.json) {
     printJson(ev, opts);
     return;
   }
-  const time = new Date(ev.event_time || ev.created_at || Date.now())
+  const time = new Date(ev.event_date || ev.event_time || ev.created_at || Date.now())
     .toLocaleTimeString('en-US', { hour12: false });
-  const name = (ev.name || ev.event_name || '').padEnd(25);
-  const params = Object.entries(ev.data || ev.parameters || {})
-    .map(([k, v]) => `${k}=${v}`)
-    .slice(0, 4)
-    .join('  ');
-  console.log(`${time}  ${name}  ${params}`);
+  const name = (ev.name || ev.event_name || '').padEnd(35);
+  const program = (ev.program || '').padEnd(20);
+  console.log(`${time}  ${name}  ${program}`);
 }
 
 export function eventsCommand() {
@@ -23,10 +40,10 @@ export function eventsCommand() {
 
   events
     .command('stream')
-    .description('Tail live Extole events (polls every 2s)')
-    .option('--filter <event_name>', 'Only show events matching this name')
-    .option('--since <duration>', 'Start window (e.g. 10m, 1h, or ISO timestamp)', '10m')
-    .option('--source <app_type>', 'Filter by app_type/source')
+    .description('Tail live events for a person (polls every 2.5s)')
+    .requiredOption('--email <email>', 'Person to watch')
+    .option('--filter <event_name>', 'Only show steps matching this name')
+    .option('--since <duration>', 'Start window (e.g. 10m, 1h)', '10m')
     .option('--json', 'Emit one JSON object per line')
     .option('--compact', 'Strip nulls and empty fields from JSON output')
     .option('--token <token>', 'Override token')
@@ -34,28 +51,30 @@ export function eventsCommand() {
     .action(async (opts) => {
       const token = resolveToken(opts);
       const sinceMs = parseDuration(opts.since);
-      let since = sinceMs ? new Date(Date.now() - sinceMs).toISOString() : opts.since;
-      let seen = new Set();
+      const sinceDate = sinceMs ? new Date(Date.now() - sinceMs) : new Date(opts.since);
 
-      if (!opts.json) console.error(`Streaming events since ${since} — Ctrl+C to stop`);
+      const personId = await findPersonId(opts.email, token);
+      if (!personId) {
+        console.error(`No person found for ${opts.email}`);
+        process.exit(1);
+      }
+
+      if (!opts.json) console.error(`Streaming events for ${opts.email} since ${sinceDate.toISOString()} — Ctrl+C to stop`);
+
+      const seen = new Set();
 
       async function poll() {
         try {
-          const params = new URLSearchParams({ since, limit: '50' });
-          if (opts.filter) params.set('name', opts.filter);
-          if (opts.source) params.set('app_type', opts.source);
-          const data = await apiJson(`/v5/events?${params}`, token);
-          const items = Array.isArray(data) ? data : (data.events || []);
-          for (const ev of items.reverse()) {
-            const id = ev.event_id || ev.id || JSON.stringify(ev);
-            if (!seen.has(id)) {
-              seen.add(id);
-              formatEvent(ev, opts);
-            }
-          }
-          if (items.length > 0) {
-            const latest = items[items.length - 1];
-            since = latest.event_time || latest.created_at || since;
+          const steps = await getPersonSteps(personId, token, 50);
+          const matching = steps.filter(s => {
+            if (seen.has(s.id)) return false;
+            if (new Date(s.event_date || s.created_date) < sinceDate) return false;
+            if (opts.filter && s.name !== opts.filter) return false;
+            return true;
+          });
+          for (const step of matching.reverse()) {
+            seen.add(step.id);
+            formatEvent(step, opts);
           }
         } catch (e) {
           if (!opts.json) console.error(`poll error: ${e.message}`);
@@ -75,6 +94,8 @@ export function eventsCommand() {
     .option('--amount <amount>', 'amount param shortcut')
     .option('-p, --param <kv>', 'key=value param (repeatable)', collect, [])
     .option('--dry-run', 'Print request payload without sending')
+    .option('--follow', 'After firing, tail the event stream for this email for 15s')
+    .option('--follow-timeout <seconds>', 'How long to tail when using --follow', '15')
     .option('--json', 'Emit raw API response')
     .option('--compact', 'Strip nulls and empty fields from JSON output')
     .option('--token <token>', 'Override token')
@@ -92,26 +113,77 @@ export function eventsCommand() {
         data[kv.slice(0, idx)] = kv.slice(idx + 1);
       }
 
-      const payload = { name: eventName, data };
+      const payload = { event_name: eventName, data };
       if (opts.dryRun) {
         console.log(JSON.stringify(payload, null, 2));
         return;
       }
 
+      const fireTime = new Date().toISOString();
       const res = await apiFetch('/v5/events', token, {
         method: 'POST',
         body: JSON.stringify(payload),
       });
       const text = await res.text();
-      if (opts.json) {
-        try { printJson(JSON.parse(text), opts); } catch { process.stdout.write(text + '\n'); }
-      } else if (res.ok) {
-        console.log(`OK  ${res.status}`);
-        try { printJson(JSON.parse(text), opts); } catch { console.log(text); }
-      } else {
+      if (!res.ok) {
         console.error(`Error ${res.status}: ${text.slice(0, 300)}`);
         process.exit(1);
       }
+
+      if (opts.json) {
+        try { printJson(JSON.parse(text), opts); } catch { process.stdout.write(text + '\n'); }
+      } else {
+        console.error(`OK  ${res.status}  fired ${eventName}`);
+      }
+
+      if (!opts.follow) return;
+
+      // Tail person steps for this email for N seconds
+      const email = opts.email || data.email;
+      if (!email) {
+        console.error('--follow requires --email to be set');
+        process.exit(2);
+      }
+
+      const personId = await findPersonId(email, token);
+      if (!personId) {
+        console.error(`No person found for ${email} — cannot follow`);
+        process.exit(1);
+      }
+
+      const timeoutMs = parseInt(opts.followTimeout) * 1000;
+      const deadline = Date.now() + timeoutMs;
+      const seen = new Set();
+
+      console.error(`\nFollowing events for ${email} for ${opts.followTimeout}s...\n`);
+
+      while (Date.now() < deadline) {
+        await sleep(2000);
+        try {
+          const steps = await getPersonSteps(personId, token, 25);
+          const newSteps = steps.filter(s => {
+            if (seen.has(s.id)) return false;
+            const stepTime = new Date(s.event_date || s.created_date).getTime();
+            return stepTime >= new Date(fireTime).getTime();
+          });
+          for (const step of newSteps.reverse()) {
+            seen.add(step.id);
+            if (opts.json) {
+              printJson(step, opts);
+            } else {
+              const time = new Date(step.event_date || step.created_date)
+                .toLocaleTimeString('en-US', { hour12: false });
+              const name = (step.name || '').padEnd(35);
+              const program = step.program || '';
+              console.log(`${time}  ${name}  ${program}`);
+            }
+          }
+        } catch (e) {
+          console.error(`poll error: ${e.message}`);
+        }
+      }
+
+      console.error(`\nDone following (${opts.followTimeout}s).`);
     });
 
   return events;
@@ -119,6 +191,10 @@ export function eventsCommand() {
 
 function collect(val, prev) {
   return prev.concat([val]);
+}
+
+function sleep(ms) {
+  return new Promise(r => setTimeout(r, ms));
 }
 
 function parseDuration(s) {
