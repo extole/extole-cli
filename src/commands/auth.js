@@ -3,7 +3,7 @@ import { loadConfig, saveConfig, setProfile, getProfile } from '../config.js';
 import { apiJson } from '../api.js';
 
 export function authCommand() {
-  const auth = new Command('auth');
+  const auth = new Command('auth').description('Manage authentication tokens');
 
   auth
     .command('login')

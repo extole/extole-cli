@@ -29,7 +29,7 @@ export async function getPersonSteps(personId, token, limit = 50) {
 }
 
 export function personCommand() {
-  const person = new Command('person');
+  const person = new Command('person').description('Look up person profile and step history');
 
   person
     .command('get')

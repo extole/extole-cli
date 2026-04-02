@@ -18,7 +18,7 @@ function formatEvent(ev, opts) {
 }
 
 export function eventsCommand() {
-  const events = new Command('events');
+  const events = new Command('events').description('Fire events and watch downstream steps');
 
 
   events

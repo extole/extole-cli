@@ -4,7 +4,7 @@ import { apiJson, apiFetch } from '../api.js';
 import { printJson, printJsonText } from '../output.js';
 
 export function reportsCommand() {
-  const reports = new Command('reports');
+  const reports = new Command('reports').description('List report types and run on-demand reports');
 
   reports
     .command('list')
