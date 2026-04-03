@@ -149,7 +149,7 @@ export function rewardsCommand() {
           const stepDate = new Date(s.event_date || s.created_date);
           const age = rewardDate ? Math.round((rewardDate - stepDate) / (1000 * 60 * 60 * 24)) : null;
           const dateStr = stepDate.toLocaleString('en-US', { month: 'numeric', day: 'numeric', year: 'numeric', hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: false }).padEnd(22);
-          const rel = age !== null && age !== 0 ? (age > 0 ? `(${age}d before)` : `(${Math.abs(age)}d after)`).padEnd(14) : ''.padEnd(14);
+          const rel = age !== null ? (age === 0 ? '(same day)' : age > 0 ? `(${age}d before)` : `(${Math.abs(age)}d after)`).padEnd(14) : ''.padEnd(14);
           const name = (s.name || '').padEnd(35);
           console.log(`${dateStr}${rel}${name}${s.journey_name || ''}`);
         }
