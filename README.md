@@ -11,8 +11,8 @@ npm install -g github:cduskin-cpu/extole-cli
 ## Auth
 
 ```
-extole auth login --token TOKEN --account acme --default   # save token, set as default
-extole auth login --token TOKEN --account staging          # save additional account
+extole auth login --token TOKEN --account acme --set-default   # save token, set as default
+extole auth login --token TOKEN --account staging              # save additional account
 extole auth default acme                                   # change default account
 extole auth list                                           # show all accounts with default marker
 extole auth status                                         # verify token + connectivity

@@ -12,14 +12,14 @@ export function authCommand() {
     .allowExcessArguments(false)
     .requiredOption('--account <name>', 'Account name to save token under')
     .requiredOption('--token <token>', 'Extole bearer token')
-    .option('--default', 'Set this account as the default')
+    .option('--set-default', 'Set this account as the default')
     .addHelpText('after', `
 Examples:
-  extole auth login --token TOKEN --account acme --default
+  extole auth login --token TOKEN --account acme --set-default
   extole auth login --token TOKEN --account staging`)
     .action(function() {
       const { token, account } = this.opts();
-      const isDefault = this.opts().default;
+      const isDefault = this.opts().setDefault;
       setProfile(account, { token });
       if (isDefault) {
         setDefaultAccount(account);
