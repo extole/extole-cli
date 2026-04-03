@@ -46,11 +46,15 @@ function formatReward(r) {
 
 export function rewardsCommand() {
   const cmd = new Command('rewards')
-    .description('Look up reward state for a person by email')
-    .requiredOption('--email <email>', 'Email address to look up')
+    .description('Look up rewards by email or reward ID')
+    .option('--email <email>', 'Email address to look up')
     .option('--status <state>', 'Filter by state (EARNED, FULFILLED, SENT, REDEEMED, CANCELED, FAILED, EXPIRED)')
     .option('--limit <n>', 'Max rewards to return', '25')
     .action(async (opts) => {
+      if (!opts.email) {
+        console.error('Error: --email <email> is required.');
+        process.exit(2);
+      }
       const token = resolveToken(opts);
 
       const limit = parseInt(opts.limit, 10);
@@ -88,12 +92,57 @@ export function rewardsCommand() {
       }
     });
 
-  return addGlobalOptions(cmd, {
+  addGlobalOptions(cmd, {
     output: true,
     examples: [
       'extole rewards --email jane@example.com',
       'extole rewards --email jane@example.com --status EARNED',
       'extole rewards --email jane@example.com --json | jq \'.[].reward_id\'',
+      'extole rewards get <reward_id>',
     ],
   });
+
+  const getCmd = new Command('get')
+    .argument('<reward_id>', 'Reward ID to look up')
+    .description('Show full detail for a single reward')
+    .action(async function(rewardId) {
+      const opts = this.optsWithGlobals();
+      const token = resolveToken(opts);
+
+      const r = await rewardsFetch(`/v2/rewards/${rewardId}`, token);
+
+      if (opts.json) {
+        printJson(r, opts);
+        return;
+      }
+
+      const field = (label, value) => value != null && value !== ''
+        ? console.log(`${label.padEnd(22)}${value}`)
+        : null;
+
+      field('reward_id',       r.reward_id);
+      field('state',           r.state);
+      field('face_value',      r.face_value != null ? `${r.face_value} ${r.face_value_type || ''}`.trim() : null);
+      field('coupon_code',     r.partner_reward_id);
+      field('journey',         r.journey_name);
+      field('rewardee_role',   r.data?.rewardee_role);
+      field('person_id',       r.person_id);
+      field('email',           r.email);
+      field('campaign_id',     r.campaign_id);
+      field('cause_event_id',  r.cause_event_id);
+      field('created_at',      r.created_at ? new Date(r.created_at).toLocaleString('en-US') : null);
+      field('container',       r.container);
+    });
+
+  addGlobalOptions(getCmd, {
+    output: true,
+    examples: [
+      'extole rewards get efda6f32db286845ac9f6272',
+      'extole rewards get efda6f32db286845ac9f6272 --account my-client',
+      'extole rewards get efda6f32db286845ac9f6272 --json',
+    ],
+  });
+
+  cmd.addCommand(getCmd);
+  return cmd;
 }
