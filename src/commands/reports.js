@@ -207,9 +207,83 @@ export function reportsCommand() {
     ],
   });
 
+  const statusCmd = new Command('status')
+    .description('Check the status of a report')
+    .allowExcessArguments(false)
+    .argument('<report_id>', 'Report ID to check')
+    .action(async function(reportId) {
+      const opts = this.optsWithGlobals();
+      const token = resolveToken(opts);
+      const report = await apiJson(`/v4/reports/${reportId}`, token);
+      if (opts.json) {
+        printJson(report, opts);
+        return;
+      }
+      console.log(`report_id  ${report.report_id}`);
+      console.log(`status     ${report.status}`);
+      if (report.report_type) console.log(`type       ${report.report_type}`);
+      if (report.created_at) console.log(`created    ${new Date(report.created_at).toLocaleString('en-US')}`);
+    });
+
+  addGlobalOptions(statusCmd, {
+    output: true,
+    examples: ['extole reports status REPORT_ID'],
+  });
+
+  const downloadCmd = new Command('download')
+    .description('Download results of a completed report')
+    .allowExcessArguments(false)
+    .argument('<report_id>', 'Report ID to download')
+    .option('--wait', 'Poll until complete before downloading')
+    .action(async function(reportId) {
+      const opts = this.optsWithGlobals();
+      const token = resolveToken(opts);
+
+      if (opts.wait) {
+        const frames = ['⠋','⠙','⠹','⠸','⠼','⠴','⠦','⠧','⠇','⠏'];
+        let frame = 0;
+        let status = '';
+        let pollAttempts = 0;
+        while (status !== 'DONE' && status !== 'FAILED') {
+          if (++pollAttempts > REPORT_POLL_MAX) {
+            process.stderr.write('\r\x1b[K');
+            console.error(`Report did not complete after ${REPORT_POLL_MAX} attempts.`);
+            process.exit(1);
+          }
+          await sleep(1500);
+          const poll = await apiJson(`/v4/reports/${reportId}`, token);
+          status = poll.status;
+          process.stderr.write(`\r${frames[frame++ % frames.length]}  ${status}    `);
+        }
+        process.stderr.write('\r\x1b[K');
+        if (status === 'FAILED') {
+          console.error('Report failed.');
+          process.exit(1);
+        }
+      }
+
+      const dl = await apiFetch(`/v4/reports/${reportId}/download`, token);
+      if (!dl.ok) {
+        console.error(`Download failed ${dl.status}`);
+        process.exit(1);
+      }
+      const text = await dl.text();
+      printJsonText(text, opts);
+    });
+
+  addGlobalOptions(downloadCmd, {
+    output: true,
+    examples: [
+      'extole reports download REPORT_ID',
+      'extole reports download REPORT_ID --wait',
+    ],
+  });
+
   reports.addCommand(listCmd);
   reports.addCommand(typesCmd);
   reports.addCommand(describeCmd);
   reports.addCommand(runCmd);
+  reports.addCommand(statusCmd);
+  reports.addCommand(downloadCmd);
   return reports;
 }
