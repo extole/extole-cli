@@ -93,7 +93,7 @@ export function streamCommand() {
     .option('--filter <name>', 'Filter by event name (repeatable)', collect, [])
     .option('--email <email>', 'Filter to a specific person by email')
     .option('--event-type <type>', 'Filter by event type, repeatable (INPUT, REWARD, STEP, SHARE...)', collect, [])
-    .option('--app-type <type>', 'Filter by app/source type, repeatable (e.g. salesforce_crm)', collect, [])
+    .option('--app-type <type>', 'Filter by app/source type (repeatable)', collect, [])
     .option('--sandbox <name>', 'Filter by sandbox/container name')
     .action(async (opts) => {
       const token = resolveToken(opts);
@@ -183,7 +183,7 @@ export function streamCommand() {
     output: true,
     examples: [
       'extole stream',
-      'extole stream --app-type salesforce_crm',
+      'extole stream --app-type my_integration',
       'extole stream --email jane@example.com',
       'extole stream --filter lead_created --filter opp_closed_won',
       'extole stream --event-type REWARD',

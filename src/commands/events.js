@@ -133,7 +133,7 @@ export function eventsCommand() {
     examples: [
       'extole events fire lead_created --email jane@example.com --dry-run',
       'extole events fire lead_created --email jane@example.com --live',
-      'extole events fire opp_closed_won -p opportunity_id=006abc -p amount=50000 --live',
+      'extole events fire conversion -p amount=500 --live',
       'extole events fire lead_created --email jane@example.com --live --watch',
     ],
   });

@@ -54,7 +54,7 @@ extole stream --event-type INPUT                      # filter by event type (re
 extole stream --event-type INPUT --event-type REWARD
 extole stream --filter lead_created                   # filter by event name (repeatable)
 extole stream --email jane@example.com                # filter to one person
-extole stream --app-type salesforce_crm               # filter by source (repeatable)
+extole stream --app-type my_integration               # filter by source (repeatable)
 extole stream --sandbox container-test                # filter by sandbox/container
 extole stream --json                                  # newline-delimited JSON
 ```
@@ -65,7 +65,7 @@ Creates an ephemeral `/v6/event-streams` session, applies filters, polls every 2
 ```
 extole stream --event-type INPUT                     # business events fired by integrations
 extole stream --event-type INPUT --event-type REWARD # business events + reward issuance
-extole stream --app-type salesforce_crm              # only events from Salesforce integration
+extole stream --app-type my_integration              # only events from a specific integration
 ```
 
 **Event type reference:**
@@ -91,7 +91,7 @@ extole stream --app-type salesforce_crm              # only events from Salesfor
 ```
 extole events fire <event_name> --live                        # required to fire in production
 extole events fire lead_created --email jane@example.com --live
-extole events fire opp_closed_won -p opportunity_id=006abc -p amount=50000 --live
+
 extole events fire <event_name> --param key=value [--param key=value ...] --live
 extole events fire <event_name> --dry-run                     # print payload without sending
 extole events fire <event_name> --live --watch                # fire then tail steps for --email for 15s
