@@ -29,7 +29,8 @@ export function eventsCommand() {
     .option('--advocate_code <code>', 'advocate_code param shortcut')
     .option('--amount <amount>', 'amount param shortcut')
     .option('-p, --param <kv>', 'key=value param (repeatable)', collect, [])
-    .option('--live', 'Actually fire the event in production (required unless --dry-run)')
+    .option('--live', 'Fire the event against the live production API')
+    .option('--sandbox', 'Fire the event in sandbox mode (adds sandbox=production-test)')
     .option('--dry-run', 'Print request payload without sending')
     .option('--watch', 'After firing, tail the event stream for this email for 15s')
     .option('--watch-timeout <seconds>', 'How long to tail when using --watch', '15')
@@ -45,15 +46,17 @@ export function eventsCommand() {
         data[kv.slice(0, idx)] = kv.slice(idx + 1);
       }
 
+      if (opts.sandbox) data.sandbox = 'production-test';
+
       const payload = { event_name: eventName, data };
       if (opts.dryRun) {
         console.log(JSON.stringify(payload, null, 2));
         return;
       }
 
-      if (!opts.live) {
-        console.error('Error: --live is required to fire events against the production API.');
-        console.error('Use --dry-run to preview the payload, or --live to fire for real.');
+      if (!opts.live && !opts.sandbox) {
+        console.error('Error: --live or --sandbox is required to fire events.');
+        console.error('Use --dry-run to preview the payload, --live to fire for real, or --sandbox to fire in sandbox mode.');
         process.exit(2);
       }
 
@@ -133,6 +136,7 @@ export function eventsCommand() {
     examples: [
       'extole events fire lead_created --email jane@example.com --dry-run',
       'extole events fire lead_created --email jane@example.com --live',
+      'extole events fire lead_created --email jane@example.com --sandbox',
       'extole events fire conversion -p amount=500 --live',
       'extole events fire lead_created --email jane@example.com --live --watch',
     ],

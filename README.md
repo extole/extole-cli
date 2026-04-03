@@ -96,8 +96,10 @@ extole stream --app-type my_integration              # only events from a specif
 ## Events
 
 ```
-extole events fire <event_name> --live                        # required to fire in production
+extole events fire <event_name> --live                        # fire against the live production API
+extole events fire <event_name> --sandbox                     # fire in sandbox mode (sandbox=production-test)
 extole events fire lead_created --email jane@example.com --live
+extole events fire lead_created --email jane@example.com --sandbox
 
 extole events fire <event_name> --param key=value [--param key=value ...] --live
 extole events fire <event_name> --dry-run                     # print payload without sending
@@ -105,7 +107,9 @@ extole events fire <event_name> --live --watch                # fire then tail s
 extole events fire <event_name> --live --watch --watch-timeout 30
 ```
 
-`--live` is required to actually send an event. Use `--dry-run` to preview the payload safely.
+Either `--live` or `--sandbox` is required to send an event. Use `--dry-run` to preview the payload safely.
+
+`--sandbox` adds `sandbox=production-test` to the event data, routing it through the sandbox pipeline.
 
 ## Person
 
