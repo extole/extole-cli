@@ -11,6 +11,7 @@ export function reportsCommand() {
 
   const listCmd = new Command('list')
     .description('List available report runners')
+    .allowExcessArguments(false)
     .action(async (opts) => {
       const token = resolveToken(opts);
       const data = await apiJson('/v7/report-runners', token);
@@ -32,6 +33,7 @@ export function reportsCommand() {
 
   const typesCmd = new Command('types')
     .description('List available report types')
+    .allowExcessArguments(false)
     .action(async (opts) => {
       const token = resolveToken(opts);
       const data = await apiJson('/v4/report-types', token);
@@ -55,6 +57,7 @@ export function reportsCommand() {
 
   const runCmd = new Command('run')
     .description('Create an on-demand report')
+    .allowExcessArguments(false)
     .requiredOption('--type <report_type>', 'Report type (e.g. summary, summary_per_program)')
     .option('-p, --param <kv>', 'key=value parameter (repeatable)', collect, [])
     .option('--days <n>', 'Shortcut: set time_range to last N days')

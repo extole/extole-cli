@@ -51,6 +51,7 @@ export function personCommand() {
 
   const getCmd = new Command('get')
     .description('Look up a person by email')
+    .allowExcessArguments(false)
     .requiredOption('--email <email>', 'Email address to look up')
     .action(async (opts) => {
       const token = resolveToken(opts);
@@ -73,6 +74,7 @@ export function personCommand() {
 
   const stepsCmd = new Command('steps')
     .description('Show steps for a person; --watch to tail live')
+    .allowExcessArguments(false)
     .requiredOption('--email <email>', 'Email address to look up')
     .option('--limit <n>', 'Number of steps to return (one-shot)', '25')
     .option('--watch', 'Poll for new steps until Ctrl+C')

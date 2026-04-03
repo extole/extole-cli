@@ -89,6 +89,7 @@ function formatStreamEvent(item, opts) {
 export function streamCommand() {
   const cmd = new Command('stream')
     .description('Tail live Extole events in real time')
+    .allowExcessArguments(false)
     .option('--filter <name>', 'Filter by event name (repeatable)', collect, [])
     .option('--email <email>', 'Filter to a specific person by email')
     .option('--event-type <type>', 'Filter by event type, repeatable (INPUT, REWARD, STEP, SHARE...)', collect, [])

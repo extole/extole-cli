@@ -7,6 +7,7 @@ export function pingCommand() {
   return addGlobalOptions(
     new Command('ping')
       .description('Verify credentials and connectivity')
+      .allowExcessArguments(false)
       .action(async (opts) => {
         const token = resolveToken(opts);
         try {

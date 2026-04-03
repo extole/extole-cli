@@ -48,6 +48,7 @@ function formatReward(r) {
 export function rewardsCommand() {
   const cmd = new Command('rewards')
     .description('Look up rewards by email or reward ID')
+    .allowExcessArguments(false)
     .option('--email <email>', 'Email address to look up')
     .option('--status <state>', 'Filter by state (EARNED, FULFILLED, SENT, REDEEMED, CANCELED, FAILED, EXPIRED)')
     .option('--limit <n>', 'Max rewards to return', '25')
@@ -106,6 +107,7 @@ export function rewardsCommand() {
   const getCmd = new Command('get')
     .argument('<reward_id>', 'Reward ID to look up')
     .description('Show full detail for a single reward')
+    .allowExcessArguments(false)
     .option('--steps', 'Also show step history for the reward recipient')
     .action(async function(rewardId) {
       const opts = this.optsWithGlobals();

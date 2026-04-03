@@ -24,6 +24,7 @@ export function eventsCommand() {
   const fireCmd = new Command('fire')
     .argument('<event_name>', 'Event name to fire')
     .description('Fire a single event via POST /v5/events')
+    .allowExcessArguments(false)
     .option('--email <email>', 'email param shortcut')
     .option('--advocate_code <code>', 'advocate_code param shortcut')
     .option('--opportunity_id <id>', 'opportunity_id param shortcut')
