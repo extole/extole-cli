@@ -35,7 +35,7 @@ export function resolveToken(options) {
   const profile = getProfile(options.account);
   if (profile?.token) return profile.token;
   const accountName = options.account || 'default';
-  console.error(`Error: no token for account "${accountName}". Run \`extole auth list\` to see saved accounts, or use --account NAME.`);
+  console.error(`Error: no token for account "${accountName}". Run 'extole auth list' to see saved accounts. Then use --account NAME or set EXTOLE_ACCOUNT.`);
   process.exit(2);
 }
 
