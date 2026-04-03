@@ -16,7 +16,7 @@ extole auth login --token TOKEN --account staging              # save additional
 extole auth default acme                                   # change default account
 extole auth list                                           # show all accounts with default marker
 extole auth status                                         # verify token + connectivity
-extole auth logout --account acme                          # remove token for an account
+extole auth logout --account acme                          # remove account
 ```
 
 All commands use the default account unless `--account NAME` is specified.
@@ -172,6 +172,6 @@ extole reports run --type summary_per_program --days 365 \
 {
   "_default": "acme",
   "acme": { "token": "..." },
-  "staging": { "token": "..." }
+  "acme-sandbox": { "token": "..." }
 }
 ```
