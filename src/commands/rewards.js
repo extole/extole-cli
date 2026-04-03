@@ -2,6 +2,7 @@ import { Command } from 'commander';
 import { resolveToken, PERSON_BASE } from '../config.js';
 import { printJson } from '../output.js';
 import { addGlobalOptions } from '../utils.js';
+import { getPersonSteps } from './person.js';
 
 const REQUEST_TIMEOUT_MS = 30_000;
 
@@ -105,6 +106,7 @@ export function rewardsCommand() {
   const getCmd = new Command('get')
     .argument('<reward_id>', 'Reward ID to look up')
     .description('Show full detail for a single reward')
+    .option('--steps', 'Also show step history for the reward recipient')
     .action(async function(rewardId) {
       const opts = this.optsWithGlobals();
       const token = resolveToken(opts);
@@ -112,7 +114,12 @@ export function rewardsCommand() {
       const r = await rewardsFetch(`/v2/rewards/${rewardId}`, token);
 
       if (opts.json) {
-        printJson(r, opts);
+        if (opts.steps && r.person_id) {
+          const steps = await getPersonSteps(r.person_id, token);
+          printJson({ reward: r, steps }, opts);
+        } else {
+          printJson(r, opts);
+        }
         return;
       }
 
@@ -132,6 +139,21 @@ export function rewardsCommand() {
       field('cause_event_id',  r.cause_event_id);
       field('created_at',      r.created_at ? new Date(r.created_at).toLocaleString('en-US') : null);
       field('container',       r.container);
+
+      if (opts.steps && r.person_id) {
+        const rewardDate = r.created_at ? new Date(r.created_at) : null;
+        const steps = await getPersonSteps(r.person_id, token);
+        console.log('\nSteps:');
+        console.log('─'.repeat(70));
+        for (const s of steps) {
+          const stepDate = new Date(s.event_date || s.created_date);
+          const age = rewardDate ? Math.round((rewardDate - stepDate) / (1000 * 60 * 60 * 24)) : null;
+          const dateStr = stepDate.toLocaleDateString('en-US').padEnd(12);
+          const rel = age !== null ? (age === 0 ? '(same day)' : age > 0 ? `(${age}d before)` : `(${Math.abs(age)}d after)`).padEnd(14) : ''.padEnd(14);
+          const name = (s.name || '').padEnd(35);
+          console.log(`${dateStr}${rel}${name}${s.journey_name || ''}`);
+        }
+      }
     });
 
   addGlobalOptions(getCmd, {
