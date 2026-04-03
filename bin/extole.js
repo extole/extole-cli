@@ -8,6 +8,7 @@ import { reportsCommand } from '../src/commands/reports.js';
 import { personCommand } from '../src/commands/person.js';
 import { streamCommand } from '../src/commands/stream.js';
 import { rewardsCommand } from '../src/commands/rewards.js';
+import { programsCommand } from '../src/commands/programs.js';
 
 const program = new Command();
 
@@ -24,5 +25,6 @@ program.addCommand(reportsCommand());
 program.addCommand(personCommand());
 program.addCommand(rewardsCommand());
 program.addCommand(streamCommand());
+program.addCommand(programsCommand());
 
 program.parse();
