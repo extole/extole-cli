@@ -58,13 +58,17 @@ export function reportsCommand() {
   const runCmd = new Command('run')
     .description('Create an on-demand report')
     .allowExcessArguments(false)
-    .requiredOption('--type REPORT_TYPE', 'Report type (e.g. summary, summary_per_program)')
+    .option('--type <type>', 'Report type (e.g. summary, summary_per_program)')
     .option('-p, --param <kv>', 'key=value parameter (repeatable)', collect, [])
     .option('--days <n>', 'Shortcut: set time_range to last N days')
     .option('--wait', 'Poll until report is complete')
     .option('--download', 'Download and print result (implies --wait)')
     .option('--verbose', 'Full output without compaction')
     .action(async (opts) => {
+      if (!opts.type) {
+        console.error('Error: --type REPORT_TYPE is required. Run `extole reports types` to see available types.');
+        process.exit(2);
+      }
       const token = resolveToken(opts);
       const parameters = {};
       for (const kv of opts.param) {
@@ -145,8 +149,67 @@ export function reportsCommand() {
     ],
   });
 
+  const describeCmd = new Command('describe')
+    .description('Show parameters for a report type')
+    .allowExcessArguments(false)
+    .option('--type <type>', 'Report type to describe')
+    .action(async (opts) => {
+      if (!opts.type) {
+        console.error('Error: --type REPORT_TYPE is required. Run `extole reports types` to see available types.');
+        process.exit(2);
+      }
+      const token = resolveToken(opts);
+      const data = await apiJson(`/v4/report-types/${encodeURIComponent(opts.type)}`, token);
+
+      if (opts.json) {
+        printJson(data, opts);
+        return;
+      }
+
+      console.log(`${data.display_name || data.name}`);
+      if (data.description) {
+        const desc = data.description.replace(/<[^>]+>/g, '').trim();
+        if (desc) console.log(desc);
+      }
+      console.log(`executor: ${data.executor_type}   formats: ${(data.formats || []).join(', ')}`);
+      console.log();
+
+      if (!data.parameters?.length) {
+        console.log('No parameters defined.');
+        return;
+      }
+
+      const required = data.parameters.filter(p => p.is_required);
+      const optional = data.parameters.filter(p => !p.is_required);
+
+      const printParam = (p) => {
+        const req = p.is_required ? ' (required)' : '';
+        const def = p.default_value != null ? `  default: ${p.default_value}` : '';
+        const vals = p.type?.values?.length ? `\n    values: ${p.type.values.join(', ')}` : '';
+        console.log(`  ${p.name}${req}  [${p.type?.name || 'STRING'}]${def}${vals}`);
+      };
+
+      if (required.length) {
+        console.log('Required:');
+        required.forEach(printParam);
+      }
+      if (optional.length) {
+        console.log('\nOptional:');
+        optional.forEach(printParam);
+      }
+    });
+
+  addGlobalOptions(describeCmd, {
+    output: true,
+    examples: [
+      'extole reports describe --type summary',
+      'extole reports describe --type ADVOCATE_LIST',
+    ],
+  });
+
   reports.addCommand(listCmd);
   reports.addCommand(typesCmd);
+  reports.addCommand(describeCmd);
   reports.addCommand(runCmd);
   return reports;
 }
