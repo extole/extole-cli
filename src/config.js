@@ -34,7 +34,7 @@ export function resolveToken(options) {
   if (options.token) return options.token;
   const profile = getProfile(options.account);
   if (profile?.token) return profile.token;
-  console.error('Error: no token found. Run `extole auth login --token <token>` or pass --token.');
+  console.error('Error: no token found. Run `extole auth --token <token>` or set EXTOLE_TOKEN.');
   process.exit(2);
 }
 
