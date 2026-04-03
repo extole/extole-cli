@@ -97,7 +97,8 @@ extole stream --app-type my_integration              # only events from a specif
 
 ```
 extole events fire <event_name> --live                        # fire against the live production API
-extole events fire <event_name> --sandbox                     # fire in sandbox mode (sandbox=production-test)
+extole events fire <event_name> --sandbox                     # fire in sandbox mode (defaults to production-test)
+extole events fire <event_name> --sandbox my-sandbox          # fire in a specific sandbox
 extole events fire lead_created --email jane@example.com --live
 extole events fire lead_created --email jane@example.com --sandbox
 
@@ -109,7 +110,7 @@ extole events fire <event_name> --live --watch --watch-timeout 30
 
 Either `--live` or `--sandbox` is required to send an event. Use `--dry-run` to preview the payload safely.
 
-`--sandbox` adds `sandbox=production-test` to the event data, routing it through the sandbox pipeline.
+`--sandbox` adds a `sandbox` param to the event data (default: `production-test`). Pass a value to target a different sandbox: `--sandbox my-sandbox`.
 
 ## Person
 

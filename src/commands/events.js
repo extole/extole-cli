@@ -30,7 +30,7 @@ export function eventsCommand() {
     .option('--amount <amount>', 'amount param shortcut')
     .option('-p, --param <kv>', 'key=value param (repeatable)', collect, [])
     .option('--live', 'Fire the event against the live production API')
-    .option('--sandbox', 'Fire the event in sandbox mode (adds sandbox=production-test)')
+    .option('--sandbox [name]', 'Fire in sandbox mode (default: production-test)')
     .option('--dry-run', 'Print request payload without sending')
     .option('--watch', 'After firing, tail the event stream for this email for 15s')
     .option('--watch-timeout <seconds>', 'How long to tail when using --watch', '15')
@@ -46,7 +46,7 @@ export function eventsCommand() {
         data[kv.slice(0, idx)] = kv.slice(idx + 1);
       }
 
-      if (opts.sandbox) data.sandbox = 'production-test';
+      if (opts.sandbox) data.sandbox = typeof opts.sandbox === 'string' ? opts.sandbox : 'production-test';
 
       const payload = { event_name: eventName, data };
       if (opts.dryRun) {
