@@ -29,6 +29,7 @@ export function eventsCommand() {
     .option('--opportunity_id <id>', 'opportunity_id param shortcut')
     .option('--amount <amount>', 'amount param shortcut')
     .option('-p, --param <kv>', 'key=value param (repeatable)', collect, [])
+    .option('--live', 'Actually fire the event in production (required unless --dry-run)')
     .option('--dry-run', 'Print request payload without sending')
     .option('--watch', 'After firing, tail the event stream for this email for 15s')
     .option('--watch-timeout <seconds>', 'How long to tail when using --watch', '15')
@@ -49,6 +50,12 @@ export function eventsCommand() {
       if (opts.dryRun) {
         console.log(JSON.stringify(payload, null, 2));
         return;
+      }
+
+      if (!opts.live) {
+        console.error('Error: --live is required to fire events against the production API.');
+        console.error('Use --dry-run to preview the payload, or --live to fire for real.');
+        process.exit(2);
       }
 
       const fireTime = new Date().toISOString();
@@ -125,10 +132,10 @@ export function eventsCommand() {
   addGlobalOptions(fireCmd, {
     output: true,
     examples: [
-      'extole events fire lead_created --email jane@example.com',
-      'extole events fire opp_closed_won --opportunity_id 006Hs00000xyz -p amount=50000',
-      'extole events fire lead_created --email jane@example.com --watch',
       'extole events fire lead_created --email jane@example.com --dry-run',
+      'extole events fire lead_created --email jane@example.com --live',
+      'extole events fire opp_closed_won --opportunity_id 006Hs00000xyz -p amount=50000 --live',
+      'extole events fire lead_created --email jane@example.com --live --watch',
     ],
   });
 
