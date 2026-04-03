@@ -58,7 +58,7 @@ export function reportsCommand() {
   const runCmd = new Command('run')
     .description('Create an on-demand report')
     .allowExcessArguments(false)
-    .requiredOption('--type <report_type>', 'Report type (e.g. summary, summary_per_program)')
+    .requiredOption('--type REPORT_TYPE', 'Report type (e.g. summary, summary_per_program)')
     .option('-p, --param <kv>', 'key=value parameter (repeatable)', collect, [])
     .option('--days <n>', 'Shortcut: set time_range to last N days')
     .option('--wait', 'Poll until report is complete')
