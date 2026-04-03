@@ -36,8 +36,8 @@ async function rewardsFetch(path, token) {
 function formatReward(r) {
   const state    = (r.state || '').padEnd(12);
   const value    = r.face_value != null
-    ? `${r.face_value} ${r.face_value_type || ''}`.trim().padEnd(14)
-    : ''.padEnd(14);
+    ? `${r.face_value} ${r.face_value_type || ''}`.trim().padEnd(18)
+    : ''.padEnd(18);
   const journey  = (r.journey_name || '').padEnd(16);
   const date     = r.created_at ? new Date(r.created_at).toLocaleDateString('en-US') : '';
   const id       = (r.reward_id || '').slice(0, 24);
@@ -74,7 +74,7 @@ export function rewardsCommand() {
         return;
       }
 
-      const col = { state: 12, value: 14, journey: 16, date: 12 };
+      const col = { state: 12, value: 18, journey: 16, date: 12 };
       console.log(
         'state'.padEnd(col.state) +
         'face_value'.padEnd(col.value) +
