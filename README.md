@@ -11,23 +11,22 @@ npm install -g github:cduskin-cpu/extole-cli
 ## Auth
 
 ```
-extole auth --token TOKEN                   # save token to default account
-extole auth --token TOKEN --account acme    # save token to named account
-extole auth list                            # show all saved accounts
-extole auth status                          # verify token + connectivity
-extole auth logout                          # remove token for an account
-extole auth logout --account acme
+extole auth login --token TOKEN --account acme --default   # save token, set as default
+extole auth login --token TOKEN --account staging          # save additional account
+extole auth default acme                                   # change default account
+extole auth list                                           # show all accounts with default marker
+extole auth status                                         # verify token + connectivity
+extole auth logout --account acme                          # remove token for an account
 ```
 
-All commands accept `--account NAME` to select a saved account (default: `default`).
-Set `EXTOLE_ACCOUNT=acme` in your shell to avoid passing it on every command.
-Pass `--token TOKEN` to override for a single call without saving.
+All commands use the default account unless `--account NAME` is specified.
+Set `EXTOLE_ACCOUNT=NAME` in your shell to override without passing it on every command.
+Pass `--token TOKEN` to override the token for a single call without saving.
 
 ## ping
 
 ```
 extole ping
-extole ping --account acme
 ```
 
 Verifies connectivity. Exit 0 = OK, exit 1 = failure.
@@ -154,7 +153,8 @@ extole reports run --type summary_per_program --days 365 \
 `~/.extole/config`:
 ```json
 {
-  "default": { "token": "..." },
-  "acme": { "token": "..." }
+  "_default": "acme",
+  "acme": { "token": "..." },
+  "staging": { "token": "..." }
 }
 ```
