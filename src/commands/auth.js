@@ -50,9 +50,10 @@ Examples:
       }
       const config = loadConfig();
       if (config[account]) {
-        delete config[account].token;
+        delete config[account];
+        if (config._default === account) delete config._default;
         saveConfig(config);
-        console.log(`Token removed from account "${account}".`);
+        console.log(`Account "${account}" removed.`);
       } else {
         console.log(`No account "${account}" found.`);
       }
