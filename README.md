@@ -12,22 +12,22 @@ npm install -g github:cduskin-cpu/extole-cli
 
 ```
 extole auth --token TOKEN                   # save token to default account
-extole auth --token TOKEN --account quim    # save token to named account
+extole auth --token TOKEN --account acme    # save token to named account
 extole auth list                            # show all saved accounts
 extole auth status                          # verify token + connectivity
 extole auth logout                          # remove token for an account
-extole auth logout --account quim
+extole auth logout --account acme
 ```
 
 All commands accept `--account NAME` to select a saved account (default: `default`).
-Set `EXTOLE_ACCOUNT=quim` in your shell to avoid passing it on every command.
+Set `EXTOLE_ACCOUNT=acme` in your shell to avoid passing it on every command.
 Pass `--token TOKEN` to override for a single call without saving.
 
 ## ping
 
 ```
 extole ping
-extole ping --account quim
+extole ping --account acme
 ```
 
 Verifies connectivity. Exit 0 = OK, exit 1 = failure.
@@ -155,6 +155,6 @@ extole reports run --type summary_per_program --days 365 \
 ```json
 {
   "default": { "token": "..." },
-  "quim": { "token": "..." }
+  "acme": { "token": "..." }
 }
 ```
