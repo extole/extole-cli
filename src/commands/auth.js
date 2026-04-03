@@ -25,6 +25,28 @@ Examples:
     });
 
   auth
+    .command('list')
+    .description('List all saved accounts')
+    .addHelpText('after', `
+Examples:
+  extole auth list`)
+    .action(() => {
+      const config = loadConfig();
+      const accounts = Object.keys(config);
+      if (accounts.length === 0) {
+        console.log('No accounts saved. Run `extole auth --token <token>` to add one.');
+        return;
+      }
+      for (const name of accounts) {
+        const token = config[name]?.token;
+        const masked = token
+          ? (token.length > 12 ? token.slice(0, 8) + '...' + token.slice(-4) : '***')
+          : '(no token)';
+        console.log(`${name.padEnd(20)}  ${masked}`);
+      }
+    });
+
+  auth
     .command('logout')
     .description('Remove saved token for an account')
     .addHelpText('after', `
