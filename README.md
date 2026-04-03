@@ -11,21 +11,40 @@ npm install -g github:cduskin-cpu/extole-cli
 ## Auth
 
 ```
-extole auth login --token <bearer-token>   # save token to ~/.extole/config
-extole auth logout
+extole auth --token TOKEN                   # save token to default account
+extole auth --token TOKEN --account quim    # save token to named account
+extole auth list                            # show all saved accounts
 extole auth status                          # verify token + connectivity
+extole auth logout                          # remove token for an account
+extole auth logout --account quim
 ```
 
-All commands accept `--token <token>` to override the saved token for one-off use.
-Multi-profile support: `--profile staging` (default profile used if omitted).
+All commands accept `--account NAME` to select a saved account (default: `default`).
+Set `EXTOLE_ACCOUNT=quim` in your shell to avoid passing it on every command.
+Pass `--token TOKEN` to override for a single call without saving.
 
 ## ping
 
 ```
 extole ping
+extole ping --account quim
 ```
 
 Verifies connectivity. Exit 0 = OK, exit 1 = failure.
+
+## Rewards
+
+```
+extole rewards --email jane@example.com
+extole rewards --email jane@example.com --status EARNED
+extole rewards --email jane@example.com --limit 50
+
+extole rewards get <reward_id>              # full detail including coupon code
+extole rewards get <reward_id> --steps      # also show recipient step history
+extole rewards get <reward_id> --json
+```
+
+Reward states: `EARNED`, `FULFILLED`, `SENT`, `REDEEMED`, `CANCELED`, `FAILED`, `EXPIRED`
 
 ## Stream
 
@@ -70,13 +89,15 @@ extole stream --app-type salesforce_crm              # only events from Salesfor
 ## Events
 
 ```
-extole events fire <event_name>               # fire a single event
-extole events fire lead_created --email jane@example.com --advocate_code ABC123
-extole events fire <event_name> --param key=value [--param key=value ...]
-extole events fire <event_name> --dry-run     # print payload without sending
-extole events fire <event_name> --watch       # fire then tail steps for --email for 15s
-extole events fire <event_name> --watch --watch-timeout 30
+extole events fire <event_name> --live                        # required to fire in production
+extole events fire lead_created --email jane@example.com --live
+extole events fire <event_name> --param key=value [--param key=value ...] --live
+extole events fire <event_name> --dry-run                     # print payload without sending
+extole events fire <event_name> --live --watch                # fire then tail steps for --email for 15s
+extole events fire <event_name> --live --watch --watch-timeout 30
 ```
+
+`--live` is required to actually send an event. Use `--dry-run` to preview the payload safely.
 
 ## Person
 
@@ -133,6 +154,6 @@ extole reports run --type summary_per_program --days 365 \
 ```json
 {
   "default": { "token": "..." },
-  "staging": { "token": "..." }
+  "quim": { "token": "..." }
 }
 ```
