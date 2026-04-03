@@ -44,11 +44,8 @@ function formatReward(r) {
 }
 
 export function rewardsCommand() {
-  const rewards = new Command('rewards').description('Look up reward state for a person');
-
-  rewards
-    .command('get')
-    .description('Show rewards for a person by email')
+  return new Command('rewards')
+    .description('Look up reward state for a person by email')
     .requiredOption('--email <email>', 'Email address to look up')
     .option('--status <state>', 'Filter by state (EARNED, FULFILLED, SENT, REDEEMED, CANCELED, FAILED, EXPIRED)')
     .option('--limit <n>', 'Max rewards to return', '25')
@@ -93,6 +90,4 @@ export function rewardsCommand() {
         formatReward(r);
       }
     });
-
-  return rewards;
 }
