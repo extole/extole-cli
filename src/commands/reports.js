@@ -2,20 +2,15 @@ import { Command } from 'commander';
 import { resolveToken } from '../config.js';
 import { apiJson, apiFetch } from '../api.js';
 import { printJson, printJsonText } from '../output.js';
-import { collect, sleep } from '../utils.js';
+import { collect, sleep, addGlobalOptions } from '../utils.js';
 
 const REPORT_POLL_MAX = 240; // 6 minutes at 1.5s intervals
 
 export function reportsCommand() {
   const reports = new Command('reports').description('List report types and run on-demand reports');
 
-  reports
-    .command('list')
+  const listCmd = new Command('list')
     .description('List available report runners')
-    .option('--json', 'Emit JSON')
-    .option('--compact', 'Strip nulls and empty fields from JSON output')
-    .option('--token <token>', 'Override token')
-    .option('--profile <profile>', 'Profile name', 'default')
     .action(async (opts) => {
       const token = resolveToken(opts);
       const data = await apiJson('/v7/report-runners', token);
@@ -33,13 +28,10 @@ export function reportsCommand() {
       }
     });
 
-  reports
-    .command('types')
+  addGlobalOptions(listCmd, { output: true });
+
+  const typesCmd = new Command('types')
     .description('List available report types')
-    .option('--json', 'Emit JSON')
-    .option('--compact', 'Strip nulls and empty fields from JSON output')
-    .option('--token <token>', 'Override token')
-    .option('--profile <profile>', 'Profile name', 'default')
     .action(async (opts) => {
       const token = resolveToken(opts);
       const data = await apiJson('/v4/report-types', token);
@@ -59,8 +51,9 @@ export function reportsCommand() {
       }
     });
 
-  reports
-    .command('run')
+  addGlobalOptions(typesCmd, { output: true });
+
+  const runCmd = new Command('run')
     .description('Create an on-demand report')
     .requiredOption('--type <report_type>', 'Report type (e.g. summary, summary_per_program)')
     .option('-p, --param <kv>', 'key=value parameter (repeatable)', collect, [])
@@ -68,8 +61,6 @@ export function reportsCommand() {
     .option('--wait', 'Poll until report is complete')
     .option('--download', 'Download and print result (implies --wait)')
     .option('--verbose', 'Full output without compaction')
-    .option('--token <token>', 'Override token')
-    .option('--profile <profile>', 'Profile name', 'default')
     .action(async (opts) => {
       const token = resolveToken(opts);
       const parameters = {};
@@ -89,7 +80,6 @@ export function reportsCommand() {
         parameters.time_range = `${start.toISOString()}/${end.toISOString()}`;
       }
 
-      // Create report
       const body = { report_type: opts.type, parameters };
       const createRes = await apiFetch('/v4/reports', token, {
         method: 'POST',
@@ -112,7 +102,6 @@ export function reportsCommand() {
 
       if (!opts.wait && !opts.download) return;
 
-      // Poll until done
       const frames = ['⠋','⠙','⠹','⠸','⠼','⠴','⠦','⠧','⠇','⠏'];
       let frame = 0;
       let status = report.status;
@@ -137,7 +126,6 @@ export function reportsCommand() {
 
       if (!opts.download) return;
 
-      // Download
       const dl = await apiFetch(`/v4/reports/${reportId}/download`, token);
       if (!dl.ok) {
         console.error(`Download failed ${dl.status}`);
@@ -147,5 +135,15 @@ export function reportsCommand() {
       printJsonText(text, opts);
     });
 
+  addGlobalOptions(runCmd, {
+    examples: [
+      'extole reports run --type summary --days 30 --download',
+      'extole reports run --type summary_per_program --days 7 --wait',
+    ],
+  });
+
+  reports.addCommand(listCmd);
+  reports.addCommand(typesCmd);
+  reports.addCommand(runCmd);
   return reports;
 }

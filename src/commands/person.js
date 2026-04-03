@@ -1,6 +1,7 @@
 import { Command } from 'commander';
 import { resolveToken, PERSON_BASE } from '../config.js';
 import { printJson } from '../output.js';
+import { addGlobalOptions } from '../utils.js';
 
 const REQUEST_TIMEOUT_MS = 30_000;
 const MAX_POLL_ERRORS = 10;
@@ -48,13 +49,9 @@ export async function getPersonSteps(personId, token, limit = 50) {
 export function personCommand() {
   const person = new Command('person').description('Look up person profile and step history');
 
-  person
-    .command('get')
+  const getCmd = new Command('get')
     .description('Look up a person by email')
     .requiredOption('--email <email>', 'Email address to look up')
-    .option('--compact', 'Strip nulls and empty fields')
-    .option('--token <token>', 'Override token')
-    .option('--profile <profile>', 'Profile name', 'default')
     .action(async (opts) => {
       const token = resolveToken(opts);
       const match = await findPerson(opts.email, token);
@@ -62,21 +59,23 @@ export function personCommand() {
         console.error(`No person found for ${opts.email}`);
         process.exit(1);
       }
-      // Fetch richer v4 profile
       const profile = await personApiFetch(`/v4/persons/${match.id}`, token);
       printJson(profile, opts);
     });
 
-  person
-    .command('steps')
+  addGlobalOptions(getCmd, {
+    output: true,
+    examples: [
+      'extole person get --email jane@example.com',
+      'extole person get --email jane@example.com --compact',
+    ],
+  });
+
+  const stepsCmd = new Command('steps')
     .description('Show steps for a person; --watch to tail live')
     .requiredOption('--email <email>', 'Email address to look up')
     .option('--limit <n>', 'Number of steps to return (one-shot)', '25')
     .option('--watch', 'Poll for new steps until Ctrl+C')
-    .option('--compact', 'Strip nulls and empty fields')
-    .option('--json', 'Emit one JSON object per line (with --watch)')
-    .option('--token <token>', 'Override token')
-    .option('--profile <profile>', 'Profile name', 'default')
     .action(async (opts) => {
       const token = resolveToken(opts);
       const match = await findPerson(opts.email, token);
@@ -97,7 +96,6 @@ export function personCommand() {
         return;
       }
 
-      // Watch mode — poll for new steps
       const seen = new Set();
       let errorCount = 0;
       if (!opts.json) console.error(`Watching steps for ${opts.email} — Ctrl+C to stop\n`);
@@ -138,5 +136,15 @@ export function personCommand() {
       setInterval(poll, 2500);
     });
 
+  addGlobalOptions(stepsCmd, {
+    output: true,
+    examples: [
+      'extole person steps --email jane@example.com',
+      'extole person steps --email jane@example.com --watch',
+    ],
+  });
+
+  person.addCommand(getCmd);
+  person.addCommand(stepsCmd);
   return person;
 }

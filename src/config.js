@@ -32,7 +32,7 @@ export function setProfile(profileName = 'default', data) {
 
 export function resolveToken(options) {
   if (options.token) return options.token;
-  const profile = getProfile(options.profile);
+  const profile = getProfile(options.account);
   if (profile?.token) return profile.token;
   console.error('Error: no token found. Run `extole auth login --token <token>` or pass --token.');
   process.exit(2);

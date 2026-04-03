@@ -1,8 +1,8 @@
 import { Command } from 'commander';
 import { resolveToken } from '../config.js';
-import { apiJson, apiFetch } from '../api.js';
+import { apiFetch } from '../api.js';
 import { printJson } from '../output.js';
-import { collect, sleep } from '../utils.js';
+import { collect, sleep, addGlobalOptions } from '../utils.js';
 import { findPerson, getPersonSteps } from './person.js';
 
 
@@ -21,9 +21,8 @@ function formatEvent(ev, opts) {
 export function eventsCommand() {
   const events = new Command('events').description('Fire events and watch downstream steps');
 
-
-  events
-    .command('fire <event_name>')
+  const fireCmd = new Command('fire')
+    .argument('<event_name>', 'Event name to fire')
     .description('Fire a single event via POST /v5/events')
     .option('--email <email>', 'email param shortcut')
     .option('--advocate_code <code>', 'advocate_code param shortcut')
@@ -33,10 +32,6 @@ export function eventsCommand() {
     .option('--dry-run', 'Print request payload without sending')
     .option('--watch', 'After firing, tail the event stream for this email for 15s')
     .option('--watch-timeout <seconds>', 'How long to tail when using --watch', '15')
-    .option('--json', 'Emit raw API response')
-    .option('--compact', 'Strip nulls and empty fields from JSON output')
-    .option('--token <token>', 'Override token')
-    .option('--profile <profile>', 'Profile name', 'default')
     .action(async (eventName, opts) => {
       const token = resolveToken(opts);
       const data = {};
@@ -75,7 +70,6 @@ export function eventsCommand() {
 
       if (!opts.watch) return;
 
-      // Tail person steps for this email for N seconds
       const email = opts.email || data.email;
       if (!email) {
         console.error('--watch requires --email to be set');
@@ -128,5 +122,16 @@ export function eventsCommand() {
       console.error(`\nDone watching (${watchTimeout}s).`);
     });
 
+  addGlobalOptions(fireCmd, {
+    output: true,
+    examples: [
+      'extole events fire lead_created --email jane@example.com',
+      'extole events fire opp_closed_won --opportunity_id 006Hs00000xyz -p amount=50000',
+      'extole events fire lead_created --email jane@example.com --watch',
+      'extole events fire lead_created --email jane@example.com --dry-run',
+    ],
+  });
+
+  events.addCommand(fireCmd);
   return events;
 }

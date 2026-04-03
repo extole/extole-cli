@@ -1,7 +1,7 @@
 import { Command } from 'commander';
 import { resolveToken, PERSON_BASE } from '../config.js';
 import { printJson } from '../output.js';
-import { collect } from '../utils.js';
+import { collect, addGlobalOptions } from '../utils.js';
 import { findPerson } from './person.js';
 
 const REQUEST_TIMEOUT_MS = 30_000;
@@ -87,26 +87,20 @@ function formatStreamEvent(item, opts) {
 }
 
 export function streamCommand() {
-  return new Command('stream')
+  const cmd = new Command('stream')
     .description('Tail live Extole events in real time')
     .option('--filter <name>', 'Filter by event name (repeatable)', collect, [])
     .option('--email <email>', 'Filter to a specific person by email')
     .option('--event-type <type>', 'Filter by event type, repeatable (INPUT, REWARD, STEP, SHARE...)', collect, [])
     .option('--app-type <type>', 'Filter by app/source type, repeatable (e.g. salesforce_crm)', collect, [])
     .option('--sandbox <name>', 'Filter by sandbox/container name')
-    .option('--json', 'Emit one JSON object per line')
-    .option('--compact', 'Strip nulls and empty fields')
-    .option('--token <token>', 'Override token')
-    .option('--profile <profile>', 'Profile name', 'default')
     .action(async (opts) => {
       const token = resolveToken(opts);
 
-      // Create ephemeral stream
       const stream = await createStream(token);
       const streamId = stream.id;
       process.stderr.write(`Stream ${streamId} created\n`);
 
-      // Register cleanup on exit
       async function cleanup() {
         process.stderr.write('\nCleaning up stream...\n');
         await deleteStream(streamId, token);
@@ -115,7 +109,6 @@ export function streamCommand() {
       process.on('SIGINT', cleanup);
       process.on('SIGTERM', cleanup);
 
-      // Add filters
       const filterPromises = [];
 
       if (opts.filter.length > 0) {
@@ -147,7 +140,6 @@ export function streamCommand() {
 
       if (!opts.json) process.stderr.write('Streaming events — Ctrl+C to stop\n\n');
 
-      // Poll for events
       const seen = new Set();
       let since = new Date().toISOString();
       let errorCount = 0;
@@ -165,7 +157,6 @@ export function streamCommand() {
                 seen.clear();
                 arr.slice(-SEEN_KEEP_SIZE).forEach(i => seen.add(i));
               }
-              // Skip internal stream management events
               const evName = item.event?.name || '';
               if (evName === 'config_change') continue;
               formatStreamEvent(item, opts);
@@ -186,4 +177,15 @@ export function streamCommand() {
       await poll();
       setInterval(poll, 2500);
     });
+
+  return addGlobalOptions(cmd, {
+    output: true,
+    examples: [
+      'extole stream',
+      'extole stream --app-type salesforce_crm',
+      'extole stream --email jane@example.com',
+      'extole stream --filter lead_created --filter opp_closed_won',
+      'extole stream --event-type REWARD',
+    ],
+  });
 }

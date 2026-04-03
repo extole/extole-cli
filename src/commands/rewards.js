@@ -1,6 +1,7 @@
 import { Command } from 'commander';
 import { resolveToken, PERSON_BASE } from '../config.js';
 import { printJson } from '../output.js';
+import { addGlobalOptions } from '../utils.js';
 
 const REQUEST_TIMEOUT_MS = 30_000;
 
@@ -44,15 +45,11 @@ function formatReward(r) {
 }
 
 export function rewardsCommand() {
-  return new Command('rewards')
+  const cmd = new Command('rewards')
     .description('Look up reward state for a person by email')
     .requiredOption('--email <email>', 'Email address to look up')
     .option('--status <state>', 'Filter by state (EARNED, FULFILLED, SENT, REDEEMED, CANCELED, FAILED, EXPIRED)')
     .option('--limit <n>', 'Max rewards to return', '25')
-    .option('--json', 'Emit raw JSON')
-    .option('--compact', 'Strip nulls and empty fields')
-    .option('--token <token>', 'Override token')
-    .option('--profile <profile>', 'Profile name', 'default')
     .action(async (opts) => {
       const token = resolveToken(opts);
 
@@ -90,4 +87,13 @@ export function rewardsCommand() {
         formatReward(r);
       }
     });
+
+  return addGlobalOptions(cmd, {
+    output: true,
+    examples: [
+      'extole rewards --email jane@example.com',
+      'extole rewards --email jane@example.com --status EARNED',
+      'extole rewards --email jane@example.com --json | jq \'.[].reward_id\'',
+    ],
+  });
 }
