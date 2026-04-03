@@ -1,4 +1,5 @@
 import { Option } from 'commander';
+import { getDefaultAccount } from './config.js';
 
 export function collect(val, prev) {
   return prev.concat([val]);
@@ -24,7 +25,7 @@ export function addGlobalOptions(cmd, { output = false, examples = [] } = {}) {
     )
     .addOption(
       new Option('--account <name>', 'Saved account name')
-        .default('default')
+        .default(getDefaultAccount())
         .env('EXTOLE_ACCOUNT')
         .hideHelp()
     );
@@ -45,10 +46,14 @@ export function addGlobalOptions(cmd, { output = false, examples = [] } = {}) {
     );
   }
 
+  const defaultAccount = getDefaultAccount();
+  const accountDesc = defaultAccount
+    ? `Saved account name (default: "${defaultAccount}", or set EXTOLE_ACCOUNT)`
+    : 'Saved account name (or set EXTOLE_ACCOUNT)';
   sections.push(
     '\nGlobal Options:\n' +
     '  --token <token>      Override token (or set EXTOLE_TOKEN)\n' +
-    '  --account <name>     Saved account name (default: "default", or set EXTOLE_ACCOUNT)'
+    `  --account <name>     ${accountDesc}`
   );
 
   if (examples.length > 0) {

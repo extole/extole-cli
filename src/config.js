@@ -19,12 +19,25 @@ export function saveConfig(config) {
   writeFileSync(CONFIG_FILE, JSON.stringify(config, null, 2), { mode: 0o600 });
 }
 
-export function getProfile(profileName = 'default') {
+export function getDefaultAccount() {
   const config = loadConfig();
-  return config[profileName] || null;
+  return config._default || null;
 }
 
-export function setProfile(profileName = 'default', data) {
+export function setDefaultAccount(name) {
+  const config = loadConfig();
+  config._default = name;
+  saveConfig(config);
+}
+
+export function getProfile(profileName) {
+  const config = loadConfig();
+  const name = profileName || config._default;
+  if (!name) return null;
+  return config[name] || null;
+}
+
+export function setProfile(profileName, data) {
   const config = loadConfig();
   config[profileName] = { ...config[profileName], ...data };
   saveConfig(config);
@@ -32,9 +45,14 @@ export function setProfile(profileName = 'default', data) {
 
 export function resolveToken(options) {
   if (options.token) return options.token;
-  const profile = getProfile(options.account);
+  const config = loadConfig();
+  const accountName = options.account || config._default;
+  if (!accountName) {
+    console.error(`Error: no default account set. Run 'extole auth login --token TOKEN --account NAME --default' to get started.`);
+    process.exit(2);
+  }
+  const profile = config[accountName];
   if (profile?.token) return profile.token;
-  const accountName = options.account || 'default';
   console.error(`Error: no token for account "${accountName}". Run 'extole auth list' to see saved accounts. Then use --account NAME or set EXTOLE_ACCOUNT.`);
   process.exit(2);
 }
