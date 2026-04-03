@@ -14,6 +14,7 @@ export function authCommand() {
   auth
     .command('login')
     .description('Save a token for an account')
+    .allowExcessArguments(false)
     .option('--token <token>', 'Extole bearer token')
     .addHelpText('after', `
 Examples:
@@ -32,6 +33,7 @@ Examples:
   auth
     .command('logout')
     .description('Remove saved token for an account')
+    .allowExcessArguments(false)
     .addHelpText('after', `
 Examples:
   extole auth logout
@@ -51,6 +53,7 @@ Examples:
   auth
     .command('list')
     .description('List all saved accounts')
+    .allowExcessArguments(false)
     .addHelpText('after', `
 Examples:
   extole auth list`)
@@ -73,6 +76,7 @@ Examples:
   auth
     .command('status')
     .description('Show token and verify connectivity')
+    .allowExcessArguments(false)
     .addHelpText('after', `
 Examples:
   extole auth status

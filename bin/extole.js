@@ -14,7 +14,8 @@ const program = new Command();
 program
   .name('extole')
   .description('Extole developer CLI')
-  .version('0.1.0');
+  .version('0.1.0')
+;
 
 program.addCommand(authCommand());
 program.addCommand(pingCommand());
