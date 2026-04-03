@@ -91,6 +91,7 @@ extole stream --app-type salesforce_crm              # only events from Salesfor
 ```
 extole events fire <event_name> --live                        # required to fire in production
 extole events fire lead_created --email jane@example.com --live
+extole events fire opp_closed_won -p opportunity_id=006abc -p amount=50000 --live
 extole events fire <event_name> --param key=value [--param key=value ...] --live
 extole events fire <event_name> --dry-run                     # print payload without sending
 extole events fire <event_name> --live --watch                # fire then tail steps for --email for 15s

@@ -27,7 +27,6 @@ export function eventsCommand() {
     .allowExcessArguments(false)
     .option('--email <email>', 'email param shortcut')
     .option('--advocate_code <code>', 'advocate_code param shortcut')
-    .option('--opportunity_id <id>', 'opportunity_id param shortcut')
     .option('--amount <amount>', 'amount param shortcut')
     .option('-p, --param <kv>', 'key=value param (repeatable)', collect, [])
     .option('--live', 'Actually fire the event in production (required unless --dry-run)')
@@ -39,7 +38,6 @@ export function eventsCommand() {
       const data = {};
       if (opts.email) data.email = opts.email;
       if (opts.advocate_code) data.advocate_code = opts.advocate_code;
-      if (opts.opportunity_id) data.opportunity_id = opts.opportunity_id;
       if (opts.amount) data.amount = opts.amount;
       for (const kv of opts.param) {
         const idx = kv.indexOf('=');
@@ -135,7 +133,7 @@ export function eventsCommand() {
     examples: [
       'extole events fire lead_created --email jane@example.com --dry-run',
       'extole events fire lead_created --email jane@example.com --live',
-      'extole events fire opp_closed_won --opportunity_id 006Hs00000xyz -p amount=50000 --live',
+      'extole events fire opp_closed_won -p opportunity_id=006abc -p amount=50000 --live',
       'extole events fire lead_created --email jane@example.com --live --watch',
     ],
   });
