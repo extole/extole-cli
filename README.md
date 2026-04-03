@@ -45,6 +45,14 @@ extole rewards get <reward_id> --json
 
 Reward states: `EARNED`, `FULFILLED`, `SENT`, `REDEEMED`, `CANCELED`, `FAILED`, `EXPIRED`
 
+## Programs
+
+```
+extole programs           # list LIVE programs and campaigns
+extole programs --all     # include PAUSED, STOPPED, NOT_LAUNCHED
+extole programs --json
+```
+
 ## Stream
 
 ```
@@ -112,15 +120,19 @@ extole person steps --email jane@example.com --watch --json
 ## Reports
 
 ```
-extole reports list                           # list saved report runners
-extole reports types                          # list all available report types
+extole reports list                              # list saved report runners
+extole reports types                             # list all available report types
+extole reports describe --type summary           # show parameters for a report type
 
-extole reports run --type <report_type> [options]
+extole reports run --type REPORT_TYPE [options]  # create report, returns ID immediately
   --days <n>           set time_range to last N days (shortcut)
   -p key=value         report parameter (repeatable)
   --wait               poll until complete
   --download           download and print result (implies --wait)
-  --compact            strip nulls and empty fields
+
+extole reports status REPORT_ID                  # check if a report is done
+extole reports download REPORT_ID                # download a completed report
+extole reports download REPORT_ID --wait         # wait for completion then download
 ```
 
 Examples:
