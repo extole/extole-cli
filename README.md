@@ -162,6 +162,7 @@ extole reports run --type summary_per_program --days 365 \
 
 - Human-readable by default; `--json` on all commands
 - `--compact` strips nulls and empty fields (useful for piping to agents)
+- `--verbose` logs each HTTP request (`→ METHOD URL`) to stderr
 - Exit 0 = success, 1 = API error, 2 = auth/config error
 - Data goes to stdout, status/progress goes to stderr (pipeable)
 

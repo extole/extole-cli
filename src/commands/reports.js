@@ -14,7 +14,7 @@ export function reportsCommand() {
     .allowExcessArguments(false)
     .action(async (opts) => {
       const token = resolveToken(opts);
-      const data = await apiJson('/v7/report-runners', token);
+      const data = await apiJson('/v7/report-runners', token, { verbose: opts.verbose });
       const runners = Array.isArray(data) ? data : (data.runners || []);
       if (opts.json) {
         printJson(runners, opts);
@@ -36,7 +36,7 @@ export function reportsCommand() {
     .allowExcessArguments(false)
     .action(async (opts) => {
       const token = resolveToken(opts);
-      const data = await apiJson('/v4/report-types', token);
+      const data = await apiJson('/v4/report-types', token, { verbose: opts.verbose });
       const types = Array.isArray(data) ? data : (data.report_types || []);
       if (opts.json) {
         printJson(types, opts);
@@ -63,7 +63,6 @@ export function reportsCommand() {
     .option('--days <n>', 'Shortcut: set time_range to last N days')
     .option('--wait', 'Poll until report is complete')
     .option('--download', 'Download and print result (implies --wait)')
-    .option('--verbose', 'Full output without compaction')
     .action(async (opts) => {
       if (!opts.type) {
         console.error('Error: --type REPORT_TYPE is required. Run `extole reports types` to see available types.');
@@ -91,6 +90,7 @@ export function reportsCommand() {
       const createRes = await apiFetch('/v4/reports', token, {
         method: 'POST',
         body: JSON.stringify(body),
+        verbose: opts.verbose,
       });
       const createText = await createRes.text();
       if (!createRes.ok) {
@@ -120,7 +120,7 @@ export function reportsCommand() {
           process.exit(1);
         }
         await sleep(1500);
-        const poll = await apiJson(`/v4/reports/${reportId}`, token);
+        const poll = await apiJson(`/v4/reports/${reportId}`, token, { verbose: opts.verbose });
         status = poll.status;
         process.stderr.write(`\r${frames[frame++ % frames.length]}  ${status}    `);
       }
@@ -133,7 +133,7 @@ export function reportsCommand() {
 
       if (!opts.download) return;
 
-      const dl = await apiFetch(`/v4/reports/${reportId}/download`, token);
+      const dl = await apiFetch(`/v4/reports/${reportId}/download`, token, { verbose: opts.verbose });
       if (!dl.ok) {
         console.error(`Download failed ${dl.status}`);
         process.exit(1);
@@ -159,7 +159,7 @@ export function reportsCommand() {
         process.exit(2);
       }
       const token = resolveToken(opts);
-      const data = await apiJson(`/v4/report-types/${encodeURIComponent(opts.type)}`, token);
+      const data = await apiJson(`/v4/report-types/${encodeURIComponent(opts.type)}`, token, { verbose: opts.verbose });
 
       if (opts.json) {
         printJson(data, opts);
@@ -214,7 +214,7 @@ export function reportsCommand() {
     .action(async function(reportId) {
       const opts = this.optsWithGlobals();
       const token = resolveToken(opts);
-      const report = await apiJson(`/v4/reports/${reportId}`, token);
+      const report = await apiJson(`/v4/reports/${reportId}`, token, { verbose: opts.verbose });
       if (opts.json) {
         printJson(report, opts);
         return;
@@ -251,7 +251,7 @@ export function reportsCommand() {
             process.exit(1);
           }
           await sleep(1500);
-          const poll = await apiJson(`/v4/reports/${reportId}`, token);
+          const poll = await apiJson(`/v4/reports/${reportId}`, token, { verbose: opts.verbose });
           status = poll.status;
           process.stderr.write(`\r${frames[frame++ % frames.length]}  ${status}    `);
         }
@@ -262,7 +262,7 @@ export function reportsCommand() {
         }
       }
 
-      const dl = await apiFetch(`/v4/reports/${reportId}/download`, token);
+      const dl = await apiFetch(`/v4/reports/${reportId}/download`, token, { verbose: opts.verbose });
       if (!dl.ok) {
         console.error(`Download failed ${dl.status}`);
         process.exit(1);

@@ -1,7 +1,7 @@
 import { Command } from 'commander';
 import { resolveToken, PERSON_BASE } from '../config.js';
 import { printJson } from '../output.js';
-import { collect, addGlobalOptions } from '../utils.js';
+import { collect, addGlobalOptions, logRequest } from '../utils.js';
 import { findPerson } from './person.js';
 
 const REQUEST_TIMEOUT_MS = 30_000;
@@ -9,8 +9,9 @@ const MAX_POLL_ERRORS = 10;
 const SEEN_MAX_SIZE = 5000;
 const SEEN_KEEP_SIZE = 4000;
 
-async function streamFetch(path, token, options = {}) {
+async function streamFetch(path, token, options = {}, verbose = false) {
   const { default: fetch } = await import('node-fetch');
+  logRequest(verbose, options.method || 'GET', `${PERSON_BASE}${path}`);
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS);
   let res;
@@ -40,33 +41,33 @@ async function streamFetch(path, token, options = {}) {
   }
 }
 
-async function createStream(token) {
+async function createStream(token, verbose) {
   const stop_at = new Date(Date.now() + 2 * 3600 * 1000).toISOString();
   return streamFetch('/v6/event-streams', token, {
     method: 'POST',
     body: JSON.stringify({ name: 'extole-cli', tags: ['cli'], stop_at }),
-  });
+  }, verbose);
 }
 
-async function addFilter(streamId, filter, token) {
+async function addFilter(streamId, filter, token, verbose) {
   return streamFetch(`/v6/event-streams/${streamId}/filters`, token, {
     method: 'POST',
     body: JSON.stringify(filter),
-  });
+  }, verbose);
 }
 
-async function deleteStream(streamId, token) {
+async function deleteStream(streamId, token, verbose) {
   try {
-    await streamFetch(`/v6/event-streams/${streamId}/delete`, token, { method: 'POST' });
+    await streamFetch(`/v6/event-streams/${streamId}/delete`, token, { method: 'POST' }, verbose);
   } catch (e) {
     process.stderr.write(`Warning: stream cleanup failed: ${e.message}\n`);
   }
 }
 
-async function readEvents(streamId, token, since) {
+async function readEvents(streamId, token, since, verbose) {
   const params = new URLSearchParams({ limit: '50', offset: '0' });
   if (since) params.set('start_date', since);
-  return streamFetch(`/v6/event-streams/${streamId}/events?${params}`, token);
+  return streamFetch(`/v6/event-streams/${streamId}/events?${params}`, token, {}, verbose);
 }
 
 function formatStreamEvent(item, opts) {
@@ -98,13 +99,13 @@ export function streamCommand() {
     .action(async (opts) => {
       const token = resolveToken(opts);
 
-      const stream = await createStream(token);
+      const stream = await createStream(token, opts.verbose);
       const streamId = stream.id;
       process.stderr.write(`Stream ${streamId} created\n`);
 
       async function cleanup() {
         process.stderr.write('\nCleaning up stream...\n');
-        await deleteStream(streamId, token);
+        await deleteStream(streamId, token, opts.verbose);
         process.exit(0);
       }
       process.on('SIGINT', cleanup);
@@ -113,20 +114,20 @@ export function streamCommand() {
       const filterPromises = [];
 
       if (opts.filter.length > 0) {
-        filterPromises.push(addFilter(streamId, { type: 'EVENT_NAME', event_names: opts.filter }, token));
+        filterPromises.push(addFilter(streamId, { type: 'EVENT_NAME', event_names: opts.filter }, token, opts.verbose));
       }
       if (opts.eventType.length > 0) {
-        filterPromises.push(addFilter(streamId, { type: 'EVENT_TYPE', event_types: opts.eventType }, token));
+        filterPromises.push(addFilter(streamId, { type: 'EVENT_TYPE', event_types: opts.eventType }, token, opts.verbose));
       }
       if (opts.appType.length > 0) {
-        filterPromises.push(addFilter(streamId, { type: 'APPLICATION_TYPE', app_types: opts.appType }, token));
+        filterPromises.push(addFilter(streamId, { type: 'APPLICATION_TYPE', app_types: opts.appType }, token, opts.verbose));
       }
       if (opts.sandbox) {
-        filterPromises.push(addFilter(streamId, { type: 'SANDBOX', sandboxes: [opts.sandbox] }, token));
+        filterPromises.push(addFilter(streamId, { type: 'SANDBOX', sandboxes: [opts.sandbox] }, token, opts.verbose));
       }
       if (opts.email) {
         try {
-          const match = await findPerson(opts.email, token);
+          const match = await findPerson(opts.email, token, opts.verbose);
           if (match) {
             filterPromises.push(addFilter(streamId, { type: 'PERSON_ID', person_ids: [match.id] }, token));
           } else {
@@ -147,7 +148,7 @@ export function streamCommand() {
 
       async function poll() {
         try {
-          const items = await readEvents(streamId, token, since);
+          const items = await readEvents(streamId, token, since, opts.verbose);
           errorCount = 0;
           for (const item of items) {
             const id = item.event_id || JSON.stringify(item);

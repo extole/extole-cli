@@ -1,13 +1,14 @@
 import { Command } from 'commander';
 import { resolveToken, PERSON_BASE } from '../config.js';
 import { printJson } from '../output.js';
-import { addGlobalOptions } from '../utils.js';
+import { addGlobalOptions, logRequest } from '../utils.js';
 import { getPersonSteps } from './person.js';
 
 const REQUEST_TIMEOUT_MS = 30_000;
 
-async function rewardsFetch(path, token) {
+async function rewardsFetch(path, token, verbose = false) {
   const { default: fetch } = await import('node-fetch');
+  logRequest(verbose, 'GET', `${PERSON_BASE}${path}`);
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS);
   let res;
@@ -68,7 +69,7 @@ export function rewardsCommand() {
       const params = new URLSearchParams({ email: opts.email, limit: String(limit) });
       if (opts.status) params.set('state', opts.status.toUpperCase());
 
-      const rewards = await rewardsFetch(`/v2/rewards?${params}`, token);
+      const rewards = await rewardsFetch(`/v2/rewards?${params}`, token, opts.verbose);
 
       if (!Array.isArray(rewards) || rewards.length === 0) {
         console.error(`No rewards found for ${opts.email}`);
@@ -113,11 +114,11 @@ export function rewardsCommand() {
       const opts = this.optsWithGlobals();
       const token = resolveToken(opts);
 
-      const r = await rewardsFetch(`/v2/rewards/${rewardId}`, token);
+      const r = await rewardsFetch(`/v2/rewards/${rewardId}`, token, opts.verbose);
 
       if (opts.json) {
         if (opts.steps && r.person_id) {
-          const steps = await getPersonSteps(r.person_id, token);
+          const steps = await getPersonSteps(r.person_id, token, 50, opts.verbose);
           printJson({ reward: r, steps }, opts);
         } else {
           printJson(r, opts);
@@ -144,7 +145,7 @@ export function rewardsCommand() {
 
       if (opts.steps && r.person_id) {
         const rewardDate = r.created_at ? new Date(r.created_at) : null;
-        const steps = await getPersonSteps(r.person_id, token);
+        const steps = await getPersonSteps(r.person_id, token, 50, opts.verbose);
         console.log('\nSteps:');
         console.log('─'.repeat(70));
         for (const s of steps) {

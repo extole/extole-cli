@@ -12,7 +12,7 @@ export function pingCommand() {
         const token = resolveToken(opts);
         try {
           const start = Date.now();
-          const res = await apiFetch('/v4/report-types?limit=1', token);
+          const res = await apiFetch('/v4/report-types?limit=1', token, { verbose: opts.verbose });
           const ms = Date.now() - start;
           if (res.ok) {
             console.log(`OK  ${ms}ms`);

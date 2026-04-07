@@ -9,6 +9,10 @@ export function sleep(ms) {
   return new Promise(r => setTimeout(r, ms));
 }
 
+export function logRequest(verbose, method, url) {
+  if (verbose) process.stderr.write(`→ ${method} ${url}\n`);
+}
+
 /**
  * Attach standard global options to any Command.
  * - Always adds: --token, --profile (hidden from default Options block)
@@ -29,6 +33,8 @@ export function addGlobalOptions(cmd, { output = false, examples = [] } = {}) {
         .env('EXTOLE_ACCOUNT')
         .hideHelp()
     );
+
+  cmd.addOption(new Option('--verbose', 'Log each HTTP request to stderr').hideHelp());
 
   if (output) {
     cmd
@@ -53,7 +59,8 @@ export function addGlobalOptions(cmd, { output = false, examples = [] } = {}) {
   sections.push(
     '\nGlobal Options:\n' +
     '  --token <token>      Override token (or set EXTOLE_TOKEN)\n' +
-    `  --account <name>     ${accountDesc}`
+    `  --account <name>     ${accountDesc}\n` +
+    '  --verbose            Log each HTTP request to stderr'
   );
 
   if (examples.length > 0) {

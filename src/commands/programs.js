@@ -1,11 +1,12 @@
 import { Command } from 'commander';
 import { resolveToken, PERSON_BASE } from '../config.js';
 import { printJson } from '../output.js';
-import { addGlobalOptions } from '../utils.js';
+import { addGlobalOptions, logRequest } from '../utils.js';
 
 // TODO: replace with /v4/programs once the v4 endpoint bug is fixed
-async function fetchPrograms(token) {
+async function fetchPrograms(token, verbose = false) {
   const { default: fetch } = await import('node-fetch');
+  logRequest(verbose, 'GET', `${PERSON_BASE}/v2/campaign-summaries`);
   const res = await fetch(`${PERSON_BASE}/v2/campaign-summaries`, {
     headers: { 'Authorization': `Bearer ${token}`, 'Accept': 'application/json' },
   });
@@ -33,7 +34,7 @@ export function programsCommand() {
     .option('--all', 'Include NOT_LAUNCHED campaigns (default: LIVE only)')
     .action(async (opts) => {
       const token = resolveToken(opts);
-      const campaigns = await fetchPrograms(token);
+      const campaigns = await fetchPrograms(token, opts.verbose);
       const groups = groupPrograms(campaigns);
 
       if (opts.json) {

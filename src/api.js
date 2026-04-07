@@ -1,10 +1,12 @@
 import fetch from 'node-fetch';
 import { BASE_URL } from './config.js';
+import { logRequest } from './utils.js';
 
 const REQUEST_TIMEOUT_MS = 30_000;
 
 export async function apiFetch(path, token, options = {}, fetchFn = fetch) {
   const url = `${BASE_URL}${path}`;
+  logRequest(options.verbose, options.method || 'GET', url);
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS);
   try {

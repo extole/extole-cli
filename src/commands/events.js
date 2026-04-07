@@ -64,6 +64,7 @@ export function eventsCommand() {
       const res = await apiFetch('/v5/events', token, {
         method: 'POST',
         body: JSON.stringify(payload),
+        verbose: opts.verbose,
       });
       const text = await res.text();
       if (!res.ok) {
@@ -91,7 +92,7 @@ export function eventsCommand() {
         process.exit(2);
       }
 
-      const match = await findPerson(email, token);
+      const match = await findPerson(email, token, opts.verbose);
       if (!match) {
         console.error(`No person found for ${email} — cannot watch`);
         process.exit(1);
@@ -105,7 +106,7 @@ export function eventsCommand() {
       while (Date.now() < deadline) {
         await sleep(2000);
         try {
-          const steps = await getPersonSteps(match.id, token, 25);
+          const steps = await getPersonSteps(match.id, token, 25, opts.verbose);
           const newSteps = steps.filter(s => {
             if (seen.has(s.id)) return false;
             const stepTime = new Date(s.event_date || s.created_date).getTime();

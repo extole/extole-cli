@@ -1,15 +1,16 @@
 import { Command } from 'commander';
 import { resolveToken, PERSON_BASE } from '../config.js';
 import { printJson } from '../output.js';
-import { addGlobalOptions } from '../utils.js';
+import { addGlobalOptions, logRequest } from '../utils.js';
 
 const REQUEST_TIMEOUT_MS = 30_000;
 const MAX_POLL_ERRORS = 10;
 const SEEN_MAX_SIZE = 5000;
 const SEEN_KEEP_SIZE = 4000;
 
-async function personApiFetch(path, token) {
+async function personApiFetch(path, token, verbose = false) {
   const { default: fetch } = await import('node-fetch');
+  logRequest(verbose, 'GET', `${PERSON_BASE}${path}`);
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS);
   let res;
@@ -36,14 +37,14 @@ async function personApiFetch(path, token) {
   }
 }
 
-export async function findPerson(email, token) {
-  const results = await personApiFetch(`/v5/persons?identity_key_value=${encodeURIComponent(email)}&limit=1`, token);
+export async function findPerson(email, token, verbose = false) {
+  const results = await personApiFetch(`/v5/persons?identity_key_value=${encodeURIComponent(email)}&limit=1`, token, verbose);
   if (!results || results.length === 0) return null;
   return results[0];
 }
 
-export async function getPersonSteps(personId, token, limit = 50) {
-  return personApiFetch(`/v5/persons/${personId}/steps?limit=${limit}`, token);
+export async function getPersonSteps(personId, token, limit = 50, verbose = false) {
+  return personApiFetch(`/v5/persons/${personId}/steps?limit=${limit}`, token, verbose);
 }
 
 export function personCommand() {
@@ -55,12 +56,12 @@ export function personCommand() {
     .requiredOption('--email <email>', 'Email address to look up')
     .action(async (opts) => {
       const token = resolveToken(opts);
-      const match = await findPerson(opts.email, token);
+      const match = await findPerson(opts.email, token, opts.verbose);
       if (!match) {
         console.error(`No person found for ${opts.email}`);
         process.exit(1);
       }
-      const profile = await personApiFetch(`/v4/persons/${match.id}`, token);
+      const profile = await personApiFetch(`/v4/persons/${match.id}`, token, opts.verbose);
       printJson(profile, opts);
     });
 
@@ -80,7 +81,7 @@ export function personCommand() {
     .option('--watch', 'Poll for new steps until Ctrl+C')
     .action(async (opts) => {
       const token = resolveToken(opts);
-      const match = await findPerson(opts.email, token);
+      const match = await findPerson(opts.email, token, opts.verbose);
       if (!match) {
         console.error(`No person found for ${opts.email}`);
         process.exit(1);
@@ -93,7 +94,7 @@ export function personCommand() {
           console.error('--limit must be a positive integer');
           process.exit(2);
         }
-        const steps = await personApiFetch(`/v5/persons/${personId}/steps?limit=${limit}`, token);
+        const steps = await personApiFetch(`/v5/persons/${personId}/steps?limit=${limit}`, token, opts.verbose);
         printJson(steps, opts);
         return;
       }
@@ -104,7 +105,7 @@ export function personCommand() {
 
       async function poll() {
         try {
-          const steps = await personApiFetch(`/v5/persons/${personId}/steps?limit=50`, token);
+          const steps = await personApiFetch(`/v5/persons/${personId}/steps?limit=50`, token, opts.verbose);
           errorCount = 0;
           for (const step of steps.reverse()) {
             if (!seen.has(step.id)) {
