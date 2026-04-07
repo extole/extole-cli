@@ -3,12 +3,12 @@ import { BASE_URL } from './config.js';
 
 const REQUEST_TIMEOUT_MS = 30_000;
 
-export async function apiFetch(path, token, options = {}) {
+export async function apiFetch(path, token, options = {}, fetchFn = fetch) {
   const url = `${BASE_URL}${path}`;
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS);
   try {
-    const res = await fetch(url, {
+    const res = await fetchFn(url, {
       ...options,
       signal: controller.signal,
       headers: {
@@ -27,8 +27,8 @@ export async function apiFetch(path, token, options = {}) {
   }
 }
 
-export async function apiJson(path, token, options = {}) {
-  const res = await apiFetch(path, token, options);
+export async function apiJson(path, token, options = {}, fetchFn = fetch) {
+  const res = await apiFetch(path, token, options, fetchFn);
   const text = await res.text();
   if (!res.ok) {
     throw new Error(`API error ${res.status}: ${text.slice(0, 300)}`);
