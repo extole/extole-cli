@@ -146,7 +146,7 @@ extole reports types                             # list all available report typ
 extole reports describe --type summary           # show parameters for a report type
 
 extole reports run --type REPORT_TYPE [options]  # create report, returns ID immediately
-  --days <n>           set time_range to last N days (shortcut)
+  --days <n>           set time_range to last N days (mutually exclusive with -p time_range)
   -p key=value         report parameter (repeatable)
   --wait               poll until complete
   --download           download and print result (implies --wait)
@@ -179,7 +179,7 @@ extole reports run --type summary_per_program --days 365 \
 - Human-readable by default; `--json` on all commands
 - `--compact` strips nulls and empty fields (useful for piping to agents)
 - `--verbose` logs each HTTP request (`→ METHOD URL`) to stderr
-- Exit 0 = success, 1 = API error, 2 = auth/config error
+- Exit 0 = success, 1 = API error, 2 = bad input/config, 130 = Ctrl+C, 143 = SIGTERM
 - Data goes to stdout, status/progress goes to stderr (pipeable)
 
 ## Config file
