@@ -1,70 +1,36 @@
 import { Command } from 'commander';
 import { resolveToken, PERSON_BASE } from '../config.js';
+import { apiFetch, apiJson } from '../api.js';
 import { printJson } from '../output.js';
-import { collect, addGlobalOptions, logRequest } from '../utils.js';
-import { findPerson } from './person.js';
-
-const REQUEST_TIMEOUT_MS = 30_000;
-const MAX_POLL_ERRORS = 10;
-const SEEN_MAX_SIZE = 5000;
-const SEEN_KEEP_SIZE = 4000;
-
-async function streamFetch(path, token, options = {}, verbose = false) {
-  const { default: fetch } = await import('node-fetch');
-  logRequest(verbose, options.method || 'GET', `${PERSON_BASE}${path}`, {
-    headers: {
-      'Authorization': `Bearer ${token}`,
-      ...(options.body ? { 'Content-Type': 'application/json' } : {}),
-    },
-    body: options.body || null,
-  });
-  const controller = new AbortController();
-  const timer = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS);
-  let res;
-  try {
-    res = await fetch(`${PERSON_BASE}${path}`, {
-      ...options,
-      signal: controller.signal,
-      headers: {
-        'Authorization': `Bearer ${token}`,
-        'Content-Type': 'application/json',
-        'Accept': 'application/json',
-        ...(options.headers || {}),
-      },
-    });
-  } catch (e) {
-    if (e.name === 'AbortError') throw new Error(`Request timed out after ${REQUEST_TIMEOUT_MS / 1000}s`);
-    throw e;
-  } finally {
-    clearTimeout(timer);
-  }
-  const text = await res.text();
-  if (!res.ok) throw new Error(`API error ${res.status}: ${text.slice(0, 300)}`);
-  try {
-    return JSON.parse(text);
-  } catch {
-    throw new Error(`Non-JSON response (${res.status}): ${text.slice(0, 200)}`);
-  }
-}
+import { collect, addGlobalOptions, SEEN_MAX_SIZE, SEEN_KEEP_SIZE } from '../utils.js';
+import { findPerson } from '../person-api.js';
 
 async function createStream(token, verbose) {
   const stop_at = new Date(Date.now() + 2 * 3600 * 1000).toISOString();
-  return streamFetch('/v6/event-streams', token, {
+  return apiJson('/v6/event-streams', token, {
     method: 'POST',
     body: JSON.stringify({ name: 'extole-cli', tags: ['cli'], stop_at }),
-  }, verbose);
+    baseUrl: PERSON_BASE,
+    verbose,
+  });
 }
 
 async function addFilter(streamId, filter, token, verbose) {
-  return streamFetch(`/v6/event-streams/${streamId}/filters`, token, {
+  return apiJson(`/v6/event-streams/${streamId}/filters`, token, {
     method: 'POST',
     body: JSON.stringify(filter),
-  }, verbose);
+    baseUrl: PERSON_BASE,
+    verbose,
+  });
 }
 
 async function deleteStream(streamId, token, verbose) {
   try {
-    await streamFetch(`/v6/event-streams/${streamId}/delete`, token, { method: 'POST' }, verbose);
+    await apiFetch(`/v6/event-streams/${streamId}/delete`, token, {
+      method: 'POST',
+      baseUrl: PERSON_BASE,
+      verbose,
+    });
   } catch (e) {
     process.stderr.write(`Warning: stream cleanup failed: ${e.message}\n`);
   }
@@ -73,7 +39,10 @@ async function deleteStream(streamId, token, verbose) {
 async function readEvents(streamId, token, since, verbose) {
   const params = new URLSearchParams({ limit: '50', offset: '0' });
   if (since) params.set('start_date', since);
-  return streamFetch(`/v6/event-streams/${streamId}/events?${params}`, token, {}, verbose);
+  return apiJson(`/v6/event-streams/${streamId}/events?${params}`, token, {
+    baseUrl: PERSON_BASE,
+    verbose,
+  });
 }
 
 function formatStreamEvent(item, opts) {
@@ -135,7 +104,7 @@ export function streamCommand() {
         try {
           const match = await findPerson(opts.email, token, opts.verbose);
           if (match) {
-            filterPromises.push(addFilter(streamId, { type: 'PERSON_ID', person_ids: [match.id] }, token));
+            filterPromises.push(addFilter(streamId, { type: 'PERSON_ID', person_ids: [match.id] }, token, opts.verbose));
           } else {
             process.stderr.write(`Warning: no person found for ${opts.email}, streaming without person filter\n`);
           }
@@ -157,33 +126,37 @@ export function streamCommand() {
           const items = await readEvents(streamId, token, since, opts.verbose);
           errorCount = 0;
           for (const item of items) {
-            const id = item.event_id || JSON.stringify(item);
-            if (!seen.has(id)) {
+            const id = item.event_id || null;
+            if (id && seen.has(id)) continue;
+            if (id) {
               seen.add(id);
               if (seen.size > SEEN_MAX_SIZE) {
                 const arr = [...seen];
                 seen.clear();
                 arr.slice(-SEEN_KEEP_SIZE).forEach(i => seen.add(i));
               }
-              const evName = item.event?.name || '';
-              if (evName === 'config_change') continue;
-              formatStreamEvent(item, opts);
             }
+            const evName = item.event?.name || '';
+            if (evName === 'config_change') continue;
+            formatStreamEvent(item, opts);
           }
           if (items.length > 0) {
             since = items[items.length - 1].event_time || since;
           }
         } catch (e) {
           process.stderr.write(`poll error: ${e.message}\n`);
-          if (++errorCount >= MAX_POLL_ERRORS) {
+          if (++errorCount >= 10) {
             process.stderr.write('Too many consecutive poll errors, stopping.\n');
             process.exit(1);
           }
         }
       }
 
-      await poll();
-      setInterval(poll, 2500);
+      async function schedulePoll() {
+        await poll();
+        setTimeout(schedulePoll, 2500);
+      }
+      await schedulePoll();
     });
 
   return addGlobalOptions(cmd, {

@@ -5,7 +5,7 @@ import { logRequest } from './utils.js';
 const REQUEST_TIMEOUT_MS = 30_000;
 
 export async function apiFetch(path, token, options = {}, fetchFn = fetch) {
-  const url = `${BASE_URL}${path}`;
+  const url = `${options.baseUrl || BASE_URL}${path}`;
   logRequest(options.verbose, options.method || 'GET', url, {
     headers: {
       'Authorization': `Bearer ${token}`,

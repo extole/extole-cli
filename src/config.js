@@ -7,10 +7,12 @@ const CONFIG_FILE = join(CONFIG_DIR, 'config');
 
 export function loadConfig() {
   if (!existsSync(CONFIG_FILE)) return {};
+  const raw = readFileSync(CONFIG_FILE, 'utf8');
   try {
-    return JSON.parse(readFileSync(CONFIG_FILE, 'utf8'));
+    return JSON.parse(raw);
   } catch {
-    return {};
+    process.stderr.write(`Error: config file at ${CONFIG_FILE} is not valid JSON. Please fix or delete it.\n`);
+    process.exit(1);
   }
 }
 
@@ -59,3 +61,4 @@ export function resolveToken(options) {
 
 export const BASE_URL = 'https://my.extole.com';
 export const PERSON_BASE = 'https://api.extole.io';
+export const AUTH_BASE = 'https://api.extole.com';

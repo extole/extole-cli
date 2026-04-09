@@ -1,41 +1,9 @@
 import { Command } from 'commander';
 import { resolveToken, PERSON_BASE } from '../config.js';
+import { apiJson } from '../api.js';
 import { printJson } from '../output.js';
-import { addGlobalOptions, logRequest } from '../utils.js';
-import { getPersonSteps } from './person.js';
-
-const REQUEST_TIMEOUT_MS = 30_000;
-
-async function rewardsFetch(path, token, verbose = false) {
-  const { default: fetch } = await import('node-fetch');
-  logRequest(verbose, 'GET', `${PERSON_BASE}${path}`, {
-    headers: { 'Authorization': `Bearer ${token}` },
-  });
-  const controller = new AbortController();
-  const timer = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS);
-  let res;
-  try {
-    res = await fetch(`${PERSON_BASE}${path}`, {
-      signal: controller.signal,
-      headers: {
-        'Authorization': `Bearer ${token}`,
-        'Accept': 'application/json',
-      },
-    });
-  } catch (e) {
-    if (e.name === 'AbortError') throw new Error(`Request timed out after ${REQUEST_TIMEOUT_MS / 1000}s`);
-    throw e;
-  } finally {
-    clearTimeout(timer);
-  }
-  const text = await res.text();
-  if (!res.ok) throw new Error(`API error ${res.status}: ${text.slice(0, 300)}`);
-  try {
-    return JSON.parse(text);
-  } catch {
-    throw new Error(`Non-JSON response (${res.status}): ${text.slice(0, 200)}`);
-  }
-}
+import { addGlobalOptions } from '../utils.js';
+import { getPersonSteps } from '../person-api.js';
 
 function formatReward(r) {
   const state    = (r.state || '').padEnd(12);
@@ -60,6 +28,10 @@ export function rewardsCommand() {
         console.error('Error: --email <email> is required.');
         process.exit(2);
       }
+      if (!opts.email.includes('@')) {
+        console.error('Error: --email must be a valid email address.');
+        process.exit(2);
+      }
       const token = resolveToken(opts);
 
       const limit = parseInt(opts.limit, 10);
@@ -71,7 +43,7 @@ export function rewardsCommand() {
       const params = new URLSearchParams({ email: opts.email, limit: String(limit) });
       if (opts.status) params.set('state', opts.status.toUpperCase());
 
-      const rewards = await rewardsFetch(`/v2/rewards?${params}`, token, opts.verbose);
+      const rewards = await apiJson(`/v2/rewards?${params}`, token, { verbose: opts.verbose, baseUrl: PERSON_BASE });
 
       if (!Array.isArray(rewards) || rewards.length === 0) {
         console.error(`No rewards found for ${opts.email}`);
@@ -116,7 +88,7 @@ export function rewardsCommand() {
       const opts = this.optsWithGlobals();
       const token = resolveToken(opts);
 
-      const r = await rewardsFetch(`/v2/rewards/${rewardId}`, token, opts.verbose);
+      const r = await apiJson(`/v2/rewards/${rewardId}`, token, { verbose: opts.verbose, baseUrl: PERSON_BASE });
 
       if (opts.json) {
         if (opts.steps && r.person_id) {

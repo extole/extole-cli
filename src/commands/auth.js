@@ -1,7 +1,6 @@
 import { Command, Option } from 'commander';
-import { loadConfig, saveConfig, setProfile, getProfile, getDefaultAccount, setDefaultAccount } from '../config.js';
-import { apiJson } from '../api.js';
-import { logRequest } from '../utils.js';
+import { loadConfig, saveConfig, setProfile, getProfile, getDefaultAccount, setDefaultAccount, AUTH_BASE } from '../config.js';
+import { apiFetch, apiJson } from '../api.js';
 
 export function authCommand() {
   const auth = new Command('auth')
@@ -121,20 +120,19 @@ Examples:
       const { token, client, setDefault: isDefault } = this.opts();
       const account = this.opts().account || client;
 
-      const { default: fetch } = await import('node-fetch');
-      logRequest(this.opts().verbose, 'POST', 'https://api.extole.com/v4/tokens', {
-        headers: { 'Authorization': `Bearer ${token}`, 'Content-Type': 'application/json' },
-        body: JSON.stringify({ client_id: client }),
-      });
-      const res = await fetch('https://api.extole.com/v4/tokens', {
-        method: 'POST',
-        headers: {
-          'Authorization': `Bearer ${token}`,
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({ client_id: client }),
-      });
-      const text = await res.text();
+      let res, text;
+      try {
+        res = await apiFetch('/v4/tokens', token, {
+          method: 'POST',
+          body: JSON.stringify({ client_id: client }),
+          baseUrl: AUTH_BASE,
+          verbose: this.opts().verbose,
+        });
+        text = await res.text();
+      } catch (e) {
+        console.error(`Failed to mint client token for ${client}: ${e.message}`);
+        process.exit(1);
+      }
       if (!res.ok) {
         console.error(`Failed to mint client token for ${client}: ${res.status}: ${text.slice(0, 300)}`);
         process.exit(1);

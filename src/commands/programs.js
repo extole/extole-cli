@@ -1,20 +1,12 @@
 import { Command } from 'commander';
 import { resolveToken, PERSON_BASE } from '../config.js';
+import { apiJson } from '../api.js';
 import { printJson } from '../output.js';
-import { addGlobalOptions, logRequest } from '../utils.js';
+import { addGlobalOptions } from '../utils.js';
 
-// TODO: replace with /v4/programs once the v4 endpoint bug is fixed
-async function fetchPrograms(token, verbose = false) {
-  const { default: fetch } = await import('node-fetch');
-  logRequest(verbose, 'GET', `${PERSON_BASE}/v2/campaign-summaries`, {
-    headers: { 'Authorization': `Bearer ${token}` },
-  });
-  const res = await fetch(`${PERSON_BASE}/v2/campaign-summaries`, {
-    headers: { 'Authorization': `Bearer ${token}`, 'Accept': 'application/json' },
-  });
-  const text = await res.text();
-  if (!res.ok) throw new Error(`API error ${res.status}: ${text.slice(0, 300)}`);
-  return JSON.parse(text);
+// TODO: replace with /v4/programs once the v4 endpoint bug is fixed (no ticket yet — ask team)
+async function fetchPrograms(token, verbose) {
+  return apiJson('/v2/campaign-summaries', token, { verbose, baseUrl: PERSON_BASE });
 }
 
 function groupPrograms(campaigns) {

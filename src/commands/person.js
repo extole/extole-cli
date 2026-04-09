@@ -1,53 +1,9 @@
 import { Command } from 'commander';
 import { resolveToken, PERSON_BASE } from '../config.js';
+import { apiJson } from '../api.js';
 import { printJson } from '../output.js';
-import { addGlobalOptions, logRequest } from '../utils.js';
-
-const REQUEST_TIMEOUT_MS = 30_000;
-const MAX_POLL_ERRORS = 10;
-const SEEN_MAX_SIZE = 5000;
-const SEEN_KEEP_SIZE = 4000;
-
-async function personApiFetch(path, token, verbose = false) {
-  const { default: fetch } = await import('node-fetch');
-  logRequest(verbose, 'GET', `${PERSON_BASE}${path}`, {
-    headers: { 'Authorization': `Bearer ${token}` },
-  });
-  const controller = new AbortController();
-  const timer = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS);
-  let res;
-  try {
-    res = await fetch(`${PERSON_BASE}${path}`, {
-      signal: controller.signal,
-      headers: {
-        'Authorization': `Bearer ${token}`,
-        'Accept': 'application/json',
-      },
-    });
-  } catch (e) {
-    if (e.name === 'AbortError') throw new Error(`Request timed out after ${REQUEST_TIMEOUT_MS / 1000}s`);
-    throw e;
-  } finally {
-    clearTimeout(timer);
-  }
-  const text = await res.text();
-  if (!res.ok) throw new Error(`API error ${res.status}: ${text.slice(0, 300)}`);
-  try {
-    return JSON.parse(text);
-  } catch {
-    throw new Error(`Non-JSON response (${res.status}): ${text.slice(0, 200)}`);
-  }
-}
-
-export async function findPerson(email, token, verbose = false) {
-  const results = await personApiFetch(`/v5/persons?identity_key_value=${encodeURIComponent(email)}&limit=1`, token, verbose);
-  if (!results || results.length === 0) return null;
-  return results[0];
-}
-
-export async function getPersonSteps(personId, token, limit = 50, verbose = false) {
-  return personApiFetch(`/v5/persons/${personId}/steps?limit=${limit}`, token, verbose);
-}
+import { addGlobalOptions, SEEN_MAX_SIZE, SEEN_KEEP_SIZE } from '../utils.js';
+import { findPerson, getPersonSteps } from '../person-api.js';
 
 export function personCommand() {
   const person = new Command('person').description('Look up person profile and step history');
@@ -57,13 +13,17 @@ export function personCommand() {
     .allowExcessArguments(false)
     .requiredOption('--email <email>', 'Email address to look up')
     .action(async (opts) => {
+      if (!opts.email.includes('@')) {
+        console.error('Error: --email must be a valid email address.');
+        process.exit(2);
+      }
       const token = resolveToken(opts);
       const match = await findPerson(opts.email, token, opts.verbose);
       if (!match) {
         console.error(`No person found for ${opts.email}`);
         process.exit(1);
       }
-      const profile = await personApiFetch(`/v4/persons/${match.id}`, token, opts.verbose);
+      const profile = await apiJson(`/v4/persons/${match.id}`, token, { verbose: opts.verbose, baseUrl: PERSON_BASE });
       printJson(profile, opts);
     });
 
@@ -82,6 +42,10 @@ export function personCommand() {
     .option('--limit <n>', 'Number of steps to return (one-shot)', '25')
     .option('--watch', 'Poll for new steps until Ctrl+C')
     .action(async (opts) => {
+      if (!opts.email.includes('@')) {
+        console.error('Error: --email must be a valid email address.');
+        process.exit(2);
+      }
       const token = resolveToken(opts);
       const match = await findPerson(opts.email, token, opts.verbose);
       if (!match) {
@@ -96,7 +60,7 @@ export function personCommand() {
           console.error('--limit must be a positive integer');
           process.exit(2);
         }
-        const steps = await personApiFetch(`/v5/persons/${personId}/steps?limit=${limit}`, token, opts.verbose);
+        const steps = await getPersonSteps(personId, token, limit, opts.verbose);
         printJson(steps, opts);
         return;
       }
@@ -107,7 +71,7 @@ export function personCommand() {
 
       async function poll() {
         try {
-          const steps = await personApiFetch(`/v5/persons/${personId}/steps?limit=50`, token, opts.verbose);
+          const steps = await getPersonSteps(personId, token, 50, opts.verbose);
           errorCount = 0;
           for (const step of steps.reverse()) {
             if (!seen.has(step.id)) {
@@ -130,15 +94,18 @@ export function personCommand() {
           }
         } catch (e) {
           console.error(`poll error: ${e.message}`);
-          if (++errorCount >= MAX_POLL_ERRORS) {
+          if (++errorCount >= 10) {
             console.error('Too many consecutive poll errors, stopping.');
             process.exit(1);
           }
         }
       }
 
-      await poll();
-      setInterval(poll, 2500);
+      async function schedulePoll() {
+        await poll();
+        setTimeout(schedulePoll, 2500);
+      }
+      await schedulePoll();
     });
 
   addGlobalOptions(stepsCmd, {

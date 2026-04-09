@@ -9,12 +9,15 @@ export function sleep(ms) {
   return new Promise(r => setTimeout(r, ms));
 }
 
+export const SEEN_MAX_SIZE = 5000;
+export const SEEN_KEEP_SIZE = 4000;
+
 export function logRequest(verbose, method, url, { headers = {}, body = null } = {}) {
   if (!verbose) return;
   const lines = [`→ ${method} ${url}`];
   for (const [k, v] of Object.entries(headers)) {
     if (k.toLowerCase() === 'authorization') {
-      const masked = v.length > 20 ? v.slice(0, 14) + '...' + v.slice(-4) : '***';
+      const masked = v.length > 20 ? v.slice(0, 6) + '...' + v.slice(-4) : '***';
       lines.push(`  ${k}: ${masked}`);
     } else {
       lines.push(`  ${k}: ${v}`);

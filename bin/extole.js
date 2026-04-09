@@ -1,6 +1,12 @@
 #!/usr/bin/env node
 
+import { readFileSync } from 'fs';
+import { fileURLToPath } from 'url';
+import { dirname, join } from 'path';
 import { Command } from 'commander';
+
+const __dirname = dirname(fileURLToPath(import.meta.url));
+const { version } = JSON.parse(readFileSync(join(__dirname, '../package.json'), 'utf8'));
 import { authCommand } from '../src/commands/auth.js';
 import { pingCommand } from '../src/commands/ping.js';
 import { eventsCommand } from '../src/commands/events.js';
@@ -15,7 +21,7 @@ const program = new Command();
 program
   .name('extole')
   .description('Extole developer CLI')
-  .version('0.1.0')
+  .version(version)
 ;
 
 program.addCommand(authCommand());

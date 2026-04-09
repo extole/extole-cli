@@ -3,20 +3,8 @@ import { resolveToken } from '../config.js';
 import { apiFetch } from '../api.js';
 import { printJson } from '../output.js';
 import { collect, sleep, addGlobalOptions } from '../utils.js';
-import { findPerson, getPersonSteps } from './person.js';
+import { findPerson, getPersonSteps } from '../person-api.js';
 
-
-function formatEvent(ev, opts) {
-  if (opts.json) {
-    printJson(ev, opts);
-    return;
-  }
-  const time = new Date(ev.event_date || ev.event_time || ev.created_at || Date.now())
-    .toLocaleTimeString('en-US', { hour12: false });
-  const name = (ev.name || ev.event_name || '').padEnd(35);
-  const program = (ev.program || '').padEnd(20);
-  console.log(`${time}  ${name}  ${program}`);
-}
 
 export function eventsCommand() {
   const events = new Command('events').description('Fire events and watch downstream steps');

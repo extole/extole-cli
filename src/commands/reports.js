@@ -6,6 +6,31 @@ import { collect, sleep, addGlobalOptions } from '../utils.js';
 
 const REPORT_POLL_MAX = 240; // 6 minutes at 1.5s intervals
 
+async function pollUntilDone(reportId, token, verbose) {
+  const frames = ['⠋','⠙','⠹','⠸','⠼','⠴','⠦','⠧','⠇','⠏'];
+  let frame = 0;
+  let status = '';
+  let pollAttempts = 0;
+  while (status !== 'DONE' && status !== 'FAILED') {
+    if (++pollAttempts > REPORT_POLL_MAX) {
+      process.stderr.write('\r\x1b[K');
+      console.error(`Report did not complete after ${REPORT_POLL_MAX} attempts. Last status: ${status || 'unknown'}`);
+      process.exit(1);
+    }
+    await sleep(1500);
+    const poll = await apiJson(`/v4/reports/${reportId}`, token, { verbose });
+    status = poll.status;
+    if (!status || typeof status !== 'string') {
+      process.stderr.write('\r\x1b[K');
+      console.error(`Unexpected response from report status check: ${JSON.stringify(poll).slice(0, 200)}`);
+      process.exit(1);
+    }
+    process.stderr.write(`\r${frames[frame++ % frames.length]}  ${status}    `);
+  }
+  process.stderr.write('\r\x1b[K');
+  return status;
+}
+
 export function reportsCommand() {
   const reports = new Command('reports').description('List report types and run on-demand reports');
 
@@ -109,23 +134,7 @@ export function reportsCommand() {
 
       if (!opts.wait && !opts.download) return;
 
-      const frames = ['⠋','⠙','⠹','⠸','⠼','⠴','⠦','⠧','⠇','⠏'];
-      let frame = 0;
-      let status = report.status;
-      let pollAttempts = 0;
-      while (status !== 'DONE' && status !== 'FAILED') {
-        if (++pollAttempts > REPORT_POLL_MAX) {
-          process.stderr.write('\r\x1b[K');
-          console.error(`Report did not complete after ${REPORT_POLL_MAX} attempts. Last status: ${status}`);
-          process.exit(1);
-        }
-        await sleep(1500);
-        const poll = await apiJson(`/v4/reports/${reportId}`, token, { verbose: opts.verbose });
-        status = poll.status;
-        process.stderr.write(`\r${frames[frame++ % frames.length]}  ${status}    `);
-      }
-      process.stderr.write('\r\x1b[K');
-
+      const status = await pollUntilDone(reportId, token, opts.verbose);
       if (status === 'FAILED') {
         console.error('Report failed.');
         process.exit(1);
@@ -240,22 +249,7 @@ export function reportsCommand() {
       const token = resolveToken(opts);
 
       if (opts.wait) {
-        const frames = ['⠋','⠙','⠹','⠸','⠼','⠴','⠦','⠧','⠇','⠏'];
-        let frame = 0;
-        let status = '';
-        let pollAttempts = 0;
-        while (status !== 'DONE' && status !== 'FAILED') {
-          if (++pollAttempts > REPORT_POLL_MAX) {
-            process.stderr.write('\r\x1b[K');
-            console.error(`Report did not complete after ${REPORT_POLL_MAX} attempts.`);
-            process.exit(1);
-          }
-          await sleep(1500);
-          const poll = await apiJson(`/v4/reports/${reportId}`, token, { verbose: opts.verbose });
-          status = poll.status;
-          process.stderr.write(`\r${frames[frame++ % frames.length]}  ${status}    `);
-        }
-        process.stderr.write('\r\x1b[K');
+        const status = await pollUntilDone(reportId, token, opts.verbose);
         if (status === 'FAILED') {
           console.error('Report failed.');
           process.exit(1);
