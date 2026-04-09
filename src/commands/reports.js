@@ -4,26 +4,39 @@ import { apiJson, apiFetch } from '../api.js';
 import { printJson, printJsonText } from '../output.js';
 import { collect, sleep, addGlobalOptions } from '../utils.js';
 
-const REPORT_POLL_MAX = 240; // 6 minutes at 1.5s intervals
+const REPORT_POLL_MAX_ATTEMPTS = 240; // 240 attempts × 1.5s = 6 minutes
 
 async function pollUntilDone(reportId, token, verbose) {
   const frames = ['⠋','⠙','⠹','⠸','⠼','⠴','⠦','⠧','⠇','⠏'];
   let frame = 0;
   let status = '';
   let pollAttempts = 0;
+  let pollErrors = 0;
+  const MAX_POLL_ERRORS = 5;
   while (status !== 'DONE' && status !== 'FAILED') {
-    if (++pollAttempts > REPORT_POLL_MAX) {
+    if (++pollAttempts > REPORT_POLL_MAX_ATTEMPTS) {
       process.stderr.write('\r\x1b[K');
-      console.error(`Report did not complete after ${REPORT_POLL_MAX} attempts. Last status: ${status || 'unknown'}`);
+      console.error(`Report did not complete after ${REPORT_POLL_MAX_ATTEMPTS} attempts. Last status: ${status || 'unknown'}`);
       process.exit(1);
     }
     await sleep(1500);
-    const poll = await apiJson(`/v4/reports/${reportId}`, token, { verbose });
-    status = poll.status;
-    if (!status || typeof status !== 'string') {
-      process.stderr.write('\r\x1b[K');
-      console.error(`Unexpected response from report status check: ${JSON.stringify(poll).slice(0, 200)}`);
-      process.exit(1);
+    try {
+      const poll = await apiJson(`/v4/reports/${reportId}`, token, { verbose });
+      pollErrors = 0;
+      status = poll.status;
+      if (!status || typeof status !== 'string') {
+        process.stderr.write('\r\x1b[K');
+        console.error(`Unexpected response from report status check: ${JSON.stringify(poll).slice(0, 200)}`);
+        process.exit(1);
+      }
+    } catch (e) {
+      if (++pollErrors >= MAX_POLL_ERRORS) {
+        process.stderr.write('\r\x1b[K');
+        console.error(`Too many poll errors: ${e.message}`);
+        process.exit(1);
+      }
+      process.stderr.write(`\r  poll error (${pollErrors}/${MAX_POLL_ERRORS}): ${e.message}    `);
+      continue;
     }
     process.stderr.write(`\r${frames[frame++ % frames.length]}  ${status}    `);
   }
@@ -99,6 +112,9 @@ export function reportsCommand() {
         const idx = kv.indexOf('=');
         if (idx < 0) { console.error(`Invalid param (expected key=value): ${kv}`); process.exit(2); }
         parameters[kv.slice(0, idx)] = kv.slice(idx + 1);
+      }
+      if (opts.days && parameters.time_range) {
+        console.error('Warning: --days ignored because -p time_range was also specified.');
       }
       if (opts.days && !parameters.time_range) {
         const days = parseInt(opts.days, 10);

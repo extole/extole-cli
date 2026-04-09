@@ -28,7 +28,7 @@ export function rewardsCommand() {
         console.error('Error: --email <email> is required.');
         process.exit(2);
       }
-      if (!opts.email.includes('@')) {
+      if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(opts.email)) {
         console.error('Error: --email must be a valid email address.');
         process.exit(2);
       }
@@ -120,9 +120,10 @@ export function rewardsCommand() {
       if (opts.steps && r.person_id) {
         const rewardDate = r.created_at ? new Date(r.created_at) : null;
         const steps = await getPersonSteps(r.person_id, token, 50, opts.verbose);
+        const stepList = Array.isArray(steps) ? steps : [];
         console.log('\nSteps:');
         console.log('─'.repeat(70));
-        for (const s of steps) {
+        for (const s of stepList) {
           const stepDate = new Date(s.event_date || s.created_date);
           const age = rewardDate ? Math.round((rewardDate - stepDate) / (1000 * 60 * 60 * 24)) : null;
           const dateStr = stepDate.toLocaleString('en-US', { month: 'numeric', day: 'numeric', year: 'numeric', hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: false }).padEnd(22);

@@ -13,7 +13,7 @@ export function personCommand() {
     .allowExcessArguments(false)
     .requiredOption('--email <email>', 'Email address to look up')
     .action(async (opts) => {
-      if (!opts.email.includes('@')) {
+      if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(opts.email)) {
         console.error('Error: --email must be a valid email address.');
         process.exit(2);
       }
@@ -42,7 +42,7 @@ export function personCommand() {
     .option('--limit <n>', 'Number of steps to return (one-shot)', '25')
     .option('--watch', 'Poll for new steps until Ctrl+C')
     .action(async (opts) => {
-      if (!opts.email.includes('@')) {
+      if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(opts.email)) {
         console.error('Error: --email must be a valid email address.');
         process.exit(2);
       }

@@ -7,6 +7,11 @@ import { Command } from 'commander';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const { version } = JSON.parse(readFileSync(join(__dirname, '../package.json'), 'utf8'));
+
+process.on('unhandledRejection', (err) => {
+  console.error(`Error: ${err?.message || err}`);
+  process.exit(1);
+});
 import { authCommand } from '../src/commands/auth.js';
 import { pingCommand } from '../src/commands/ping.js';
 import { eventsCommand } from '../src/commands/events.js';

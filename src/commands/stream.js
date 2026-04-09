@@ -5,6 +5,8 @@ import { printJson } from '../output.js';
 import { collect, addGlobalOptions, SEEN_MAX_SIZE, SEEN_KEEP_SIZE } from '../utils.js';
 import { findPerson } from '../person-api.js';
 
+const INTERNAL_EVENT_NAMES = new Set(['config_change']);
+
 async function createStream(token, verbose) {
   const stop_at = new Date(Date.now() + 2 * 3600 * 1000).toISOString();
   return apiJson('/v6/event-streams', token, {
@@ -55,8 +57,11 @@ function formatStreamEvent(item, opts) {
     .toLocaleTimeString('en-US', { hour12: false });
   const name = (ev.name || '').padEnd(35);
   const data = ev.data ? Object.entries(ev.data)
-    .filter(([, v]) => v && v.scope !== 'CLIENT_ADMIN')
-    .map(([k, v]) => `${k}=${v.value || v}`)
+    .filter(([, v]) => v && (typeof v !== 'object' || v.scope !== 'CLIENT_ADMIN'))
+    .map(([k, v]) => {
+      const val = typeof v === 'object' && v !== null ? (v.value ?? JSON.stringify(v)) : v;
+      return `${k}=${val}`;
+    })
     .slice(0, 3)
     .join('  ') : '';
   console.log(`${time}  ${name}  ${data}`);
@@ -76,15 +81,14 @@ export function streamCommand() {
 
       const stream = await createStream(token, opts.verbose);
       const streamId = stream.id;
-      process.stderr.write(`Stream ${streamId} created\n`);
+      process.stderr.write(`Stream ${streamId} created (expires in 2 hours)\n`);
 
-      async function cleanup() {
+      function cleanup() {
         process.stderr.write('\nCleaning up stream...\n');
-        await deleteStream(streamId, token, opts.verbose);
-        process.exit(0);
+        deleteStream(streamId, token, opts.verbose).finally(() => process.exit(0));
       }
-      process.on('SIGINT', cleanup);
-      process.on('SIGTERM', cleanup);
+      process.once('SIGINT', cleanup);
+      process.once('SIGTERM', cleanup);
 
       const filterPromises = [];
 
@@ -101,16 +105,18 @@ export function streamCommand() {
         filterPromises.push(addFilter(streamId, { type: 'SANDBOX', sandboxes: [opts.sandbox] }, token, opts.verbose));
       }
       if (opts.email) {
-        try {
-          const match = await findPerson(opts.email, token, opts.verbose);
-          if (match) {
-            filterPromises.push(addFilter(streamId, { type: 'PERSON_ID', person_ids: [match.id] }, token, opts.verbose));
-          } else {
-            process.stderr.write(`Warning: no person found for ${opts.email}, streaming without person filter\n`);
-          }
-        } catch (e) {
-          process.stderr.write(`Warning: person lookup failed: ${e.message}\n`);
-        }
+        filterPromises.push(
+          findPerson(opts.email, token, opts.verbose)
+            .then(match => {
+              if (match) {
+                return addFilter(streamId, { type: 'PERSON_ID', person_ids: [match.id] }, token, opts.verbose);
+              }
+              process.stderr.write(`Warning: no person found for ${opts.email}, streaming without person filter\n`);
+            })
+            .catch(e => {
+              process.stderr.write(`Warning: person lookup failed: ${e.message}\n`);
+            })
+        );
       }
 
       await Promise.all(filterPromises);
@@ -137,11 +143,12 @@ export function streamCommand() {
               }
             }
             const evName = item.event?.name || '';
-            if (evName === 'config_change') continue;
+            if (INTERNAL_EVENT_NAMES.has(evName)) continue;
             formatStreamEvent(item, opts);
           }
           if (items.length > 0) {
-            since = items[items.length - 1].event_time || since;
+            const last = items[items.length - 1];
+            since = last.event_time || last.event?.event_time || since;
           }
         } catch (e) {
           process.stderr.write(`poll error: ${e.message}\n`);

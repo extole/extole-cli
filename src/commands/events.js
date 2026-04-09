@@ -18,11 +18,15 @@ export function eventsCommand() {
     .option('--amount <amount>', 'amount param shortcut')
     .option('-p, --param <kv>', 'key=value param (repeatable)', collect, [])
     .option('--live', 'Fire the event against the live production API')
-    .option('--sandbox [name]', 'Fire in sandbox mode (default: production-test)')
+    .option('--sandbox [name]', 'Fire in sandbox mode (default: production-test); mutually exclusive with --live')
     .option('--dry-run', 'Print request payload without sending')
     .option('--watch', 'After firing, tail the event stream for this email for 15s')
     .option('--watch-timeout <seconds>', 'How long to tail when using --watch', '15')
     .action(async (eventName, opts) => {
+      if (opts.live && opts.sandbox) {
+        console.error('Error: --live and --sandbox are mutually exclusive.');
+        process.exit(2);
+      }
       const token = resolveToken(opts);
       const data = {};
       if (opts.email) data.email = opts.email;

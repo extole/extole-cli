@@ -10,7 +10,8 @@ async function fetchPrograms(token, verbose) {
 }
 
 function groupPrograms(campaigns) {
-  const filtered = campaigns.filter(
+  const list = Array.isArray(campaigns) ? campaigns : (campaigns?.campaigns || []);
+  const filtered = list.filter(
     c => c.campaign_type === 'MARKETING' && c.state !== 'ARCHIVED'
   );
   const groups = {};
