@@ -108,15 +108,16 @@ Examples:
     .allowExcessArguments(false)
     .requiredOption('--token <token>', 'Superuser bearer token')
     .requiredOption('--client <client_id>', 'Client ID to scope the token to (numeric ID, not shortname)')
-    .requiredOption('--account <name>', 'Account name to save the minted token under')
+    .option('--account <name>', 'Account name to save the minted token under (default: client ID)')
     .option('--set-default', 'Set this account as the default')
     .addHelpText('after', `
 Examples:
-  extole auth su --token SU_TOKEN --client CLIENT_ID --account acme
+  extole auth su --token SU_TOKEN --client CLIENT_ID
+  extole auth su --token SU_TOKEN --client CLIENT_ID --set-default
   extole auth su --token SU_TOKEN --client CLIENT_ID --account acme --set-default`)
     .action(async function() {
-      const { token, client, account } = this.opts();
-      const isDefault = this.opts().setDefault;
+      const { token, client, setDefault: isDefault } = this.opts();
+      const account = this.opts().account || client;
 
       const { default: fetch } = await import('node-fetch');
       const res = await fetch('https://api.extole.com/v4/tokens', {
