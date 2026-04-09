@@ -107,7 +107,7 @@ Examples:
     .description('Mint a client-scoped token from a superuser token and save it')
     .allowExcessArguments(false)
     .requiredOption('--token <token>', 'Superuser bearer token')
-    .requiredOption('--client <client_id>', 'Client ID to scope the token to')
+    .requiredOption('--client <client_id>', 'Client ID to scope the token to (numeric ID, not shortname)')
     .requiredOption('--account <name>', 'Account name to save the minted token under')
     .option('--set-default', 'Set this account as the default')
     .addHelpText('after', `
