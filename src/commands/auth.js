@@ -1,6 +1,7 @@
 import { Command, Option } from 'commander';
 import { loadConfig, saveConfig, setProfile, getProfile, getDefaultAccount, setDefaultAccount } from '../config.js';
 import { apiJson } from '../api.js';
+import { logRequest } from '../utils.js';
 
 export function authCommand() {
   const auth = new Command('auth')
@@ -110,6 +111,7 @@ Examples:
     .requiredOption('--client <client_id>', 'Client ID to scope the token to (numeric ID, not shortname)')
     .option('--account <name>', 'Account name to save the minted token under (default: client ID)')
     .option('--set-default', 'Set this account as the default')
+    .option('--verbose', 'Log each HTTP request to stderr')
     .addHelpText('after', `
 Examples:
   extole auth su --token SU_TOKEN --client CLIENT_ID
@@ -120,6 +122,7 @@ Examples:
       const account = this.opts().account || client;
 
       const { default: fetch } = await import('node-fetch');
+      logRequest(this.opts().verbose, 'POST', 'https://api.extole.com/v4/tokens');
       const res = await fetch('https://api.extole.com/v4/tokens', {
         method: 'POST',
         headers: {
