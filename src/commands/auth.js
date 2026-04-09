@@ -2,6 +2,35 @@ import { Command, Option } from 'commander';
 import { loadConfig, saveConfig, setProfile, getProfile, getDefaultAccount, setDefaultAccount, AUTH_BASE } from '../config.js';
 import { apiFetch, apiJson } from '../api.js';
 
+export async function mintClientToken(suToken, clientId, verbose, fetchFn) {
+  let res, text;
+  try {
+    res = await apiFetch('/v4/tokens', suToken, {
+      method: 'POST',
+      body: JSON.stringify({ client_id: clientId }),
+      baseUrl: AUTH_BASE,
+      verbose,
+    }, fetchFn);
+    text = await res.text();
+  } catch (e) {
+    throw new Error(`Failed to mint client token for ${clientId}: ${e.message}`);
+  }
+  if (!res.ok) {
+    throw new Error(`Failed to mint client token for ${clientId}: ${res.status}: ${text.slice(0, 300)}`);
+  }
+  let data;
+  try {
+    data = JSON.parse(text);
+  } catch {
+    throw new Error(`Unexpected response: ${text.slice(0, 200)}`);
+  }
+  const clientToken = data.access_token;
+  if (!clientToken) {
+    throw new Error(`No access_token in response: ${text.slice(0, 200)}`);
+  }
+  return clientToken;
+}
+
 export function authCommand() {
   const auth = new Command('auth')
     .description('Manage Extole credentials');
@@ -125,33 +154,11 @@ Examples:
       const { token, client, setDefault: isDefault } = this.opts();
       const account = this.opts().account || client;
 
-      let res, text;
+      let clientToken;
       try {
-        res = await apiFetch('/v4/tokens', token, {
-          method: 'POST',
-          body: JSON.stringify({ client_id: client }),
-          baseUrl: AUTH_BASE,
-          verbose: this.opts().verbose,
-        });
-        text = await res.text();
+        clientToken = await mintClientToken(token, client, this.opts().verbose);
       } catch (e) {
-        console.error(`Failed to mint client token for ${client}: ${e.message}`);
-        process.exit(1);
-      }
-      if (!res.ok) {
-        console.error(`Failed to mint client token for ${client}: ${res.status}: ${text.slice(0, 300)}`);
-        process.exit(1);
-      }
-      let data;
-      try {
-        data = JSON.parse(text);
-      } catch {
-        console.error(`Unexpected response: ${text.slice(0, 200)}`);
-        process.exit(1);
-      }
-      const clientToken = data.access_token;
-      if (!clientToken) {
-        console.error(`No access_token in response: ${text.slice(0, 200)}`);
+        console.error(e.message);
         process.exit(1);
       }
 
