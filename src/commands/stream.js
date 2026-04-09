@@ -6,9 +6,11 @@ import { collect, addGlobalOptions, SEEN_MAX_SIZE, SEEN_KEEP_SIZE, POLL_INTERVAL
 import { findPerson } from '../person-api.js';
 
 const INTERNAL_EVENT_NAMES = new Set(['config_change']);
+const STREAM_EXPIRY_MS = 2 * 3600 * 1000; // 2 hours
+const MAX_STREAM_FIELDS = 3;
 
 async function createStream(token, verbose) {
-  const stop_at = new Date(Date.now() + 2 * 3600 * 1000).toISOString();
+  const stop_at = new Date(Date.now() + STREAM_EXPIRY_MS).toISOString();
   return apiJson('/v6/event-streams', token, {
     method: 'POST',
     body: JSON.stringify({ name: 'extole-cli', tags: ['cli'], stop_at }),
@@ -62,9 +64,8 @@ function formatStreamEvent(item, opts) {
       const val = typeof v === 'object' && v !== null ? (v.value ?? JSON.stringify(v)) : v;
       return `${k}=${val}`;
     }) : [];
-  const MAX_FIELDS = 3;
-  const truncated = entries.length > MAX_FIELDS ? `  (+${entries.length - MAX_FIELDS} more)` : '';
-  const data = entries.slice(0, MAX_FIELDS).join('  ') + truncated;
+  const truncated = entries.length > MAX_STREAM_FIELDS ? `  (+${entries.length - MAX_STREAM_FIELDS} more)` : '';
+  const data = entries.slice(0, MAX_STREAM_FIELDS).join('  ') + truncated;
   console.log(`${time}  ${name}  ${data}`);
 }
 
