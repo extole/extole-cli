@@ -103,6 +103,58 @@ Examples:
     });
 
   auth
+    .command('su')
+    .description('Mint a client-scoped token from a superuser token and save it')
+    .allowExcessArguments(false)
+    .requiredOption('--token <token>', 'Superuser bearer token')
+    .requiredOption('--client <client_id>', 'Client ID to scope the token to')
+    .requiredOption('--account <name>', 'Account name to save the minted token under')
+    .option('--set-default', 'Set this account as the default')
+    .addHelpText('after', `
+Examples:
+  extole auth su --token SU_TOKEN --client CLIENT_ID --account acme
+  extole auth su --token SU_TOKEN --client CLIENT_ID --account acme --set-default`)
+    .action(async function() {
+      const { token, client, account } = this.opts();
+      const isDefault = this.opts().setDefault;
+
+      const { default: fetch } = await import('node-fetch');
+      const res = await fetch('https://api.extole.com/v4/tokens', {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ client_id: client }),
+      });
+      const text = await res.text();
+      if (!res.ok) {
+        console.error(`Failed to mint token: ${res.status}: ${text.slice(0, 300)}`);
+        process.exit(1);
+      }
+      let data;
+      try {
+        data = JSON.parse(text);
+      } catch {
+        console.error(`Unexpected response: ${text.slice(0, 200)}`);
+        process.exit(1);
+      }
+      const clientToken = data.access_token;
+      if (!clientToken) {
+        console.error(`No access_token in response: ${text.slice(0, 200)}`);
+        process.exit(1);
+      }
+
+      setProfile(account, { token: clientToken });
+      if (isDefault) {
+        setDefaultAccount(account);
+        console.log(`Client token minted and saved to account "${account}" (default).`);
+      } else {
+        console.log(`Client token minted and saved to account "${account}".`);
+      }
+    });
+
+  auth
     .command('status')
     .description('Show token and verify connectivity')
     .allowExcessArguments(false)

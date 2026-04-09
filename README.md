@@ -23,6 +23,16 @@ All commands use the default account unless `--account NAME` is specified.
 Set `EXTOLE_ACCOUNT=NAME` in your shell to override without passing it on every command.
 Pass `--token TOKEN` to override the token for a single call without saving.
 
+### Superuser access
+
+If you have a superuser token, use `auth su` to mint a client-scoped token (valid 2 hours) and save it as a named account:
+
+```
+extole auth su --token SU_TOKEN --client CLIENT_ID --account acme --set-default
+```
+
+When it expires, run the same command again to re-mint.
+
 ## ping
 
 ```
