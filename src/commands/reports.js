@@ -5,6 +5,7 @@ import { printJson, printJsonText } from '../output.js';
 import { collect, sleep, addGlobalOptions } from '../utils.js';
 
 const REPORT_POLL_MAX_ATTEMPTS = 240; // 240 attempts × 1.5s = 6 minutes
+const TERMINAL_STATES = new Set(['DONE', 'FAILED', 'CANCELLED', 'EXPIRED']);
 
 async function pollUntilDone(reportId, token, verbose) {
   const frames = ['⠋','⠙','⠹','⠸','⠼','⠴','⠦','⠧','⠇','⠏'];
@@ -13,7 +14,7 @@ async function pollUntilDone(reportId, token, verbose) {
   let pollAttempts = 0;
   let pollErrors = 0;
   const MAX_POLL_ERRORS = 5;
-  while (status !== 'DONE' && status !== 'FAILED') {
+  while (!TERMINAL_STATES.has(status)) {
     if (++pollAttempts > REPORT_POLL_MAX_ATTEMPTS) {
       process.stderr.write('\r\x1b[K');
       console.error(`Report did not complete after ${REPORT_POLL_MAX_ATTEMPTS} attempts. Last status: ${status || 'unknown'}`);
@@ -114,7 +115,8 @@ export function reportsCommand() {
         parameters[kv.slice(0, idx)] = kv.slice(idx + 1);
       }
       if (opts.days && parameters.time_range) {
-        console.error('Warning: --days ignored because -p time_range was also specified.');
+        console.error('Error: --days and -p time_range are mutually exclusive.');
+        process.exit(2);
       }
       if (opts.days && !parameters.time_range) {
         const days = parseInt(opts.days, 10);
@@ -151,8 +153,8 @@ export function reportsCommand() {
       if (!opts.wait && !opts.download) return;
 
       const status = await pollUntilDone(reportId, token, opts.verbose);
-      if (status === 'FAILED') {
-        console.error('Report failed.');
+      if (status !== 'DONE') {
+        console.error(`Report ended with status: ${status}`);
         process.exit(1);
       }
 

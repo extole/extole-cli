@@ -72,7 +72,7 @@ export function eventsCommand() {
 
       if (!opts.watch) return;
 
-      const email = opts.email || data.email;
+      const email = opts.email;
       if (!email) {
         console.error('--watch requires --email to be set');
         process.exit(2);
@@ -96,7 +96,6 @@ export function eventsCommand() {
       console.error(`\nWatching steps for ${email} for ${watchTimeout}s...\n`);
 
       while (Date.now() < deadline) {
-        await sleep(2000);
         try {
           const steps = await getPersonSteps(match.id, token, 25, opts.verbose);
           const newSteps = steps.filter(s => {
@@ -119,6 +118,7 @@ export function eventsCommand() {
         } catch (e) {
           console.error(`poll error: ${e.message}`);
         }
+        await sleep(2000);
       }
 
       console.error(`\nDone watching (${watchTimeout}s).`);

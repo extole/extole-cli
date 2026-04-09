@@ -1,5 +1,7 @@
 import { Command } from 'commander';
 import { resolveToken, PERSON_BASE } from '../config.js';
+
+const VALID_REWARD_STATES = new Set(['EARNED', 'FULFILLED', 'SENT', 'REDEEMED', 'CANCELED', 'FAILED', 'EXPIRED']);
 import { apiJson } from '../api.js';
 import { printJson } from '../output.js';
 import { addGlobalOptions } from '../utils.js';
@@ -37,6 +39,11 @@ export function rewardsCommand() {
       const limit = parseInt(opts.limit, 10);
       if (isNaN(limit) || limit <= 0) {
         console.error('--limit must be a positive integer');
+        process.exit(2);
+      }
+
+      if (opts.status && !VALID_REWARD_STATES.has(opts.status.toUpperCase())) {
+        console.error(`Error: --status must be one of: ${[...VALID_REWARD_STATES].join(', ')}`);
         process.exit(2);
       }
 

@@ -56,14 +56,15 @@ function formatStreamEvent(item, opts) {
   const time = new Date(item.event_time || ev.event_time || Date.now())
     .toLocaleTimeString('en-US', { hour12: false });
   const name = (ev.name || '').padEnd(35);
-  const data = ev.data ? Object.entries(ev.data)
+  const entries = ev.data ? Object.entries(ev.data)
     .filter(([, v]) => v && (typeof v !== 'object' || v.scope !== 'CLIENT_ADMIN'))
     .map(([k, v]) => {
       const val = typeof v === 'object' && v !== null ? (v.value ?? JSON.stringify(v)) : v;
       return `${k}=${val}`;
-    })
-    .slice(0, 3)
-    .join('  ') : '';
+    }) : [];
+  const MAX_FIELDS = 3;
+  const truncated = entries.length > MAX_FIELDS ? `  (+${entries.length - MAX_FIELDS} more)` : '';
+  const data = entries.slice(0, MAX_FIELDS).join('  ') + truncated;
   console.log(`${time}  ${name}  ${data}`);
 }
 
@@ -83,12 +84,12 @@ export function streamCommand() {
       const streamId = stream.id;
       process.stderr.write(`Stream ${streamId} created (expires in 2 hours)\n`);
 
-      function cleanup() {
+      function cleanup(exitCode) {
         process.stderr.write('\nCleaning up stream...\n');
-        deleteStream(streamId, token, opts.verbose).finally(() => process.exit(0));
+        deleteStream(streamId, token, opts.verbose).finally(() => process.exit(exitCode));
       }
-      process.once('SIGINT', cleanup);
-      process.once('SIGTERM', cleanup);
+      process.once('SIGINT', () => cleanup(130));
+      process.once('SIGTERM', () => cleanup(143));
 
       const filterPromises = [];
 

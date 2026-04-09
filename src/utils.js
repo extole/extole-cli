@@ -1,6 +1,8 @@
 import { Option } from 'commander';
 import { getDefaultAccount } from './config.js';
 
+// Cached once at module load so every command registration shares the same value
+// without re-reading the config file.
 const _defaultAccount = getDefaultAccount();
 
 export function collect(val, prev) {

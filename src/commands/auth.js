@@ -20,11 +20,12 @@ Examples:
     .action(function() {
       const { token, account } = this.opts();
       const isDefault = this.opts().setDefault;
-      if (!token || token.trim().length < 10) {
+      const trimmedToken = token.trim();
+      if (!trimmedToken || trimmedToken.length < 10) {
         console.error('Error: token appears invalid (too short).');
         process.exit(2);
       }
-      setProfile(account, { token });
+      setProfile(account, { token: trimmedToken });
       if (isDefault) {
         setDefaultAccount(account);
         console.log(`Token saved to account "${account}" (default).`);

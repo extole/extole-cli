@@ -4,7 +4,7 @@ import { apiJson } from '../api.js';
 import { printJson } from '../output.js';
 import { addGlobalOptions } from '../utils.js';
 
-// TODO: replace with /v4/programs once the v4 endpoint bug is fixed (no ticket yet — ask team)
+// TODO: replace with /v4/programs once the v4 endpoint bug is fixed
 async function fetchPrograms(token, verbose) {
   return apiJson('/v2/campaign-summaries', token, { verbose, baseUrl: PERSON_BASE });
 }
@@ -35,7 +35,7 @@ export function programsCommand() {
       if (opts.json) {
         const out = Object.entries(groups).map(([program_label, camps]) => ({
           program_label,
-          campaigns: camps.map(c => ({
+          campaigns: (opts.all ? camps : camps.filter(c => c.state === 'LIVE')).map(c => ({
             campaign_id: c.campaign_id,
             name: c.name,
             state: c.state,

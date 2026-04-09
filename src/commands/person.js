@@ -72,7 +72,6 @@ export function personCommand() {
       async function poll() {
         try {
           const steps = await getPersonSteps(personId, token, 50, opts.verbose);
-          errorCount = 0;
           for (const step of steps.reverse()) {
             if (!seen.has(step.id)) {
               seen.add(step.id);
@@ -92,6 +91,7 @@ export function personCommand() {
               }
             }
           }
+          errorCount = 0;
         } catch (e) {
           console.error(`poll error: ${e.message}`);
           if (++errorCount >= 10) {
