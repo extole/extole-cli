@@ -28,10 +28,16 @@ Pass `--token TOKEN` to override the token for a single call without saving.
 If you have a superuser token, use `auth su` to mint a client-scoped token (valid 2 hours) and save it as a named account:
 
 ```
+extole auth su --token SU_TOKEN --client CLIENT_ID
+```
+
+The account is named after the client ID by default. Use `--account` to override, and `--set-default` to make it the default account:
+
+```
 extole auth su --token SU_TOKEN --client CLIENT_ID --account acme --set-default
 ```
 
-When it expires, run the same command again to re-mint.
+When it expires (2 hours), run the same command again to re-mint.
 
 ## ping
 
