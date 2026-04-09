@@ -6,7 +6,14 @@ const REQUEST_TIMEOUT_MS = 30_000;
 
 export async function apiFetch(path, token, options = {}, fetchFn = fetch) {
   const url = `${BASE_URL}${path}`;
-  logRequest(options.verbose, options.method || 'GET', url);
+  logRequest(options.verbose, options.method || 'GET', url, {
+    headers: {
+      'Authorization': `Bearer ${token}`,
+      ...(options.body ? { 'Content-Type': 'application/json' } : {}),
+      ...(options.headers || {}),
+    },
+    body: options.body || null,
+  });
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS);
   try {

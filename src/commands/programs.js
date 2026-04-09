@@ -6,7 +6,9 @@ import { addGlobalOptions, logRequest } from '../utils.js';
 // TODO: replace with /v4/programs once the v4 endpoint bug is fixed
 async function fetchPrograms(token, verbose = false) {
   const { default: fetch } = await import('node-fetch');
-  logRequest(verbose, 'GET', `${PERSON_BASE}/v2/campaign-summaries`);
+  logRequest(verbose, 'GET', `${PERSON_BASE}/v2/campaign-summaries`, {
+    headers: { 'Authorization': `Bearer ${token}` },
+  });
   const res = await fetch(`${PERSON_BASE}/v2/campaign-summaries`, {
     headers: { 'Authorization': `Bearer ${token}`, 'Accept': 'application/json' },
   });

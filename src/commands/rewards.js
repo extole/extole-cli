@@ -8,7 +8,9 @@ const REQUEST_TIMEOUT_MS = 30_000;
 
 async function rewardsFetch(path, token, verbose = false) {
   const { default: fetch } = await import('node-fetch');
-  logRequest(verbose, 'GET', `${PERSON_BASE}${path}`);
+  logRequest(verbose, 'GET', `${PERSON_BASE}${path}`, {
+    headers: { 'Authorization': `Bearer ${token}` },
+  });
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS);
   let res;

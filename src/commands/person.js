@@ -10,7 +10,9 @@ const SEEN_KEEP_SIZE = 4000;
 
 async function personApiFetch(path, token, verbose = false) {
   const { default: fetch } = await import('node-fetch');
-  logRequest(verbose, 'GET', `${PERSON_BASE}${path}`);
+  logRequest(verbose, 'GET', `${PERSON_BASE}${path}`, {
+    headers: { 'Authorization': `Bearer ${token}` },
+  });
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS);
   let res;

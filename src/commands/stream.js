@@ -11,7 +11,13 @@ const SEEN_KEEP_SIZE = 4000;
 
 async function streamFetch(path, token, options = {}, verbose = false) {
   const { default: fetch } = await import('node-fetch');
-  logRequest(verbose, options.method || 'GET', `${PERSON_BASE}${path}`);
+  logRequest(verbose, options.method || 'GET', `${PERSON_BASE}${path}`, {
+    headers: {
+      'Authorization': `Bearer ${token}`,
+      ...(options.body ? { 'Content-Type': 'application/json' } : {}),
+    },
+    body: options.body || null,
+  });
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS);
   let res;

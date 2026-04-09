@@ -9,8 +9,19 @@ export function sleep(ms) {
   return new Promise(r => setTimeout(r, ms));
 }
 
-export function logRequest(verbose, method, url) {
-  if (verbose) process.stderr.write(`→ ${method} ${url}\n`);
+export function logRequest(verbose, method, url, { headers = {}, body = null } = {}) {
+  if (!verbose) return;
+  const lines = [`→ ${method} ${url}`];
+  for (const [k, v] of Object.entries(headers)) {
+    if (k.toLowerCase() === 'authorization') {
+      const masked = v.length > 20 ? v.slice(0, 14) + '...' + v.slice(-4) : '***';
+      lines.push(`  ${k}: ${masked}`);
+    } else {
+      lines.push(`  ${k}: ${v}`);
+    }
+  }
+  if (body) lines.push(`  ${body}`);
+  process.stderr.write(lines.join('\n') + '\n');
 }
 
 /**

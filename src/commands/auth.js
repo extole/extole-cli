@@ -122,7 +122,10 @@ Examples:
       const account = this.opts().account || client;
 
       const { default: fetch } = await import('node-fetch');
-      logRequest(this.opts().verbose, 'POST', 'https://api.extole.com/v4/tokens');
+      logRequest(this.opts().verbose, 'POST', 'https://api.extole.com/v4/tokens', {
+        headers: { 'Authorization': `Bearer ${token}`, 'Content-Type': 'application/json' },
+        body: JSON.stringify({ client_id: client }),
+      });
       const res = await fetch('https://api.extole.com/v4/tokens', {
         method: 'POST',
         headers: {
