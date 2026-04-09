@@ -130,7 +130,7 @@ Examples:
       });
       const text = await res.text();
       if (!res.ok) {
-        console.error(`Failed to mint token: ${res.status}: ${text.slice(0, 300)}`);
+        console.error(`Failed to mint client token for ${client}: ${res.status}: ${text.slice(0, 300)}`);
         process.exit(1);
       }
       let data;
