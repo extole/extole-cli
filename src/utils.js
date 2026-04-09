@@ -16,6 +16,23 @@ export function sleep(ms) {
 export const SEEN_MAX_SIZE = 5000;
 export const SEEN_KEEP_SIZE = 4000;
 
+export const POLL_INTERVAL_MS = 2500;
+
+export function isValidEmail(email) {
+  return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email);
+}
+
+export function formatEventTime(isoString) {
+  return new Date(isoString).toLocaleTimeString('en-US', { hour12: false });
+}
+
+export function formatEventDate(isoString) {
+  return new Date(isoString).toLocaleString('en-US', {
+    month: 'numeric', day: 'numeric', year: 'numeric',
+    hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: false,
+  });
+}
+
 export function logRequest(verbose, method, url, { headers = {}, body = null } = {}) {
   if (!verbose) return;
   const lines = [`→ ${method} ${url}`];

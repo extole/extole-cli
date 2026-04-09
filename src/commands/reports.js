@@ -2,7 +2,7 @@ import { Command } from 'commander';
 import { resolveToken } from '../config.js';
 import { apiJson, apiFetch } from '../api.js';
 import { printJson, printJsonText } from '../output.js';
-import { collect, sleep, addGlobalOptions } from '../utils.js';
+import { collect, sleep, addGlobalOptions, formatEventDate } from '../utils.js';
 
 const REPORT_POLL_MAX_ATTEMPTS = 240; // 240 attempts × 1.5s = 6 minutes
 const TERMINAL_STATES = new Set(['DONE', 'FAILED', 'CANCELLED', 'EXPIRED']);
@@ -249,7 +249,7 @@ export function reportsCommand() {
       console.log(`report_id  ${report.report_id}`);
       console.log(`status     ${report.status}`);
       if (report.report_type) console.log(`type       ${report.report_type}`);
-      if (report.created_at) console.log(`created    ${new Date(report.created_at).toLocaleString('en-US')}`);
+      if (report.created_at) console.log(`created    ${formatEventDate(report.created_at)}`);
     });
 
   addGlobalOptions(statusCmd, {

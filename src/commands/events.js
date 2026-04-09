@@ -1,8 +1,8 @@
 import { Command } from 'commander';
 import { resolveToken } from '../config.js';
 import { apiFetch } from '../api.js';
-import { printJson } from '../output.js';
-import { collect, sleep, addGlobalOptions } from '../utils.js';
+import { printJson, printJsonText } from '../output.js';
+import { collect, sleep, addGlobalOptions, POLL_INTERVAL_MS, isValidEmail, formatEventTime } from '../utils.js';
 import { findPerson, getPersonSteps } from '../person-api.js';
 
 
@@ -65,7 +65,7 @@ export function eventsCommand() {
       }
 
       if (opts.json) {
-        try { printJson(JSON.parse(text), opts); } catch { process.stdout.write(text + '\n'); }
+        printJsonText(text, opts);
       } else {
         console.error(`OK  ${res.status}  fired ${eventName}`);
       }
@@ -108,8 +108,7 @@ export function eventsCommand() {
             if (opts.json) {
               printJson(step, opts);
             } else {
-              const time = new Date(step.event_date || step.created_date)
-                .toLocaleTimeString('en-US', { hour12: false });
+              const time = formatEventTime(step.event_date || step.created_date);
               const name = (step.name || '').padEnd(35);
               const program = step.program || '';
               console.log(`${time}  ${name}  ${program}`);
@@ -118,7 +117,7 @@ export function eventsCommand() {
         } catch (e) {
           console.error(`poll error: ${e.message}`);
         }
-        await sleep(2000);
+        await sleep(POLL_INTERVAL_MS);
       }
 
       console.error(`\nDone watching (${watchTimeout}s).`);

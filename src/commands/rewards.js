@@ -4,7 +4,7 @@ import { resolveToken, PERSON_BASE } from '../config.js';
 const VALID_REWARD_STATES = new Set(['EARNED', 'FULFILLED', 'SENT', 'REDEEMED', 'CANCELED', 'FAILED', 'EXPIRED']);
 import { apiJson } from '../api.js';
 import { printJson } from '../output.js';
-import { addGlobalOptions } from '../utils.js';
+import { addGlobalOptions, isValidEmail, formatEventDate } from '../utils.js';
 import { getPersonSteps } from '../person-api.js';
 
 function formatReward(r) {
@@ -13,7 +13,7 @@ function formatReward(r) {
     ? `${r.face_value} ${r.face_value_type || ''}`.trim().padEnd(18)
     : ''.padEnd(18);
   const journey  = (r.journey_name || '').padEnd(16);
-  const date     = r.created_at ? new Date(r.created_at).toLocaleDateString('en-US') : '';
+  const date     = r.created_at ? new Date(r.created_at).toLocaleDateString('en-US') : ''; // date-only intentional in list view
   const id       = (r.reward_id || '').slice(0, 24);
   console.log(`${state}${value}${journey}${date.padEnd(12)}${id}`);
 }
@@ -30,7 +30,7 @@ export function rewardsCommand() {
         console.error('Error: --email <email> is required.');
         process.exit(2);
       }
-      if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(opts.email)) {
+      if (!isValidEmail(opts.email)) {
         console.error('Error: --email must be a valid email address.');
         process.exit(2);
       }
@@ -121,7 +121,7 @@ export function rewardsCommand() {
       field('email',           r.email);
       field('campaign_id',     r.campaign_id);
       field('cause_event_id',  r.cause_event_id);
-      field('created_at',      r.created_at ? new Date(r.created_at).toLocaleString('en-US') : null);
+      field('created_at',      r.created_at ? formatEventDate(r.created_at) : null);
       field('container',       r.container);
 
       if (opts.steps && r.person_id) {
@@ -133,7 +133,7 @@ export function rewardsCommand() {
         for (const s of stepList) {
           const stepDate = new Date(s.event_date || s.created_date);
           const age = rewardDate ? Math.round((rewardDate - stepDate) / (1000 * 60 * 60 * 24)) : null;
-          const dateStr = stepDate.toLocaleString('en-US', { month: 'numeric', day: 'numeric', year: 'numeric', hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: false }).padEnd(22);
+          const dateStr = formatEventDate(stepDate.toISOString()).padEnd(22);
           const rel = age !== null ? (age === 0 ? '(same day)' : age > 0 ? `(${age}d before)` : `(${Math.abs(age)}d after)`).padEnd(14) : ''.padEnd(14);
           const name = (s.name || '').padEnd(35);
           console.log(`${dateStr}${rel}${name}${s.journey_name || ''}`);

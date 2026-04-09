@@ -2,7 +2,7 @@ import { Command } from 'commander';
 import { resolveToken, PERSON_BASE } from '../config.js';
 import { apiFetch, apiJson } from '../api.js';
 import { printJson } from '../output.js';
-import { collect, addGlobalOptions, SEEN_MAX_SIZE, SEEN_KEEP_SIZE } from '../utils.js';
+import { collect, addGlobalOptions, SEEN_MAX_SIZE, SEEN_KEEP_SIZE, POLL_INTERVAL_MS } from '../utils.js';
 import { findPerson } from '../person-api.js';
 
 const INTERNAL_EVENT_NAMES = new Set(['config_change']);
@@ -162,7 +162,7 @@ export function streamCommand() {
 
       async function schedulePoll() {
         await poll();
-        setTimeout(schedulePoll, 2500);
+        setTimeout(schedulePoll, POLL_INTERVAL_MS);
       }
       await schedulePoll();
     });

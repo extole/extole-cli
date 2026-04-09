@@ -2,7 +2,7 @@ import { Command } from 'commander';
 import { resolveToken, PERSON_BASE } from '../config.js';
 import { apiJson } from '../api.js';
 import { printJson } from '../output.js';
-import { addGlobalOptions, SEEN_MAX_SIZE, SEEN_KEEP_SIZE } from '../utils.js';
+import { addGlobalOptions, SEEN_MAX_SIZE, SEEN_KEEP_SIZE, POLL_INTERVAL_MS, isValidEmail, formatEventTime } from '../utils.js';
 import { findPerson, getPersonSteps } from '../person-api.js';
 
 export function personCommand() {
@@ -13,7 +13,7 @@ export function personCommand() {
     .allowExcessArguments(false)
     .requiredOption('--email <email>', 'Email address to look up')
     .action(async (opts) => {
-      if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(opts.email)) {
+      if (!isValidEmail(opts.email)) {
         console.error('Error: --email must be a valid email address.');
         process.exit(2);
       }
@@ -42,7 +42,7 @@ export function personCommand() {
     .option('--limit <n>', 'Number of steps to return (one-shot)', '25')
     .option('--watch', 'Poll for new steps until Ctrl+C')
     .action(async (opts) => {
-      if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(opts.email)) {
+      if (!isValidEmail(opts.email)) {
         console.error('Error: --email must be a valid email address.');
         process.exit(2);
       }
@@ -83,8 +83,7 @@ export function personCommand() {
               if (opts.json) {
                 printJson(step, opts);
               } else {
-                const time = new Date(step.event_date || step.created_date)
-                  .toLocaleTimeString('en-US', { hour12: false });
+                const time = formatEventTime(step.event_date || step.created_date);
                 const name = (step.name || '').padEnd(35);
                 const program = step.program || '';
                 console.log(`${time}  ${name}  ${program}`);
@@ -103,7 +102,7 @@ export function personCommand() {
 
       async function schedulePoll() {
         await poll();
-        setTimeout(schedulePoll, 2500);
+        setTimeout(schedulePoll, POLL_INTERVAL_MS);
       }
       await schedulePoll();
     });
