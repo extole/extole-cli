@@ -23,8 +23,15 @@ export function personCommand() {
         console.error(`No person found for ${opts.email}`);
         process.exit(1);
       }
-      const profile = await apiJson(`/v4/persons/${match.id}`, token, { verbose: opts.verbose, baseUrl: PERSON_BASE });
-      printJson(profile, opts);
+      const [profile, dataEntries] = await Promise.all([
+        apiJson(`/v5/persons/${match.id}`, token, { verbose: opts.verbose, baseUrl: PERSON_BASE }),
+        apiJson(`/v5/persons/${match.id}/data`, token, { verbose: opts.verbose, baseUrl: PERSON_BASE }).catch(() => ({})),
+      ]);
+      const data = {};
+      for (const [key, entry] of Object.entries(dataEntries)) {
+        if (entry?.value != null) data[key] = entry.value;
+      }
+      printJson({ ...profile, ...(Object.keys(data).length > 0 ? { data } : {}) }, opts);
     });
 
   addGlobalOptions(getCmd, {
