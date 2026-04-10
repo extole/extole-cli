@@ -5,7 +5,7 @@ const VALID_REWARD_STATES = new Set(['EARNED', 'FULFILLED', 'SENT', 'REDEEMED', 
 import { apiJson } from '../api.js';
 import { printJson } from '../output.js';
 import { addGlobalOptions, isValidEmail, formatEventDate } from '../utils.js';
-import { getPersonSteps } from '../person-api.js';
+import { findPerson, getPersonSteps } from '../person-api.js';
 
 function formatReward(r) {
   const state    = (r.state || '').padEnd(12);
@@ -13,8 +13,9 @@ function formatReward(r) {
     ? `${r.face_value} ${r.face_value_type || ''}`.trim().padEnd(18)
     : ''.padEnd(18);
   const journey  = (r.journey_name || '').padEnd(16);
-  const date     = r.created_at ? new Date(r.created_at).toLocaleDateString('en-US') : ''; // date-only intentional in list view
-  const id       = (r.reward_id || '').slice(0, 24);
+  const dateVal  = r.created_date || r.created_at;
+  const date     = dateVal ? new Date(dateVal).toLocaleDateString('en-US') : '';
+  const id       = (r.id || r.reward_id || '').slice(0, 24);
   console.log(`${state}${value}${journey}${date.padEnd(12)}${id}`);
 }
 
@@ -47,10 +48,16 @@ export function rewardsCommand() {
         process.exit(2);
       }
 
-      const params = new URLSearchParams({ email: opts.email, limit: String(limit) });
+      const match = await findPerson(opts.email, token, opts.verbose);
+      if (!match) {
+        console.error(`No person found for ${opts.email}`);
+        process.exit(1);
+      }
+
+      const params = new URLSearchParams({ limit: String(limit) });
       if (opts.status) params.set('state', opts.status.toUpperCase());
 
-      const rewards = await apiJson(`/v2/rewards?${params}`, token, { verbose: opts.verbose, baseUrl: PERSON_BASE });
+      const rewards = await apiJson(`/v5/persons/${match.id}/rewards?${params}`, token, { verbose: opts.verbose, baseUrl: PERSON_BASE });
 
       if (!Array.isArray(rewards) || rewards.length === 0) {
         console.error(`No rewards found for ${opts.email}`);
@@ -111,7 +118,7 @@ export function rewardsCommand() {
         ? console.log(`${label.padEnd(22)}${value}`)
         : null;
 
-      field('reward_id',       r.reward_id);
+      field('reward_id',       r.id || r.reward_id);
       field('state',           r.state);
       field('face_value',      r.face_value != null ? `${r.face_value} ${r.face_value_type || ''}`.trim() : null);
       field('coupon_code',     r.partner_reward_id);
@@ -121,7 +128,8 @@ export function rewardsCommand() {
       field('email',           r.email);
       field('campaign_id',     r.campaign_id);
       field('cause_event_id',  r.cause_event_id);
-      field('created_at',      r.created_at ? formatEventDate(r.created_at) : null);
+      const createdDate = r.created_date || r.created_at;
+      field('created_at',      createdDate ? formatEventDate(createdDate) : null);
       field('container',       r.container);
 
       if (opts.steps && r.person_id) {
