@@ -172,6 +172,37 @@ Examples:
     });
 
   auth
+    .command('token')
+    .description('Print the raw token for an account (for piping into other tools)')
+    .allowExcessArguments(false)
+    .addOption(
+      new Option('--account <name>', 'Account to read token from')
+        .default(getDefaultAccount())
+        .env('EXTOLE_ACCOUNT')
+    )
+    .addHelpText('after', `
+Examples:
+  extole auth token
+  extole auth token --account acme
+  extole auth token | pbcopy
+  some-tool --token $(extole auth token)`)
+    .action(function() {
+      const { account } = this.opts();
+      if (!account) {
+        console.error('Error: --account NAME is required (no default account set).');
+        process.exit(2);
+      }
+      const profile = getProfile(account);
+      const token = profile?.token;
+      if (!token) {
+        console.error(`No token for account "${account}". Run \`extole auth login --token TOKEN --account NAME\`.`);
+        process.exit(2);
+      }
+      process.stderr.write('# treat this token as a credential — do not log or share\n');
+      process.stdout.write(token + '\n');
+    });
+
+  auth
     .command('status')
     .description('Show token and verify connectivity')
     .allowExcessArguments(false)
