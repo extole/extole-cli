@@ -23,7 +23,7 @@ export function mcpCommand() {
           body: JSON.stringify({ prompt }),
         });
       } catch {
-        console.error(`Error: Extole AI chat server is unavailable (${CHAT_URL})`);
+        console.error('Error: Extole AI chat server is unavailable');
         process.exit(1);
       }
 
