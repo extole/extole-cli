@@ -13,6 +13,7 @@ process.on('unhandledRejection', (err) => {
   process.exit(1);
 });
 import { authCommand } from '../src/commands/auth.js';
+import { mcpCommand } from '../src/commands/mcp.js';
 import { pingCommand } from '../src/commands/ping.js';
 import { eventsCommand } from '../src/commands/events.js';
 import { reportsCommand } from '../src/commands/reports.js';
@@ -30,6 +31,7 @@ program
 ;
 
 program.addCommand(authCommand());
+program.addCommand(mcpCommand());
 program.addCommand(pingCommand());
 program.addCommand(eventsCommand());
 program.addCommand(reportsCommand());
