@@ -12,14 +12,20 @@ export function mcpCommand() {
       const prompt = promptParts.join(' ');
       const token = resolveToken(opts);
 
-      const res = await fetch(CHAT_URL, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${token}`,
-        },
-        body: JSON.stringify({ prompt }),
-      });
+      let res;
+      try {
+        res = await fetch(CHAT_URL, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${token}`,
+          },
+          body: JSON.stringify({ prompt }),
+        });
+      } catch {
+        console.error(`Error: Extole AI chat server is unavailable (${CHAT_URL})`);
+        process.exit(1);
+      }
 
       if (!res.ok) {
         const text = await res.text();
