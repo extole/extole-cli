@@ -1,6 +1,12 @@
+import { createServer } from 'http';
+import { randomBytes, createHash } from 'crypto';
+import { exec } from 'child_process';
 import { Command, Option } from 'commander';
 import { loadConfig, saveConfig, setProfile, getProfile, getDefaultAccount, setDefaultAccount, AUTH_BASE } from '../config.js';
 import { apiFetch, apiJson } from '../api.js';
+
+const IDP_BASE = 'https://idp.extole.com';
+const MCP_CLIENT_ID = 'extole-cli';
 
 export async function mintClientToken(suToken, clientId, verbose, fetchFn) {
   let res, text;
@@ -239,6 +245,112 @@ Examples:
         console.error(`Ping failed: ${e.message}`);
         process.exit(1);
       }
+    });
+
+  auth
+    .command('mcp-login')
+    .description('Authenticate with the Extole MCP via browser login')
+    .allowExcessArguments(false)
+    .addHelpText('after', `
+Examples:
+  extole auth mcp-login`)
+    .action(async function () {
+      // Generate PKCE pair
+      const codeVerifier = randomBytes(32).toString('base64url');
+      const codeChallenge = createHash('sha256').update(codeVerifier).digest('base64url');
+
+      // Start a one-shot local server to catch the OAuth callback
+      let resolveCode, rejectCode;
+      const codePromise = new Promise((res, rej) => { resolveCode = res; rejectCode = rej; });
+
+      const server = createServer((req, res) => {
+        const url = new URL(req.url, 'http://localhost');
+        if (url.pathname !== '/callback') {
+          res.writeHead(404); res.end(); return;
+        }
+        const error = url.searchParams.get('error');
+        if (error) {
+          res.writeHead(400, { 'Content-Type': 'text/plain' });
+          res.end(`Login failed: ${error}`);
+          rejectCode(new Error(error));
+          return;
+        }
+        const code = url.searchParams.get('code');
+        if (code) {
+          res.writeHead(200, { 'Content-Type': 'text/html' });
+          res.end('<html><body><p>Login successful — you may close this tab.</p></body></html>');
+          resolveCode(code);
+        }
+      });
+
+      await new Promise(resolve => server.listen(0, 'localhost', resolve));
+      const port = server.address().port;
+      const redirectUri = `http://localhost:${port}/callback`;
+
+      const authUrl = new URL(`${IDP_BASE}/oauth2/authorize`);
+      authUrl.searchParams.set('client_id', MCP_CLIENT_ID);
+      authUrl.searchParams.set('response_type', 'code');
+      authUrl.searchParams.set('scope', 'openid');
+      authUrl.searchParams.set('redirect_uri', redirectUri);
+      authUrl.searchParams.set('code_challenge', codeChallenge);
+      authUrl.searchParams.set('code_challenge_method', 'S256');
+
+      console.log('Opening browser for Extole MCP login...');
+      console.log(`If the browser does not open, visit:\n${authUrl.toString()}\n`);
+
+      const openCmd = process.platform === 'win32' ? 'start' : process.platform === 'darwin' ? 'open' : 'xdg-open';
+      exec(`${openCmd} "${authUrl.toString()}"`);
+
+      const timeout = setTimeout(() => {
+        server.close();
+        rejectCode(new Error('Login timed out after 2 minutes'));
+      }, 120_000);
+
+      let code;
+      try {
+        code = await codePromise;
+      } catch (e) {
+        console.error(`Error: ${e.message}`);
+        process.exit(1);
+      } finally {
+        clearTimeout(timeout);
+        server.close();
+      }
+
+      // Exchange code for token
+      const tokenRes = await fetch(`${IDP_BASE}/oauth2/token`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+        body: new URLSearchParams({
+          grant_type: 'authorization_code',
+          client_id: MCP_CLIENT_ID,
+          code,
+          redirect_uri: redirectUri,
+          code_verifier: codeVerifier,
+        }),
+      });
+
+      if (!tokenRes.ok) {
+        const text = await tokenRes.text();
+        console.error(`Error: token exchange failed (${tokenRes.status}): ${text}`);
+        process.exit(1);
+      }
+
+      const tokenData = await tokenRes.json();
+      const jwt = tokenData.access_token;
+      if (!jwt) {
+        console.error('Error: no access_token in IDP response');
+        process.exit(1);
+      }
+
+      const config = loadConfig();
+      config._mcp = { token: jwt };
+      if (tokenData.expires_in) {
+        config._mcp.expiresAt = Date.now() + tokenData.expires_in * 1000;
+      }
+      saveConfig(config);
+
+      console.log('MCP login successful. Token saved.');
     });
 
   return auth;
