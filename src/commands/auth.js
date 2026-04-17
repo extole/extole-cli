@@ -144,7 +144,7 @@ Examples:
 
   auth
     .command('su')
-    .description('Mint a client-scoped token from a superuser token and save it')
+    .description('Use a superuser token (--token) to mint a client-scoped token and save it as a named account (--account)')
     .allowExcessArguments(false)
     .requiredOption('--token <token>', 'Superuser bearer token')
     .requiredOption('--client <client_id>', 'Client ID to scope the token to (numeric ID, not shortname)')
