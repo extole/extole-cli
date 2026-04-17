@@ -168,17 +168,16 @@ Wraps the `/v1/audiences` and `/v1/audiences/{id}/operations` endpoints. Primari
 
 Extole programs are composed of typed components (campaigns, journeys, rules, actions, reward suppliers, content, etc.) organized in a nominal type hierarchy. These commands help developers inspect what's deployed and understand component schemas.
 
-### Program component inspection
+### Program component listing
 
 ```
 extole program <program-id> components
 extole program <program-id> components --type <type-name>
-extole program <program-id> component <component-id>
 ```
 
-`components` lists all component instances in the given program. `--type` filters to a specific nominal type (e.g. `reward-supplier`, `rule`, `action`). `component <id>` shows the full configuration for one component.
+Lists all component instances in the given program. `--type` filters to a specific nominal type (e.g. `reward-supplier`, `rule`, `action`) and includes subtypes — passing `reward-supplier` returns `reward-supplier`, `shopify-reward-supplier`, `bhn-reward-supplier`, etc.
 
-Default output (`components`):
+Output:
 ```
 component-id          type                         version  name
 ────────────────────  ───────────────────────────  ───────  ─────────────────────────
@@ -189,15 +188,28 @@ cmp-jkl012            targetable-event             10.0     friend_signup
 cmp-mno345            rule                         10.0     Eligibility Gate
 ```
 
-`--type` accepts both exact types and parent types — passing `reward-supplier` returns both `reward-supplier` and subtypes like `shopify-reward-supplier`.
+Flags:
+- `--type <type-name>` — filter by nominal type (matches exact type and all subtypes)
+- `--json` — emit raw API response
 
-`component <id>` output:
+### Component inspection
+
+```
+extole program <program-id> component <component-id>
+extole program <program-id> component <component-id> --tree
+extole program <program-id> component <component-id> --refs
+```
+
+`component <id>` shows the full configuration and variables for one component.
+
+Output:
 ```
 id:       cmp-ghi789
 type:     shopify-reward-supplier
 version:  10.0
 parent:   reward-supplier-v10.0
 name:     $20 Shopify Credit
+socket:   rewards
 
 configuration:
   face_value:       20.00
@@ -206,7 +218,31 @@ configuration:
   discount_type:    percentage
 ```
 
-Flags on all three:
+`--tree` expands the downstream subtree — all components this component contains, recursively. Backed by `GET /v1/components/{id}/tree`. Useful when debugging a reward flow or rule chain to see the full set of pieces involved without querying each child individually.
+
+```
+$ extole program <id> component cmp-ghi789 --tree
+
+cmp-ghi789   shopify-reward-supplier   $20 Shopify Credit
+  cmp-r01    reward-entry              Reward Entry
+  cmp-r02    reward-issuer             Reward Issuer
+  cmp-e01    rule                      60-Day Pending Period
+  cmp-e02    rule                      Annual Reward Cap
+  cmp-e03    rule                      Risk Evaluation
+```
+
+`--refs` shows which other components this component references via sockets — the forward edges in the component graph. Sourced from the `component_references` field on the component. Useful for understanding how components are wired together without reading raw JSON.
+
+```
+$ extole program <id> component cmp-mno345 --refs
+
+references:
+  cmp-r02   rewards   reward-issuer   Reward Issuer
+```
+
+Flags:
+- `--tree` — expand downstream subtree
+- `--refs` — show socket references to other components
 - `--json` — emit raw API response
 
 ### Type reference
