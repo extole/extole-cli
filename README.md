@@ -174,6 +174,24 @@ extole reports run --type summary_per_program --days 365 \
   | jq '[.[].program] | unique'
 ```
 
+## AI (extole mcp)
+
+Ask questions or run tasks using Extole AI:
+
+```
+extole mcp "why aren't events firing for jane@example.com"
+extole mcp "list active programs for this client"
+extole mcp "explain the reward supplier types available"
+```
+
+Requires MCP authentication (separate from the Extole API token):
+
+```
+extole auth mcp-login
+```
+
+Opens a browser for login. After completing, the token is saved automatically and refreshed as needed. Re-run `mcp-login` if the session expires.
+
 ## Output conventions
 
 - Human-readable by default; `--json` on all commands
