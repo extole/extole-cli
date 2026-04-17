@@ -164,6 +164,75 @@ Wraps the `/v1/audiences` and `/v1/audiences/{id}/operations` endpoints. Primari
 
 ---
 
+## Components
+
+Extole programs are composed of typed components (campaigns, journeys, rules, actions, reward suppliers, content, etc.) organized in a nominal type hierarchy. These commands help developers inspect what's deployed and understand component schemas.
+
+### Program component inspection
+
+```
+extole program <program-id> components
+extole program <program-id> components --type <type-name>
+extole program <program-id> component <component-id>
+```
+
+`components` lists all component instances in the given program. `--type` filters to a specific nominal type (e.g. `reward-supplier`, `rule`, `action`). `component <id>` shows the full configuration for one component.
+
+Default output (`components`):
+```
+component-id          type                         version  name
+────────────────────  ───────────────────────────  ───────  ─────────────────────────
+cmp-abc123            campaign                     8.0      Refer a Friend
+cmp-def456            reward-supplier              10.0     Visa Gift Card
+cmp-ghi789            shopify-reward-supplier      10.0     $20 Shopify Credit
+cmp-jkl012            targetable-event             10.0     friend_signup
+cmp-mno345            rule                         10.0     Eligibility Gate
+```
+
+`--type` accepts both exact types and parent types — passing `reward-supplier` returns both `reward-supplier` and subtypes like `shopify-reward-supplier`.
+
+`component <id>` output:
+```
+id:       cmp-ghi789
+type:     shopify-reward-supplier
+version:  10.0
+parent:   reward-supplier-v10.0
+name:     $20 Shopify Credit
+
+configuration:
+  face_value:       20.00
+  currency:         USD
+  shop_domain:      mystore.myshopify.com
+  discount_type:    percentage
+```
+
+Flags on all three:
+- `--json` — emit raw API response
+
+### Type reference
+
+```
+extole components types --parent <type-name>
+```
+
+Lists known component subtypes for a given parent. Useful when you know the base type but need to see what concrete implementations are available.
+
+```
+$ extole components types --parent reward-supplier
+
+type                          version
+────────────────────────────  ───────
+reward-supplier               10.0
+shopify-reward-supplier       10.0
+bhn-reward-supplier           10.0
+big-commerce-reward-supplier  10.0
+sessionm-reward-supplier      10.0
+```
+
+Without `--parent`, lists the top-level component type families only (not the full hierarchy — use `--parent` to drill in).
+
+---
+
 ## Output conventions
 
 - Human-readable by default; `--json` available on all commands
