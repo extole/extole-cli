@@ -2,7 +2,7 @@ import { Command } from 'commander';
 import { loadConfig, saveConfig } from '../config.js';
 import { addGlobalOptions } from '../utils.js';
 
-const CHAT_URL = 'https://chat.extole.com/chat';
+const AGENT_URL = 'https://agent.extole.com';
 const IDP_TOKEN_URL = 'https://idp.extole.com/oauth2/token';
 const MCP_CLIENT_ID = 'extole-cli';
 
@@ -64,16 +64,16 @@ export function mcpCommand() {
 
       let res;
       try {
-        res = await fetch(CHAT_URL, {
+        res = await fetch(`${AGENT_URL}/conversation:send`, {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',
             'Authorization': `Bearer ${token}`,
           },
-          body: JSON.stringify({ prompt }),
+          body: JSON.stringify({ userPrompt: prompt }),
         });
       } catch {
-        console.error('Error: Extole AI chat server is unavailable');
+        console.error('Error: Extole AI agent server is unavailable');
         process.exit(1);
       }
 
@@ -84,7 +84,9 @@ export function mcpCommand() {
       }
 
       const data = await res.json();
-      console.log(data.response);
+      const assistantMsg = [...(data.messages ?? [])].reverse().find(m => m.type === 'assistant');
+      const reply = assistantMsg?.text ?? data.response ?? JSON.stringify(data);
+      console.log(reply);
     });
 
   addGlobalOptions(cmd, {
