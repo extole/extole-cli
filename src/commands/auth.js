@@ -255,17 +255,18 @@ Examples:
 Examples:
   extole auth mcp-login`)
     .action(async function () {
-      // Generate PKCE pair
+      // Generate PKCE pair and state
       const codeVerifier = randomBytes(32).toString('base64url');
       const codeChallenge = createHash('sha256').update(codeVerifier).digest('base64url');
+      const state = randomBytes(16).toString('base64url');
 
-      // Start a one-shot local server to catch the OAuth callback
+      // Start a one-shot local server on 127.0.0.1 to catch the OAuth callback
       let resolveCode, rejectCode;
       const codePromise = new Promise((res, rej) => { resolveCode = res; rejectCode = rej; });
 
       const server = createServer((req, res) => {
-        const url = new URL(req.url, 'http://localhost');
-        if (url.pathname !== '/callback') {
+        const url = new URL(req.url, 'http://127.0.0.1');
+        if (url.pathname !== '/oauth/callback') {
           res.writeHead(404); res.end(); return;
         }
         const error = url.searchParams.get('error');
@@ -273,6 +274,12 @@ Examples:
           res.writeHead(400, { 'Content-Type': 'text/plain' });
           res.end(`Login failed: ${error}`);
           rejectCode(new Error(error));
+          return;
+        }
+        if (url.searchParams.get('state') !== state) {
+          res.writeHead(400, { 'Content-Type': 'text/plain' });
+          res.end('Login failed: state mismatch');
+          rejectCode(new Error('state mismatch'));
           return;
         }
         const code = url.searchParams.get('code');
@@ -283,17 +290,18 @@ Examples:
         }
       });
 
-      await new Promise(resolve => server.listen(0, 'localhost', resolve));
+      await new Promise(resolve => server.listen(0, '127.0.0.1', resolve));
       const port = server.address().port;
-      const redirectUri = `http://localhost:${port}/callback`;
+      const redirectUri = `http://127.0.0.1:${port}/oauth/callback`;
 
       const authUrl = new URL(`${IDP_BASE}/oauth2/authorize`);
       authUrl.searchParams.set('client_id', MCP_CLIENT_ID);
       authUrl.searchParams.set('response_type', 'code');
-      authUrl.searchParams.set('scope', 'openid');
+      authUrl.searchParams.set('scope', 'openid profile email');
       authUrl.searchParams.set('redirect_uri', redirectUri);
       authUrl.searchParams.set('code_challenge', codeChallenge);
       authUrl.searchParams.set('code_challenge_method', 'S256');
+      authUrl.searchParams.set('state', state);
 
       console.log('Opening browser for Extole MCP login...');
       console.log(`If the browser does not open, visit:\n${authUrl.toString()}\n`);
@@ -317,7 +325,7 @@ Examples:
         server.close();
       }
 
-      // Exchange code for token
+      // Exchange code for tokens
       const tokenRes = await fetch(`${IDP_BASE}/oauth2/token`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
@@ -347,6 +355,9 @@ Examples:
       config._mcp = { token: jwt };
       if (tokenData.expires_in) {
         config._mcp.expiresAt = Date.now() + tokenData.expires_in * 1000;
+      }
+      if (tokenData.refresh_token) {
+        config._mcp.refreshToken = tokenData.refresh_token;
       }
       saveConfig(config);
 

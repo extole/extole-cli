@@ -1,21 +1,57 @@
 import { Command } from 'commander';
-import { loadConfig } from '../config.js';
+import { loadConfig, saveConfig } from '../config.js';
 import { addGlobalOptions } from '../utils.js';
 
 const CHAT_URL = 'https://chat.extole.com/chat';
+const IDP_TOKEN_URL = 'https://idp.extole.com/oauth2/token';
+const MCP_CLIENT_ID = 'extole-cli';
 
-function resolveMcpToken() {
+async function resolveMcpToken() {
   const config = loadConfig();
   const mcp = config._mcp;
+
   if (!mcp?.token) {
     console.error("Error: MCP not authenticated. Run 'extole auth mcp-login' first.");
     process.exit(1);
   }
-  if (mcp.expiresAt && Date.now() > mcp.expiresAt) {
-    console.error("Error: MCP token expired. Run 'extole auth mcp-login' to refresh.");
+
+  // Token still valid
+  if (!mcp.expiresAt || Date.now() < mcp.expiresAt - 30_000) {
+    return mcp.token;
+  }
+
+  // Try refresh
+  if (!mcp.refreshToken) {
+    console.error("Error: MCP token expired. Run 'extole auth mcp-login' to re-authenticate.");
     process.exit(1);
   }
-  return mcp.token;
+
+  const res = await fetch(IDP_TOKEN_URL, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+    body: new URLSearchParams({
+      grant_type: 'refresh_token',
+      client_id: MCP_CLIENT_ID,
+      refresh_token: mcp.refreshToken,
+    }),
+  });
+
+  if (!res.ok) {
+    console.error("Error: MCP token expired and refresh failed. Run 'extole auth mcp-login' to re-authenticate.");
+    process.exit(1);
+  }
+
+  const tokenData = await res.json();
+  config._mcp.token = tokenData.access_token;
+  if (tokenData.expires_in) {
+    config._mcp.expiresAt = Date.now() + tokenData.expires_in * 1000;
+  }
+  if (tokenData.refresh_token) {
+    config._mcp.refreshToken = tokenData.refresh_token;
+  }
+  saveConfig(config);
+
+  return config._mcp.token;
 }
 
 export function mcpCommand() {
@@ -24,7 +60,7 @@ export function mcpCommand() {
     .argument('<prompt...>', 'What you want to do or know')
     .action(async (promptParts) => {
       const prompt = promptParts.join(' ');
-      const token = resolveMcpToken();
+      const token = await resolveMcpToken();
 
       let res;
       try {
