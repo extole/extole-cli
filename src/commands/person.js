@@ -47,6 +47,7 @@ export function personCommand() {
     .allowExcessArguments(false)
     .requiredOption('--email <email>', 'Email address to look up')
     .option('--limit <n>', 'Number of steps to return (one-shot)', '25')
+    .option('--event <event_id>', 'Filter to steps caused by this event ID')
     .option('--watch', 'Poll for new steps until Ctrl+C')
     .action(async (opts) => {
       if (!isValidEmail(opts.email)) {
@@ -67,7 +68,7 @@ export function personCommand() {
           console.error('--limit must be a positive integer');
           process.exit(2);
         }
-        const steps = await getPersonSteps(personId, token, limit, opts.verbose);
+        const steps = await getPersonSteps(personId, token, limit, opts.verbose, { causeEventId: opts.event });
         printJson(steps, opts);
         return;
       }
@@ -118,6 +119,7 @@ export function personCommand() {
     output: true,
     examples: [
       'extole person steps --email jane@example.com',
+      'extole person steps --email jane@example.com --event EVENT_ID',
       'extole person steps --email jane@example.com --watch',
     ],
   });

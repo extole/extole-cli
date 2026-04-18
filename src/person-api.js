@@ -11,9 +11,11 @@ export async function findPerson(email, token, verbose = false) {
   return results[0];
 }
 
-export async function getPersonSteps(personId, token, limit = 50, verbose = false) {
+export async function getPersonSteps(personId, token, limit = 50, verbose = false, { causeEventId } = {}) {
+  const params = new URLSearchParams({ limit: String(limit) });
+  if (causeEventId) params.set('causeEventIds', causeEventId);
   return apiJson(
-    `/v5/persons/${personId}/steps?limit=${limit}`,
+    `/v5/persons/${personId}/steps?${params}`,
     token,
     { verbose, baseUrl: PERSON_BASE }
   );
