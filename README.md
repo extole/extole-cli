@@ -197,12 +197,20 @@ extole components types --parent rule --tree   # rendered as a hierarchy
 
 ## AI (extole mcp)
 
-Ask questions or run tasks using Extole AI:
+`extole mcp` gives you access to an Extole AI agent with deep knowledge of Extole's API surface, program configuration model, event semantics, component type system, and reward flows. Use it **before** exploring the API blindly — it can tell you which endpoint to use, what parameters it accepts, what the response shape is, and how concepts relate to each other.
+
+Good uses:
+- **API discovery**: "what endpoint do I use to filter steps by a specific event?"
+- **Concept clarification**: "what's the difference between a journey and a step?"
+- **Debugging guidance**: "why would a purchase event not trigger a reward?"
+- **Design validation**: "if I want to enroll a person into a program, what's the right API approach?"
+- **Schema lookup**: "what fields does the reward-supplier component type require?"
 
 ```
+extole mcp "what endpoint filters person steps by cause event id?"
 extole mcp "why aren't events firing for jane@example.com"
-extole mcp "list active programs for this client"
 extole mcp "explain the reward supplier types available"
+extole mcp "what's the difference between causeEventIds and rootEventIds on steps?"
 ```
 
 Requires MCP authentication (separate from the Extole API token):
@@ -211,7 +219,7 @@ Requires MCP authentication (separate from the Extole API token):
 extole auth mcp-login
 ```
 
-Opens a browser for login. After completing, the token is saved automatically and refreshed as needed. Re-run `mcp-login` if the session expires.
+Opens a browser for login. Token is saved automatically and refreshed as needed. Re-run `mcp-login` if the session expires.
 
 ## Output conventions
 
