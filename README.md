@@ -174,6 +174,27 @@ extole reports run --type summary_per_program --days 365 \
   | jq '[.[].program] | unique'
 ```
 
+## Components
+
+```
+extole components                              # all components, account-wide
+extole components --program <id>              # scoped to one program
+extole components --type reward-supplier      # filter by type (matches subtypes too)
+extole components --name "gift card"          # filter by name substring
+
+extole components get <component-id>          # full config + variables
+extole components get <component-id> --tree   # downstream subtree (recursive)
+extole components get <component-id> --sockets  # socket references to other components
+
+extole components types                        # all concrete types in this account
+extole components types --parent rule          # subtypes of a given parent type
+extole components types --parent rule --tree   # rendered as a hierarchy
+```
+
+`--type` does substring matching against the full type hierarchy, so `--type reward` matches `reward-v10.0`, `reward-rule-v10.0`, `reward-email-v10.0`, etc.
+
+`--tree` on `get` is backed by `GET /v1/components/{id}/tree` and shows the full downstream tree — useful for understanding a reward flow or rule chain without querying each child individually.
+
 ## AI (extole mcp)
 
 Ask questions or run tasks using Extole AI:

@@ -166,106 +166,90 @@ Wraps the `/v1/audiences` and `/v1/audiences/{id}/operations` endpoints. Primari
 
 ## Components
 
-Extole programs are composed of typed components (campaigns, journeys, rules, actions, reward suppliers, content, etc.) organized in a nominal type hierarchy. These commands help developers inspect what's deployed and understand component schemas.
+Extole programs are composed of typed components (campaigns, journeys, rules, actions, reward suppliers, content, etc.) organized in a nominal type hierarchy. These commands help developers browse and inspect what's deployed.
 
-### Program component listing
+### List
 
 ```
-extole program <program-id> components
-extole program <program-id> components --type <type-name>
+extole components
+extole components --program <id>
+extole components --type <type>
+extole components --name <substr>
 ```
 
-Lists all component instances in the given program. `--type` filters to a specific nominal type (e.g. `reward-supplier`, `rule`, `action`) and includes subtypes — passing `reward-supplier` returns `reward-supplier`, `shopify-reward-supplier`, `bhn-reward-supplier`, etc.
+Lists component instances. Filters compose: `--program` scopes to one campaign, `--type` filters by nominal type (substring match against the full type hierarchy — passing `reward` matches `reward-v10.0`, `reward-rule-v10.0`, `reward-email-v10.0`, etc.), `--name` is a case-insensitive substring match on display name. Without `--program`, returns all components account-wide.
 
 Output:
 ```
-component-id          type                         version  name
-────────────────────  ───────────────────────────  ───────  ─────────────────────────
-cmp-abc123            campaign                     8.0      Refer a Friend
-cmp-def456            reward-supplier              10.0     Visa Gift Card
-cmp-ghi789            shopify-reward-supplier      10.0     $20 Shopify Credit
-cmp-jkl012            targetable-event             10.0     friend_signup
-cmp-mno345            rule                         10.0     Eligibility Gate
+id                      type                                name
+──────────────────────  ──────────────────────────────────  ─────────────────────────────
+7538881267944473040     reward-v10.0                        $100 Amazon Gift Card
+7549241896804698436     reward-rule-v10.0                   60 Days Pending Period
+7574487262475608080     reward-email-v10.0                  Advocate Reward Email
 ```
 
-Flags:
-- `--type <type-name>` — filter by nominal type (matches exact type and all subtypes)
-- `--json` — emit raw API response
-
-### Component inspection
+### Inspect
 
 ```
-extole program <program-id> component <component-id>
-extole program <program-id> component <component-id> --tree
-extole program <program-id> component <component-id> --refs
+extole components get <component-id>
+extole components get <component-id> --tree
+extole components get <component-id> --sockets
 ```
 
-`component <id>` shows the full configuration and variables for one component.
+`get` shows full configuration and variables for one component.
 
 Output:
 ```
-id:       cmp-ghi789
-type:     shopify-reward-supplier
-version:  10.0
-parent:   reward-supplier-v10.0
-name:     $20 Shopify Credit
+id:       7538881267944473040
+type:     reward-v10.0
+name:     $100 Amazon Gift Card
 socket:   rewards
+program:  7538872591906886315
 
 configuration:
-  face_value:       20.00
-  currency:         USD
-  shop_domain:      mystore.myshopify.com
-  discount_type:    percentage
+  enabled                         true
+  rewardSupplierId                "8e772da718c21ddba9fc6e14"
+  journeyName                     "javascript@buildtime:..."
 ```
 
-`--tree` expands the downstream subtree — all components this component contains, recursively. Backed by `GET /v1/components/{id}/tree`. Useful when debugging a reward flow or rule chain to see the full set of pieces involved without querying each child individually.
+`--tree` expands the downstream subtree — all components this component contains, recursively. Backed by `GET /v1/components/{id}/tree`. Useful for debugging a reward flow or rule chain without querying each child individually.
 
 ```
-$ extole program <id> component cmp-ghi789 --tree
+$ extole components get 7538881267944473040 --tree
 
-cmp-ghi789   shopify-reward-supplier   $20 Shopify Credit
-  cmp-r01    reward-entry              Reward Entry
-  cmp-r02    reward-issuer             Reward Issuer
-  cmp-e01    rule                      60-Day Pending Period
-  cmp-e02    rule                      Annual Reward Cap
-  cmp-e03    rule                      Risk Evaluation
+$100 Amazon Gift Card  (reward-v10.0)  7538881267944473040
+  60 days Pending Period  (reward-rule-v10.0)  7549241896804698436
+  Annual Reward Cap  (reward-rule-v10.0)  7538881268640398741
+  risk_evaluation  (reward-rule-v10.0)  7538881271613826152
+  Reward Entry  (reward-entry-v10.0)  7538881335092106018
+  Reward Emails  (reward-issuer-v10.0)  7538881269789978250
+    reward_email  (reward-email-v10.0)  7538881270780641729
+    reward_reminder_email  (reward-email-v10.0)  7538881270494326681
 ```
 
-`--refs` shows which other components this component references via sockets — the forward edges in the component graph. Sourced from the `component_references` field on the component. Useful for understanding how components are wired together without reading raw JSON.
+`--sockets` shows forward socket references — what other components this component is wired to, sourced from the `component_references` field.
 
-```
-$ extole program <id> component cmp-mno345 --refs
-
-references:
-  cmp-r02   rewards   reward-issuer   Reward Issuer
-```
-
-Flags:
-- `--tree` — expand downstream subtree
-- `--refs` — show socket references to other components
-- `--json` — emit raw API response
+Note: reverse traversal (what references a given component) is not supported by the API — there is no inbound reference index.
 
 ### Type reference
 
 ```
-extole components types --parent <type-name>
+extole components types
+extole components types --parent <type>
+extole components types --parent <type> --tree
 ```
 
-Lists known component subtypes for a given parent. Useful when you know the base type but need to see what concrete implementations are available.
+Lists component types derived from what's deployed in the account. Without `--parent`, shows all concrete types and their parent types. `--parent` filters to types within a given family. `--tree` renders the hierarchy visually (most useful combined with `--parent`).
 
 ```
-$ extole components types --parent reward-supplier
+$ extole components types --parent business-event
 
-type                          version
-────────────────────────────  ───────
-reward-supplier               10.0
-shopify-reward-supplier       10.0
-bhn-reward-supplier           10.0
-big-commerce-reward-supplier  10.0
-sessionm-reward-supplier      10.0
+type                    parents
+──────────────────────  ────────────────────────────
+business-event-v10.0    targetable-step-event-v10.0
 ```
 
-Without `--parent`, lists the top-level component type families only (not the full hierarchy — use `--parent` to drill in).
+All flags support `--json` for machine-readable output.
 
 ---
 
