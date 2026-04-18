@@ -176,6 +176,16 @@ extole reports run --type summary_per_program --days 365 \
 
 ## Components
 
+Extole's configuration is built from **components** — typed, composable building blocks that define programs, rules, rewards, emails, and more. Understanding the component model is prerequisite to building or modifying offer programs programmatically.
+
+**The type system is nominal and open-ended.** A component declares its type (e.g. `reward-supplier-v10.0`); there is no closed registry of valid types. New types can be declared at any time. The CLI shows what types actually exist in the account at runtime — not a static schema.
+
+**Types form a hierarchy.** `reward-supplier-v10.0` is a subtype of `reward-supplier`, which is a subtype of `component`. Filtering by `--type reward-supplier` matches all subtypes. `components types --tree` renders this hierarchy for the live account.
+
+**Components wire together via sockets.** A rule component references a reward-supplier via a named socket. `--sockets` shows what a component connects to; `--tree` shows the full downstream subgraph.
+
+**The agentic pattern: learn from examples.** There is no static schema doc for what a `reward-supplier-v10.0` requires. The reliable approach is to find a known-good instance (`extole components --type reward-supplier-v10`), read its full config (`extole components get <id>`), and reason from that. `extole mcp` can also answer type-specific questions.
+
 ```
 extole components                              # all components, account-wide
 extole components --program <id>              # scoped to one program
@@ -193,7 +203,7 @@ extole components types --parent rule --tree   # rendered as a hierarchy
 
 `--type` does substring matching against the full type hierarchy, so `--type reward` matches `reward-v10.0`, `reward-rule-v10.0`, `reward-email-v10.0`, etc.
 
-`--tree` on `get` is backed by `GET /v1/components/{id}/tree` and shows the full downstream tree — useful for understanding a reward flow or rule chain without querying each child individually.
+`--tree` on `get` shows the full downstream subgraph — useful for understanding a reward flow or rule chain without querying each child individually.
 
 ## AI (extole mcp)
 
