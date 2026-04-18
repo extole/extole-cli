@@ -95,7 +95,13 @@ export function reportsCommand() {
       }
     });
 
-  addGlobalOptions(typesCmd, { output: true });
+  addGlobalOptions(typesCmd, {
+    output: true,
+    examples: [
+      'extole reports types',
+      'extole reports types --json | jq \'.[].report_type\'',
+    ],
+  });
 
   const runCmd = new Command('run')
     .description('Create an on-demand report')

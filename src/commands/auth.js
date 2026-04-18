@@ -150,8 +150,10 @@ Examples:
     .requiredOption('--client <client_id>', 'Client ID to scope the token to (numeric ID, not shortname)')
     .option('--account <name>', 'Account name to save the minted token under (default: client ID)')
     .option('--set-default', 'Set this account as the default')
-    .option('--verbose', 'Log each HTTP request to stderr')
     .addHelpText('after', `
+Global Options:
+  --verbose            Log each HTTP request to stderr
+
 Examples:
   extole auth su --token SU_TOKEN --client CLIENT_ID
   extole auth su --token SU_TOKEN --client CLIENT_ID --set-default
@@ -249,7 +251,7 @@ Examples:
 
   auth
     .command('mcp-login')
-    .description('Authenticate with the Extole MCP via browser login')
+    .description('Authenticate with Extole AI via browser login (separate from API token auth)')
     .allowExcessArguments(false)
     .addHelpText('after', `
 Examples:

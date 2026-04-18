@@ -43,7 +43,7 @@ export function personCommand() {
   });
 
   const stepsCmd = new Command('steps')
-    .description('Show steps for a person; --watch to tail live')
+    .description('Show step history for a person (use --watch to tail live)')
     .allowExcessArguments(false)
     .requiredOption('--email <email>', 'Email address to look up')
     .option('--limit <n>', 'Number of steps to return (one-shot)', '25')

@@ -29,17 +29,18 @@ program
   .name('extole')
   .description('Extole developer CLI')
   .version(version)
+  .enablePositionalOptions()
 ;
 
 program.addCommand(authCommand());
-program.addCommand(mcpCommand());
 program.addCommand(pingCommand());
+program.addCommand(streamCommand());
 program.addCommand(eventsCommand());
-program.addCommand(reportsCommand());
 program.addCommand(personCommand());
 program.addCommand(rewardsCommand());
-program.addCommand(streamCommand());
 program.addCommand(programsCommand());
 program.addCommand(componentsCommand());
+program.addCommand(reportsCommand());
+program.addCommand(mcpCommand());
 
 program.parse();
