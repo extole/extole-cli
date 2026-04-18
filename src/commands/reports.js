@@ -46,11 +46,8 @@ async function pollUntilDone(reportId, token, verbose) {
 }
 
 export function reportsCommand() {
-  const reports = new Command('reports').description('List report types and run on-demand reports');
-
-  const listCmd = new Command('list')
-    .description('List available report runners')
-    .allowExcessArguments(false)
+  const reports = new Command('reports')
+    .description('List report runners and run on-demand reports')
     .action(async (opts) => {
       const token = resolveToken(opts);
       const data = await apiJson('/v7/report-runners', token, { verbose: opts.verbose });
@@ -59,16 +56,22 @@ export function reportsCommand() {
         printJson(runners, opts);
         return;
       }
+      if (runners.length === 0) { console.log('No report runners found.'); return; }
       const col1 = Math.max(20, ...runners.map(r => (r.runner_id || r.id || '').length)) + 2;
       console.log('runner_id'.padEnd(col1) + 'display_name');
       console.log('─'.repeat(col1) + '─'.repeat(40));
       for (const r of runners) {
-        const id = (r.runner_id || r.id || '').padEnd(col1);
-        console.log(`${id}${r.display_name || r.name || ''}`);
+        console.log(`${(r.runner_id || r.id || '').padEnd(col1)}${r.display_name || r.name || ''}`);
       }
     });
 
-  addGlobalOptions(listCmd, { output: true });
+  addGlobalOptions(reports, {
+    output: true,
+    examples: [
+      'extole reports',
+      'extole reports --json',
+    ],
+  });
 
   const typesCmd = new Command('types')
     .description('List available report types')
@@ -291,7 +294,6 @@ export function reportsCommand() {
     ],
   });
 
-  reports.addCommand(listCmd);
   reports.addCommand(typesCmd);
   reports.addCommand(describeCmd);
   reports.addCommand(runCmd);

@@ -88,8 +88,8 @@ Fires a lightweight API call and prints latency + resolved client ID. Exit code 
 ## Reports
 
 ```
-extole reports list
-extole reports list --json
+extole reports
+extole reports --json
 ```
 
 Lists available Extole report runners for the authenticated client.

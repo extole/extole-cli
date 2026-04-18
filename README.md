@@ -141,7 +141,7 @@ extole person steps --email jane@example.com --watch --json
 ## Reports
 
 ```
-extole reports list                              # list saved report runners
+extole reports                                   # list saved report runners
 extole reports types                             # list all available report types
 extole reports describe --type summary           # show parameters for a report type
 
