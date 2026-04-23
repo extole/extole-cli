@@ -42,7 +42,6 @@ export function healthCommand() {
   const healthCmd = new Command('health')
     .description('Check domain and email deliverability health for the account. Validates email domains (SPF, DMARC, DKIM, MX, A) and program domains (CNAME/A). All checks are read-only — nothing is created.')
     .option('--domain <domain>', 'Filter to a specific email domain (substring match)')
-    .option('--program <id>', 'Validate a specific program domain by program ID')
     .action(async (opts) => {
       const token = resolveToken(opts);
       const results = { email_domains: [], program_domains: [] };
@@ -57,7 +56,7 @@ export function healthCommand() {
         : domainList;
 
       if (filtered.length > 0) {
-        if (!opts.json) console.log('\n  email domains\n');
+        if (!opts.json) console.log('\n\x1b[1mEmail Domains\x1b[0m\n');
 
         for (const d of filtered) {
           const v = await fetchEmailDomainValidation(d.id, token, opts.verbose);
@@ -86,23 +85,17 @@ export function healthCommand() {
             console.log();
           }
         }
-      } else if (!opts.json && !opts.program) {
-        console.log('\n  email domains\n  (none configured)\n');
+      } else if (!opts.json) {
+        console.log('\n\x1b[1mEmail Domains\x1b[0m\n  (none configured)\n');
       }
 
       // ── Program domains ──────────────────────────────────────────────────
-      let programs = [];
-      if (opts.program) {
-        programs = [{ program_id: opts.program, name: opts.program, domain: null }];
-      } else {
-        const progData = await fetchPrograms(token, opts.verbose);
-        programs = Array.isArray(progData) ? progData : (progData.programs || []);
-      }
-
-      const programsWithDomains = programs.filter(p => p.domain || opts.program);
+      const progData = await fetchPrograms(token, opts.verbose);
+      const programs = Array.isArray(progData) ? progData : (progData.programs || []);
+      const programsWithDomains = programs.filter(p => p.domain);
 
       if (programsWithDomains.length > 0) {
-        if (!opts.json) console.log('  program domains\n');
+        if (!opts.json) console.log('\x1b[1mProgram Domains\x1b[0m\n');
 
         for (const p of programsWithDomains) {
           const id = p.program_id || p.id;
@@ -118,7 +111,6 @@ export function healthCommand() {
             if (status === 'FAIL') anyFail = true;
           }
         }
-        if (!opts.json) console.log();
       }
 
       if (opts.json) { printJson(results, opts); return; }
@@ -130,7 +122,6 @@ export function healthCommand() {
     examples: [
       'extole health',
       'extole health --domain example.com',
-      'extole health --program <program-id>',
       'extole health --json',
     ],
   });
