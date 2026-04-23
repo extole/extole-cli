@@ -185,7 +185,16 @@ export function webhooksCommand() {
       });
       if (!res.ok) {
         const text = await res.text();
-        console.error(`Error ${res.status}: ${text.slice(0, 300)}`);
+        let detail = text.slice(0, 300);
+        try {
+          const err = JSON.parse(text);
+          const actions = err.webhook_controller_actions;
+          if (actions?.length) {
+            const campaignIds = [...new Set(actions.map(a => a.campaign_id).filter(Boolean))];
+            detail = `webhook is still wired to campaign(s): ${campaignIds.join(', ')}. Delete the controller actions first.`;
+          }
+        } catch (_) { /* use raw text */ }
+        console.error(`Error ${res.status}: ${detail}`);
         process.exit(1);
       }
       if (opts.json) { printJson({ deleted: webhookId }, opts); return; }

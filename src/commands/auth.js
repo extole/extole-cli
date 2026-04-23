@@ -170,7 +170,7 @@ Examples:
         process.exit(1);
       }
 
-      setProfile(account, { token: clientToken });
+      setProfile(account, { token: clientToken, su_client: client });
       if (isDefault) {
         setDefaultAccount(account);
         console.log(`Client token minted and saved to account "${account}" (default).`);

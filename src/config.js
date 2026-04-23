@@ -59,6 +59,15 @@ export function resolveToken(options) {
   process.exit(2);
 }
 
+export function getSuClientForToken(token) {
+  const config = loadConfig();
+  for (const [key, val] of Object.entries(config)) {
+    if (key.startsWith('_')) continue;
+    if (val?.token === token && val?.su_client) return val.su_client;
+  }
+  return null;
+}
+
 export const BASE_URL = 'https://my.extole.com';
 export const PERSON_BASE = 'https://api.extole.io';
 export const AUTH_BASE = 'https://api.extole.com';

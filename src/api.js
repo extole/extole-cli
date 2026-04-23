@@ -1,5 +1,5 @@
 import fetch from 'node-fetch';
-import { BASE_URL } from './config.js';
+import { BASE_URL, getSuClientForToken } from './config.js';
 import { logRequest } from './utils.js';
 
 const REQUEST_TIMEOUT_MS = 30_000;
@@ -40,6 +40,13 @@ export async function apiJson(path, token, options = {}, fetchFn = fetch) {
   const res = await apiFetch(path, token, options, fetchFn);
   const text = await res.text();
   if (!res.ok) {
+    if (res.status === 401) {
+      const suClient = getSuClientForToken(token);
+      if (suClient) {
+        throw new Error(`Token expired — auth su tokens are valid for 2 hours. Re-mint: extole auth su --token <SU_TOKEN> --client ${suClient}`);
+      }
+      throw new Error(`API error 401: authentication failed — token may be expired`);
+    }
     throw new Error(`API error ${res.status}: ${text.slice(0, 300)}`);
   }
   try {

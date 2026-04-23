@@ -16,7 +16,16 @@ extole auth login --token TOKEN --account staging              # save additional
 extole auth default acme                                   # change default account
 extole auth list                                           # show all accounts with default marker
 extole auth status                                         # verify token + connectivity
+extole auth token                                          # print raw token for the default account
+extole auth token --account acme                          # print raw token for a named account
 extole auth logout --account acme                          # remove account
+```
+
+`auth token` prints the raw token to stdout (with a credential warning on stderr). Useful for piping into other tools:
+
+```
+extole auth token | pbcopy
+curl -H "Authorization: Bearer $(extole auth token)" https://api.extole.io/v6/webhooks/built
 ```
 
 All commands use the default account unless `--account NAME` is specified.
