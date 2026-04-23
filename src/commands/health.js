@@ -94,7 +94,7 @@ export function healthCommand() {
           results.email_domains.push({ domain: d.domain, validation: v });
 
           if (!opts.json) {
-            const overall = emailDomainDot(v);
+            const overall = dot(v.domain_validation_status);
             const label = emailDomainLabel(v);
             console.log(`  ${overall}  ${d.domain}${label}`);
             checkLine('SPF',   v.spf);
