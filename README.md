@@ -69,6 +69,36 @@ extole programs --all     # include PAUSED, STOPPED, NOT_LAUNCHED
 extole programs --json
 ```
 
+## Health
+
+Read-only domain and email deliverability checks. Validates email domains (SPF, DMARC, DKIM, MX, A records) and program domains (CNAME/A resolution) against Extole's validation API. Nothing is created or modified.
+
+```
+extole health                          # check all email domains + program domains
+extole health --domain example.com    # filter to a specific email domain
+extole health --program <program-id>  # check a specific program's domain
+extole health --json                  # raw validation results
+```
+
+Output uses colored dots — green for PASS, red for FAIL — with the reason inline:
+
+```
+  email domains
+
+  ● example.com
+    ● SPF      PASS   Extole senders whitelisted by SPF record
+    ● DMARC    PASS   DMARC passed through DKIM records
+    ● DKIM     PASS   3/3 records passing
+    ● MX       PASS
+    ● A        PASS
+
+  program domains
+
+  ● brand.example.com → cdn.extole.com
+```
+
+Exit code 1 if any check fails — useful in CI or pre-deploy scripts.
+
 ## Webhooks
 
 Outbound webhooks send Extole events to external systems via HTTP POST. There are three types: `GENERIC` (event-triggered, used for integrations), `CLIENT` (share/referral events), and `REWARD` (fulfillment calls to reward suppliers).
