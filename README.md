@@ -76,7 +76,6 @@ Read-only domain and email deliverability checks. Validates email domains (SPF, 
 ```
 extole health                          # check all email domains + program domains
 extole health --domain example.com    # filter to a specific email domain
-extole health --program <program-id>  # check a specific program's domain
 extole health --json                  # raw validation results
 ```
 
