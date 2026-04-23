@@ -40,7 +40,7 @@ async function fetchProgramDomainValidation(programId, token, verbose) {
 
 export function healthCommand() {
   const healthCmd = new Command('health')
-    .description('Check domain and email deliverability health for the account. Validates email domains (SPF, DMARC, DKIM, MX, A) and program domains (CNAME/A). All checks are read-only — nothing is created.')
+    .description('Check domain and email deliverability health for the account. Validates email domains (SPF, DMARC, DKIM, MX, A) and program domains (CNAME/A). All checks are read-only — nothing is created. Exit codes: 0 = all pass, 1 = one or more failures, 2 = bad input/auth.')
     .option('--domain <domain>', 'Filter to a specific email domain (substring match)')
     .action(async (opts) => {
       const token = resolveToken(opts);
@@ -60,6 +60,7 @@ export function healthCommand() {
 
         for (const d of filtered) {
           const v = await fetchEmailDomainValidation(d.id, token, opts.verbose);
+          if (v.domain_validation_status === 'FAIL') anyFail = true;
           results.email_domains.push({ domain: d.domain, validation: v });
 
           if (!opts.json) {
@@ -80,8 +81,6 @@ export function healthCommand() {
             checkLine('A',     v.a);
 
             if (v.sendgrid) checkLine('SendGrid', v.sendgrid);
-
-            if (v.domain_validation_status === 'FAIL') anyFail = true;
             console.log();
           }
         }
@@ -100,6 +99,7 @@ export function healthCommand() {
         for (const p of programsWithDomains) {
           const id = p.program_id || p.id;
           const v = await fetchProgramDomainValidation(id, token, opts.verbose);
+          if (v.domain_validation_status === 'FAIL') anyFail = true;
           results.program_domains.push({ program_id: id, name: p.name, validation: v });
 
           if (!opts.json) {
@@ -108,14 +108,15 @@ export function healthCommand() {
             const resolved = v.canonical_name ? ` → ${v.canonical_name}` : status === 'FAIL' ? ' → (not resolving)' : '';
             console.log(`  ${dot(status)}  ${domain}${resolved}`);
             if (v.reason) console.log(`        ${v.reason}`);
-            if (status === 'FAIL') anyFail = true;
           }
         }
       }
 
-      if (opts.json) { printJson(results, opts); return; }
+      if (opts.json) { printJson({ status: anyFail ? 'FAIL' : 'PASS', ...results }, opts); return; }
       if (anyFail) process.exit(1);
     });
+
+  healthCmd.addHelpText('after', '\nExit Codes:\n  0  all checks pass\n  1  one or more checks failed\n  2  bad input or authentication error');
 
   addGlobalOptions(healthCmd, {
     output: true,

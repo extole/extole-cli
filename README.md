@@ -105,7 +105,7 @@ Output uses colored dots — green for PASS, red for FAIL — with the reason in
   ● brand.example.com → cdn.extole.com
 ```
 
-Exit code 1 if any check fails — useful in CI or pre-deploy scripts.
+Exit codes: `0` = all checks pass, `1` = one or more failures, `2` = bad input or auth error. Suitable for CI preflight scripts and readiness probes.
 
 ## Webhooks
 
