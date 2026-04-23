@@ -29,7 +29,7 @@ function emailDomainDot(v) {
 }
 
 function emailDomainLabel(v) {
-  if (v.domain_validation_status === 'FAIL') return '  will not send';
+  if (v.domain_validation_status === 'FAIL') return '  Extole will not send from this domain';
   const subStatuses = [
     v.spf?.domain_validation_status,
     v.dmarc?.domain_validation_status,
@@ -38,8 +38,8 @@ function emailDomainLabel(v) {
     ...(v.dkim || []).map(k => k.domain_validation_status),
   ];
   if (subStatuses.some(s => s === 'FAIL')) {
-    if (v.dmarc?.domain_validation_status === 'PASS') return '  DMARC pass — will send';
-    return '  will send — check sub-records';
+    if (v.dmarc?.domain_validation_status === 'PASS') return '  DMARC pass — Extole will send from this domain; flagged issues above should still be resolved';
+    return '  Extole will send from this domain, but sub-record failures should be investigated';
   }
   return '';
 }
