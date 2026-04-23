@@ -69,6 +69,79 @@ extole programs --all     # include PAUSED, STOPPED, NOT_LAUNCHED
 extole programs --json
 ```
 
+## Webhooks
+
+Outbound webhooks send Extole events to external systems via HTTP POST. There are three types: `GENERIC` (event-triggered, used for integrations), `CLIENT` (share/referral events), and `REWARD` (fulfillment calls to reward suppliers).
+
+```
+extole webhooks                                    # list all webhooks with URL
+extole webhooks --type GENERIC                     # filter by type
+extole webhooks --filter "sfdc"                    # filter by name substring
+extole webhooks --json
+
+extole webhooks get <webhook-id>                   # full config: URL, method, tags, retry intervals
+extole webhooks get <webhook-id> --built           # show with inherited defaults applied
+
+extole webhooks create --name "SFDC Events" --url https://example.com/hook
+extole webhooks create --name "SFDC Events" --url https://example.com/hook --type GENERIC
+
+extole webhooks delete <webhook-id>                # archive (fails if still wired to a campaign)
+```
+
+### Attaching webhooks to campaigns
+
+`attach` wires a webhook to a campaign so that matching events trigger an outbound dispatch. It creates a campaign controller with an event trigger and webhook action, then publishes the campaign.
+
+```
+extole webhooks attach \
+  --webhook <webhook-id> \
+  --campaign <campaign-id> \
+  --event signed_up
+
+extole webhooks attach \
+  --webhook <webhook-id> \
+  --campaign <campaign-id> \
+  --event purchase \
+  --event-type STEP              # STEP = internal processing step; INPUT = integration event (default)
+
+# Attach multiple events to one campaign — defer publish until the last one
+extole webhooks attach --webhook <id> --campaign <id> --event signed_up --skip-publish
+extole webhooks attach --webhook <id> --campaign <id> --event purchase    # publishes once here
+```
+
+`--quality` controls dispatch priority: `HIGH` (normal), `LOW` (best-effort), `ALWAYS` (bypasses campaign targeting rules). Defaults to `HIGH`.
+
+### Live testing with listen
+
+`listen` temporarily wires a URL to a campaign event and tails incoming dispatches. Creates a webhook + controller, publishes, polls for results every 3 seconds, and deletes everything on Ctrl-C.
+
+The URL must be publicly reachable — Extole makes outbound HTTP POSTs to it. Use any tunneling tool (ngrok, cloudflared) to expose a local server, or point at a request capture service.
+
+```
+extole webhooks listen \
+  --url https://my-server.com/hook \
+  --campaign <campaign-id> \
+  --event signed_up
+
+extole webhooks listen \
+  --url https://my-server.com/hook \
+  --campaign <campaign-id> \
+  --event signed_up \
+  --yes                          # skip confirmation prompt
+```
+
+### Inspecting dispatch history
+
+```
+extole webhooks dispatches <webhook-id>            # what Extole tried to send (attempt records)
+extole webhooks dispatches <webhook-id> --limit 50
+
+extole webhooks dispatch-results <webhook-id>      # HTTP outcomes: response codes + bodies
+extole webhooks dispatch-results <webhook-id> --json
+```
+
+`dispatches` = one record per dispatch attempt. `dispatch-results` = HTTP response side — use this to debug failures (non-200s, timeouts, error bodies).
+
 ## Stream
 
 ```
