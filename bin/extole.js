@@ -22,6 +22,7 @@ import { streamCommand } from '../src/commands/stream.js';
 import { rewardsCommand } from '../src/commands/rewards.js';
 import { programsCommand } from '../src/commands/programs.js';
 import { componentsCommand } from '../src/commands/components.js';
+import { webhooksCommand } from '../src/commands/webhooks.js';
 
 const program = new Command();
 
@@ -40,6 +41,7 @@ program.addCommand(personCommand());
 program.addCommand(rewardsCommand());
 program.addCommand(programsCommand());
 program.addCommand(componentsCommand());
+program.addCommand(webhooksCommand());
 program.addCommand(reportsCommand());
 program.addCommand(mcpCommand());
 
