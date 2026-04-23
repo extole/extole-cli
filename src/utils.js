@@ -55,7 +55,7 @@ export function logRequest(verbose, method, url, { headers = {}, body = null } =
  * - examples: string[] → appended as an Examples section
  * All hidden options are surfaced in labeled sections via addHelpText.
  */
-export function addGlobalOptions(cmd, { output = false, examples = [] } = {}) {
+export function addGlobalOptions(cmd, { output = false, examples = [], exitCodes = null } = {}) {
   cmd
     .addOption(
       new Option('--token <token>', 'Override token for this call')
@@ -96,6 +96,10 @@ export function addGlobalOptions(cmd, { output = false, examples = [] } = {}) {
     `  --account <name>     ${accountDesc}\n` +
     '  --verbose            Log each HTTP request to stderr'
   );
+
+  if (exitCodes) {
+    sections.push('\nExit Codes:\n  ' + exitCodes);
+  }
 
   if (examples.length > 0) {
     sections.push('\nExamples:\n' + examples.map(e => `  ${e}`).join('\n'));

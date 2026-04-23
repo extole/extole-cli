@@ -26,6 +26,9 @@ export function pingCommand() {
           process.exit(1);
         }
       }),
-    { examples: ['extole ping', 'extole ping --account my-client'] }
+    {
+      examples: ['extole ping', 'extole ping --account my-client'],
+      exitCodes: '0 = OK, 1 = unreachable or auth failure',
+    }
   );
 }

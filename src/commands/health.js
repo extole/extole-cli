@@ -40,7 +40,7 @@ async function fetchProgramDomainValidation(programId, token, verbose) {
 
 export function healthCommand() {
   const healthCmd = new Command('health')
-    .description('Check domain and email deliverability health for the account. Validates email domains (SPF, DMARC, DKIM, MX, A) and program domains (CNAME/A). All checks are read-only — nothing is created. Exit codes: 0 = all pass, 1 = one or more failures, 2 = bad input/auth.')
+    .description('Check domain and email deliverability health for the account. Validates email domains (SPF, DMARC, DKIM, MX, A) and program domains (CNAME/A). All checks are read-only — nothing is created.')
     .option('--domain <domain>', 'Filter to a specific email domain (substring match)')
     .action(async (opts) => {
       const token = resolveToken(opts);
