@@ -5,6 +5,7 @@ import { printJson } from '../output.js';
 import { addGlobalOptions } from '../utils.js';
 
 const PASS = '\x1b[32m●\x1b[0m';
+const WARN = '\x1b[33m●\x1b[0m';
 const FAIL = '\x1b[31m●\x1b[0m';
 const SKIP = '\x1b[90m●\x1b[0m';
 
@@ -12,6 +13,35 @@ function dot(status) {
   if (status === 'PASS') return PASS;
   if (status === 'FAIL') return FAIL;
   return SKIP;
+}
+
+function emailDomainDot(v) {
+  if (v.domain_validation_status === 'FAIL') return FAIL;
+  const subStatuses = [
+    v.spf?.domain_validation_status,
+    v.dmarc?.domain_validation_status,
+    v.mx?.domain_validation_status,
+    v.a?.domain_validation_status,
+    ...(v.dkim || []).map(k => k.domain_validation_status),
+  ];
+  if (subStatuses.some(s => s === 'FAIL')) return WARN;
+  return PASS;
+}
+
+function emailDomainLabel(v) {
+  if (v.domain_validation_status === 'FAIL') return '  will not send';
+  const subStatuses = [
+    v.spf?.domain_validation_status,
+    v.dmarc?.domain_validation_status,
+    v.mx?.domain_validation_status,
+    v.a?.domain_validation_status,
+    ...(v.dkim || []).map(k => k.domain_validation_status),
+  ];
+  if (subStatuses.some(s => s === 'FAIL')) {
+    if (v.dmarc?.domain_validation_status === 'PASS') return '  DMARC pass — will send';
+    return '  will send — check sub-records';
+  }
+  return '';
 }
 
 function checkLine(label, check) {
@@ -64,8 +94,9 @@ export function healthCommand() {
           results.email_domains.push({ domain: d.domain, validation: v });
 
           if (!opts.json) {
-            const overall = dot(v.domain_validation_status);
-            console.log(`  ${overall}  ${d.domain}`);
+            const overall = emailDomainDot(v);
+            const label = emailDomainLabel(v);
+            console.log(`  ${overall}  ${d.domain}${label}`);
             checkLine('SPF',   v.spf);
             checkLine('DMARC', v.dmarc);
 
