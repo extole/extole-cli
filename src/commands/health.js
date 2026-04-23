@@ -112,7 +112,7 @@ export function healthCommand() {
           if (!opts.json) {
             const status = v.domain_validation_status;
             const domain = v.program_domain || p.domain || id;
-            const resolved = v.canonical_name ? ` → ${v.canonical_name}` : '';
+            const resolved = v.canonical_name ? ` → ${v.canonical_name}` : status === 'FAIL' ? ' → (not resolving)' : '';
             console.log(`  ${dot(status)}  ${domain}${resolved}`);
             if (v.reason) console.log(`        ${v.reason}`);
             if (status === 'FAIL') anyFail = true;
