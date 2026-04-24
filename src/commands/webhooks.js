@@ -94,7 +94,19 @@ export function webhooksCommand() {
     .action(async (webhookId, opts) => {
       const token = resolveToken(opts);
       const w = await fetchWebhook(webhookId, token, opts.built, opts.verbose);
-      if (opts.json) { printJson(w, opts); return; }
+      // For REWARD webhooks, fetch state filters
+      let rewardFilters = null;
+      if ((w.type || '').toUpperCase() === 'REWARD') {
+        try {
+          rewardFilters = await apiJson(`/v4/webhooks/reward/${w.webhook_id || w.id}/filters`, token, { verbose: opts.verbose, baseUrl: PERSON_BASE });
+        } catch (_) { /* non-fatal */ }
+      }
+
+      if (opts.json) {
+        const out = rewardFilters ? { ...w, filters: rewardFilters } : w;
+        printJson(out, opts);
+        return;
+      }
 
       console.log(`id:       ${w.webhook_id || w.id}`);
       console.log(`name:     ${w.name || ''}`);
@@ -109,6 +121,17 @@ export function webhooksCommand() {
       if (internalTags?.length) console.log(`internal: ${internalTags.join(', ')}`);
       if (w.retry_intervals || w.retryIntervals) {
         console.log(`retries:  ${(w.retry_intervals || w.retryIntervals).join(', ')}`);
+      }
+      if (rewardFilters?.length) {
+        console.log(`filters:`);
+        for (const f of rewardFilters) {
+          const type = f.type || f.filter_type || '?';
+          const detail = f.states ? `states=${f.states.join(', ')}`
+            : f.reward_supplier_ids ? `suppliers=${f.reward_supplier_ids.join(', ')}`
+            : f.tags ? `tags=${f.tags.join(', ')}`
+            : JSON.stringify(f);
+          console.log(`  ${type.padEnd(12)}  ${detail}`);
+        }
       }
       if (w.component_ids?.length) console.log(`components: ${w.component_ids.join(', ')}`);
       if (w.request) {
@@ -141,6 +164,7 @@ export function webhooksCommand() {
     .option('--request <script>', 'javascript@runtime request script (inline) — runs per dispatch, return null to suppress')
     .option('--request-file <path>', 'Path to a file containing the request script')
     .option('--built', 'Show resolved (built) representation of the webhook after creation')
+    .option('--dry-run', 'Print the request payload and exit without creating anything')
     .action(async (opts) => {
       if (!opts.name) { console.error('error: --name is required'); process.exit(2); }
       if (!opts.url)  { console.error('error: --url is required');  process.exit(2); }
@@ -174,6 +198,15 @@ export function webhooksCommand() {
       if (opts.description) payload.description = opts.description;
       if (opts.tag?.length) payload.tags = opts.tag;
       if (requestScript) payload.request = requestScript;
+
+      if (opts.dryRun) {
+        console.log(JSON.stringify(payload, null, 2));
+        if (opts.filterState?.length) {
+          console.log('\n// state filter (posted separately after creation):');
+          console.log(JSON.stringify({ states: opts.filterState }, null, 2));
+        }
+        return;
+      }
 
       // CLIENT, REWARD, PARTNER types must be created via my.extole.com/api — api.extole.io normalizes them to GENERIC
       const isTyped = ['CLIENT', 'REWARD', 'PARTNER'].includes(opts.type);

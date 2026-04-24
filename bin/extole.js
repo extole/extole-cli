@@ -24,6 +24,7 @@ import { programsCommand } from '../src/commands/programs.js';
 import { componentsCommand } from '../src/commands/components.js';
 import { webhooksCommand } from '../src/commands/webhooks.js';
 import { healthCommand } from '../src/commands/health.js';
+import { whoamiCommand } from '../src/commands/whoami.js';
 
 const program = new Command();
 
@@ -36,6 +37,7 @@ program
 
 program.addCommand(authCommand());
 program.addCommand(pingCommand());
+program.addCommand(whoamiCommand());
 program.addCommand(streamCommand());
 program.addCommand(eventsCommand());
 program.addCommand(personCommand());

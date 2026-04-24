@@ -255,6 +255,7 @@ export function componentsCommand() {
     .option('--type <type>',                'Component type, e.g. extension or integration-v1. Registered types enforce a settings schema; omit for custom/untyped components.')
     .option('--tag <tag>',                  'Tag on the component (repeatable)', (v, acc) => [...acc, v], [])
     .option('--webhook-tag <tag>',          'Add a build-time variable that discovers a webhook by tag (repeatable). Format: tag (auto-names the variable) or varName:tag (explicit name)', (v, acc) => [...acc, v], [])
+    .option('--dry-run',                    'Print the request payload and exit without creating anything')
     .action(async (opts) => {
       const token = resolveToken(opts);
 
@@ -286,6 +287,11 @@ export function componentsCommand() {
       if (opts.type) payload.types = [opts.type];
       if (opts.tag?.length) payload.tags = opts.tag;
       if (settings.length) payload.settings = settings;
+
+      if (opts.dryRun) {
+        console.log(JSON.stringify(payload, null, 2));
+        return;
+      }
 
       const res = await apiFetch('/v1/components', token, {
         method: 'POST',
