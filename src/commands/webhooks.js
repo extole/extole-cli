@@ -102,9 +102,17 @@ export function webhooksCommand() {
       console.log(`url:      ${w.url || ''}`);
       if (w.description) console.log(`desc:     ${w.description}`);
       if (w.default_method || w.defaultMethod) console.log(`method:   ${w.default_method || w.defaultMethod}`);
-      if (w.tags?.length) console.log(`tags:     ${w.tags.join(', ')}`);
+      const tags = w.tags?.filter(t => !t.startsWith('internal:'));
+      const internalTags = w.tags?.filter(t => t.startsWith('internal:'));
+      if (tags?.length) console.log(`tags:     ${tags.join(', ')}`);
+      if (internalTags?.length) console.log(`internal: ${internalTags.join(', ')}`);
       if (w.retry_intervals || w.retryIntervals) {
         console.log(`retries:  ${(w.retry_intervals || w.retryIntervals).join(', ')}`);
+      }
+      if (w.component_ids?.length) console.log(`components: ${w.component_ids.join(', ')}`);
+      if (w.request) {
+        console.log(`request:`);
+        console.log(w.request.split('\n').map(l => `  ${l}`).join('\n'));
       }
     });
 
