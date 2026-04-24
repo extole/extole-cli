@@ -1,3 +1,4 @@
+import { readFileSync } from 'fs';
 import { Command } from 'commander';
 import { createInterface } from 'readline';
 import { resolveToken, PERSON_BASE, BASE_URL } from '../config.js';
@@ -43,7 +44,7 @@ export function webhooksCommand() {
   const webhooks = new Command('webhooks')
     .description('List outbound webhooks. Shows id, type, name, and destination URL.')
     .option('--enabled <bool>', 'Filter by enabled status (true|false)')
-    .option('--type <type>', 'Filter by webhook type: GENERIC (event-triggered), CLIENT (share/referral), REWARD (fulfillment)')
+    .option('--filter-type <type>', 'Filter by webhook type: GENERIC, CLIENT, REWARD, PARTNER')
     .option('--filter <substr>', 'Filter by name substring (case-insensitive)')
     .option('--limit <n>', 'Max results', '50')
     .option('--offset <n>', 'Offset for pagination', '0')
@@ -51,7 +52,7 @@ export function webhooksCommand() {
       const token = resolveToken(opts);
       const params = { limit: opts.limit, offset: opts.offset, include_archived: 'false' };
       if (opts.enabled !== undefined) params.enabled = opts.enabled;
-      if (opts.type) params.type = opts.type;
+      if (opts.filterType) params.type = opts.filterType;
       if (opts.filter) params.name = opts.filter;
 
       const data = await fetchWebhooks(token, params, opts.verbose);
@@ -78,8 +79,8 @@ export function webhooksCommand() {
     examples: [
       'extole webhooks',
       'extole webhooks --enabled true',
-      'extole webhooks --type GENERIC',
-      'extole webhooks --name "sfdc"',
+      'extole webhooks --filter-type GENERIC',
+      'extole webhooks --filter "sfdc"',
       'extole webhooks --json',
     ],
   });
@@ -128,18 +129,35 @@ export function webhooksCommand() {
   // ── create ────────────────────────────────────────────────────────────────
 
   const createCmd = new Command('create')
-    .description('Create a new webhook')
+    .description('Create an outbound webhook. GENERIC fires for any routed event (default); CLIENT fires for browser/mobile SDK events only; REWARD for reward fulfillment; PARTNER adds response body parsing for partner flows. Use --tag to enable build-time discovery by a component.')
     .option('--name <name>', 'Webhook name')
     .option('--url <url>', 'Destination URL')
-    .option('--type <type>', 'Webhook type (GENERIC, CLIENT, REWARD)', 'GENERIC')
+    .option('--type <type>', 'Webhook type: GENERIC | CLIENT | REWARD | PARTNER', 'GENERIC')
     .option('--enabled <bool>', 'Enable immediately (default: true)', 'true')
     .option('--description <text>', 'Optional description')
     .option('--method <method>', 'HTTP method (POST, PUT)', 'POST')
-    .option('--tag <tag>', 'Tag (repeatable)', (val, acc) => [...acc, val], [])
+    .option('--tag <tag>', 'Tag (repeatable) — used by components to discover this webhook at build time', (val, acc) => [...acc, val], [])
+    .option('--request <script>', 'javascript@runtime request script (inline) — runs per dispatch, return null to suppress')
+    .option('--request-file <path>', 'Path to a file containing the request script')
     .action(async (opts) => {
       if (!opts.name) { console.error('error: --name is required'); process.exit(2); }
       if (!opts.url)  { console.error('error: --url is required');  process.exit(2); }
+      if (opts.request && opts.requestFile) {
+        console.error('error: --request and --request-file are mutually exclusive');
+        process.exit(2);
+      }
       const token = resolveToken(opts);
+
+      let requestScript = opts.request || null;
+      if (opts.requestFile) {
+        try {
+          requestScript = readFileSync(opts.requestFile, 'utf8').trim();
+        } catch (e) {
+          console.error(`error reading --request-file: ${e.message}`);
+          process.exit(2);
+        }
+      }
+
       const payload = {
         name: opts.name,
         url: opts.url,
@@ -149,12 +167,17 @@ export function webhooksCommand() {
       };
       if (opts.description) payload.description = opts.description;
       if (opts.tag?.length) payload.tags = opts.tag;
+      if (requestScript) payload.request = requestScript;
 
-      const res = await apiFetch('/v6/webhooks', token, {
+      // CLIENT, REWARD, PARTNER types must be created via my.extole.com/api — api.extole.io normalizes them to GENERIC
+      const isTyped = ['CLIENT', 'REWARD', 'PARTNER'].includes(opts.type);
+      const webhookBase = isTyped ? BASE_URL : PERSON_BASE;
+      const webhookPath = isTyped ? '/api/v6/webhooks' : '/v6/webhooks';
+      const res = await apiFetch(webhookPath, token, {
         method: 'POST',
         body: JSON.stringify(payload),
         verbose: opts.verbose,
-        baseUrl: PERSON_BASE,
+        baseUrl: webhookBase,
       });
       const text = await res.text();
       if (!res.ok) {
@@ -175,6 +198,7 @@ export function webhooksCommand() {
     examples: [
       'extole webhooks create --name "SFDC Events" --url https://example.com/hook',
       'extole webhooks create --name "Reward Hook" --url https://example.com/hook --type REWARD',
+      'extole webhooks create --name "Iterable Events" --url https://api.iterable.com/api/events/track --type CLIENT --tag iterable-events --request-file request.js',
       'extole webhooks create --name "Test" --url https://example.com/hook --json',
     ],
   });
@@ -329,7 +353,7 @@ export function webhooksCommand() {
     .requiredOption('--event <name>', 'Event name that triggers dispatch (e.g. signed_up)')
     .option('--event-type <type>', 'INPUT (business event) or STEP (internal processing step). Default: INPUT', 'INPUT')
     .option('--quality <q>', 'Dispatch priority: HIGH (normal), LOW (best-effort), ALWAYS (bypasses targeting rules). Default: HIGH', 'HIGH')
-    .option('--yes', 'Skip confirmation prompt')
+    .option('-y, --yes', 'Skip confirmation prompt')
     .action(async (opts) => {
       const token = resolveToken(opts);
 

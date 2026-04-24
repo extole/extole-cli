@@ -1,6 +1,6 @@
 import { Command } from 'commander';
 import { resolveToken, PERSON_BASE } from '../config.js';
-import { apiJson } from '../api.js';
+import { apiJson, apiFetch } from '../api.js';
 import { printJson } from '../output.js';
 import { addGlobalOptions } from '../utils.js';
 
@@ -51,8 +51,8 @@ export function componentsCommand() {
   const components = new Command('components')
     .description('Browse and inspect Extole components')
     .option('--program <id>', 'Filter by program (campaign) ID')
-    .option('--type <type>', 'Filter by component type (matches parent types and subtypes)')
-    .option('--name <substr>', 'Filter by name substring (case-insensitive)')
+    .option('--filter-type <type>', 'Filter by component type (matches parent types and subtypes)')
+    .option('--filter <substr>', 'Filter by name substring (case-insensitive)')
     .action(async (opts) => {
       const token = resolveToken(opts);
       const params = {};
@@ -60,9 +60,9 @@ export function componentsCommand() {
 
       let list = await fetchAllComponents(token, params, opts.verbose);
 
-      if (opts.type) list = list.filter(c => matchesType(c, opts.type));
-      if (opts.name) {
-        const q = opts.name.toLowerCase();
+      if (opts.filterType) list = list.filter(c => matchesType(c, opts.filterType));
+      if (opts.filter) {
+        const q = opts.filter.toLowerCase();
         list = list.filter(c =>
           (c.name || '').toLowerCase().includes(q) ||
           (c.display_name || '').toLowerCase().includes(q)
@@ -83,8 +83,8 @@ export function componentsCommand() {
     examples: [
       'extole components',
       'extole components --program <program-id>',
-      'extole components --type reward-supplier',
-      'extole components --name "gift card"',
+      'extole components --filter-type reward-supplier',
+      'extole components --filter "gift card"',
     ],
   });
 
@@ -231,6 +231,130 @@ export function componentsCommand() {
   });
 
   components.addCommand(typesCmd);
+
+  // ── create ─────────────────────────────────────────────────────────────────
+
+  function buildtimeWebhookVar(varName, displayName, tag) {
+    return {
+      name: varName,
+      display_name: displayName,
+      type: 'STRING',
+      values: {
+        default: `javascript@buildtime:(function(){ var items = Java.from(context.getComponent().createElementsQuery().withType('WEBHOOK').withTag('${tag}').list()); return items && items.length > 0 ? items[0].getId() : null; })()`,
+      },
+      tags: ['category:Webhooks'],
+    };
+  }
+
+  const createCmd = new Command('create')
+    .description('Create a component attached to a campaign. --webhook-tag generates a build-time variable that resolves a webhook ID by tag when the campaign is published — the component-driven integration pattern.')
+    .requiredOption('--name <name>',        'Component name, snake_case (e.g. my_integration)')
+    .requiredOption('--campaign <id>',      'Campaign ID to attach to')
+    .option('--display-name <name>',        'Human-readable display name (defaults to --name)')
+    .option('--description <text>',         'Component description')
+    .option('--type <type>',                'Component type, e.g. extension or integration-v1. Registered types enforce a settings schema; omit for custom/untyped components.')
+    .option('--tag <tag>',                  'Tag on the component (repeatable)', (v, acc) => [...acc, v], [])
+    .option('--webhook-tag <tag>',          'Add a build-time variable that discovers a webhook by tag (repeatable). Format: tag (auto-names the variable) or varName:tag (explicit name)', (v, acc) => [...acc, v], [])
+    .action(async (opts) => {
+      const token = resolveToken(opts);
+
+      const settings = [];
+
+      // Build webhook discovery variables
+      for (const spec of opts.webhookTag) {
+        // Accept "varName:tag" or just "tag" (auto-derive varName from tag)
+        const colonIdx = spec.indexOf(':');
+        let varName, tag;
+        if (colonIdx > 0) {
+          varName = spec.slice(0, colonIdx);
+          tag = spec.slice(colonIdx + 1);
+        } else {
+          tag = spec;
+          // Convert tag to camelCase varName: e.g. my-integration-events → myIntegrationEventsWebhookId
+          varName = tag.replace(/-([a-z])/g, (_, c) => c.toUpperCase()) + 'WebhookId';
+        }
+        const displayName = varName.replace(/([A-Z])/g, ' $1').replace(/^./, s => s.toUpperCase());
+        settings.push(buildtimeWebhookVar(varName, displayName, tag));
+      }
+
+      const payload = {
+        name: opts.name,
+        display_name: opts.displayName || opts.name,
+        description: opts.description || null,
+        campaign_id: opts.campaign,
+      };
+      if (opts.type) payload.types = [opts.type];
+      if (opts.tag?.length) payload.tags = opts.tag;
+      if (settings.length) payload.settings = settings;
+
+      const res = await apiFetch('/v1/components', token, {
+        method: 'POST',
+        body: JSON.stringify(payload),
+        verbose: opts.verbose,
+        baseUrl: PERSON_BASE,
+      });
+      const text = await res.text();
+      if (!res.ok) {
+        console.error(`Error ${res.status}: ${text.slice(0, 400)}`);
+        process.exit(1);
+      }
+      const c = JSON.parse(text);
+      if (opts.json) { printJson(c, opts); return; }
+
+      console.log(`created:  ${c.id}`);
+      console.log(`name:     ${c.name}`);
+      console.log(`display:  ${c.display_name || ''}`);
+      console.log(`type:     ${(c.types || []).join(', ') || '(none)'}`);
+      console.log(`program:  ${c.campaign_id}`);
+      if (settings.length) {
+        console.log(`webhooks:`);
+        for (const s of settings) {
+          console.log(`  ${s.name}`);
+        }
+      }
+    });
+
+  addGlobalOptions(createCmd, {
+    output: true,
+    examples: [
+      'extole components create --name my_integration --campaign <id>',
+      'extole components create --name iterable_events --campaign <id> --webhook-tag iterable-events',
+      'extole components create --name sfdc_sync --campaign <id> --webhook-tag sfdc-events --webhook-tag sfdc-rewards --display-name "SFDC Sync"',
+      'extole components create --name my_integration --campaign <id> --webhook-tag eventsWebhookId:my-integration-events --json',
+    ],
+  });
+
+  components.addCommand(createCmd);
+
+  // ── delete ─────────────────────────────────────────────────────────────────
+
+  const deleteCmd = new Command('delete')
+    .description('Delete a component by ID.')
+    .argument('<component-id>', 'Component ID to delete')
+    .action(async (componentId, opts) => {
+      const token = resolveToken(opts);
+      const res = await apiFetch(`/v1/components/${componentId}`, token, {
+        method: 'DELETE',
+        verbose: opts.verbose,
+        baseUrl: PERSON_BASE,
+      });
+      if (!res.ok) {
+        const text = await res.text();
+        console.error(`Error ${res.status}: ${text.slice(0, 300)}`);
+        process.exit(1);
+      }
+      if (opts.json) { printJson({ deleted: componentId }, opts); return; }
+      console.log(`deleted: ${componentId}`);
+    });
+
+  addGlobalOptions(deleteCmd, {
+    output: true,
+    examples: [
+      'extole components delete <component-id>',
+    ],
+  });
+
+  components.addCommand(deleteCmd);
 
   return components;
 }

@@ -109,11 +109,18 @@ Exit codes: `0` = all checks pass, `1` = one or more failures, `2` = bad input o
 
 ## Webhooks
 
-Outbound webhooks send Extole events to external systems via HTTP POST. There are three types: `GENERIC` (event-triggered, used for integrations), `CLIENT` (share/referral events), and `REWARD` (fulfillment calls to reward suppliers).
+Outbound webhooks send Extole events to external systems via HTTP POST. Four types:
+
+| Type | When it fires | Unique field |
+|---|---|---|
+| `GENERIC` | Any event routed by a component or campaign controller | — |
+| `CLIENT` | Browser/mobile SDK events only | — |
+| `REWARD` | Reward fulfillment events | `filters` |
+| `PARTNER` | Partner/integration flows | `response_body_handler` (parses HTTP response body) |
 
 ```
 extole webhooks                                    # list all webhooks with URL
-extole webhooks --type GENERIC                     # filter by type
+extole webhooks --filter-type GENERIC              # filter by type
 extole webhooks --filter "sfdc"                    # filter by name substring
 extole webhooks --json
 
@@ -122,13 +129,38 @@ extole webhooks get <webhook-id> --built           # show with inherited default
 
 extole webhooks create --name "SFDC Events" --url https://example.com/hook
 extole webhooks create --name "SFDC Events" --url https://example.com/hook --type GENERIC
+extole webhooks create --name "Iterable Events" --url https://api.iterable.com/api/events/track \
+  --type CLIENT --tag iterable-events --request-file request.js
 
 extole webhooks delete <webhook-id>                # archive (fails if still wired to a campaign)
 ```
 
-### Attaching webhooks to campaigns
+### Webhook types and the `--tag` flag
 
-`attach` wires a webhook to a campaign so that matching events trigger an outbound dispatch. It creates a campaign controller with an event trigger and webhook action, then publishes the campaign.
+Tags on webhooks are the key to the **component-driven integration pattern** — a component discovers which webhook to call by tag at campaign publish time, rather than hardcoding an ID. This is how production integrations like Iterable are wired.
+
+```
+# Create a webhook with a discovery tag
+extole webhooks create \
+  --name "Iterable Events" \
+  --url https://api.iterable.com/api/events/track \
+  --type GENERIC \
+  --tag "iterable-events"
+
+# Create a component on the same campaign that discovers it by tag
+extole components create \
+  --name "iterable_integration" \
+  --campaign <campaign-id> \
+  --webhook-tag "iterable-events"
+```
+
+When the campaign is published, the component resolves the webhook ID from the tag and stores it. The component owns the routing logic — no separate campaign controller needed.
+
+See `templates/webhook-component.md` for a full annotated walkthrough including request scripts, payload mapping, and the context object reference.
+
+### Attaching webhooks to campaigns (controller model)
+
+For simpler cases — one event type, no component needed — `attach` wires a webhook directly to a campaign via a controller.
 
 ```
 extole webhooks attach \
@@ -149,18 +181,20 @@ extole webhooks attach --webhook <id> --campaign <id> --event purchase    # publ
 
 `--quality` controls dispatch priority: `HIGH` (normal), `LOW` (best-effort), `ALWAYS` (bypasses campaign targeting rules). Defaults to `HIGH`.
 
-### Live testing with listen
+### Live testing
 
-`listen` temporarily wires a URL to a campaign event and tails incoming dispatches. Creates a webhook + controller, publishes, polls for results every 3 seconds, and deletes everything on Ctrl-C.
-
-The URL must be publicly reachable — Extole makes outbound HTTP POSTs to it. Use any tunneling tool (ngrok, cloudflared) to expose a local server, or point at a request capture service.
+For local end-to-end testing, use `webhook-listen.js` to spin up a local HTTP server with a public tunnel (requires `cloudflared`):
 
 ```
-extole webhooks listen \
-  --url https://my-server.com/hook \
-  --campaign <campaign-id> \
-  --event signed_up
+node ~/projects/webhook-listen.js                                  # start tunnel, print public URL
+node ~/projects/webhook-listen.js --create-webhook --account acme  # also create a temporary webhook
+```
 
+The script prints each inbound request — method, headers, pretty-printed JSON body — and deletes the webhook on Ctrl-C if it created one.
+
+`listen` is a lower-level alternative that wires a URL to a campaign event and tails dispatch results directly from the API:
+
+```
 extole webhooks listen \
   --url https://my-server.com/hook \
   --campaign <campaign-id> \
@@ -287,34 +321,69 @@ extole reports run --type summary_per_program --days 365 \
 
 ## Components
 
-Extole's configuration is built from **components** — typed, composable building blocks that define programs, rules, rewards, emails, and more. Understanding the component model is prerequisite to building or modifying offer programs programmatically.
+Extole's configuration is built from **components** — typed, composable building blocks that define programs, rules, rewards, emails, integrations, and more. Understanding the component model is prerequisite to building or modifying offer programs programmatically.
 
 **The type system is nominal and open-ended.** A component declares its type (e.g. `reward-supplier-v10.0`); there is no closed registry of valid types. New types can be declared at any time. The CLI shows what types actually exist in the account at runtime — not a static schema.
 
-**Types form a hierarchy.** `reward-supplier-v10.0` is a subtype of `reward-supplier`, which is a subtype of `component`. Filtering by `--type reward-supplier` matches all subtypes. `components types --tree` renders this hierarchy for the live account.
+**Types form a hierarchy.** `reward-supplier-v10.0` is a subtype of `reward-supplier`, which is a subtype of `component`. Filtering by `--filter-type reward-supplier` matches all subtypes. `components types --tree` renders this hierarchy for the live account.
 
 **Components wire together via sockets.** A rule component references a reward-supplier via a named socket. `--sockets` shows what a component connects to; `--tree` shows the full downstream subgraph.
 
-**The agentic pattern: learn from examples.** There is no static schema doc for what a `reward-supplier-v10.0` requires. The reliable approach is to find a known-good instance (`extole components --type reward-supplier-v10`), read its full config (`extole components get <id>`), and reason from that. `extole mcp` can also answer type-specific questions.
+**The agentic pattern: learn from examples.** There is no static schema doc for what a `reward-supplier-v10.0` requires. The reliable approach is to find a known-good instance (`extole components --filter-type reward-supplier-v10`), read its full config (`extole components get <id>`), and reason from that. `extole mcp` can also answer type-specific questions.
 
 ```
-extole components                              # all components, account-wide
-extole components --program <id>              # scoped to one program
-extole components --type reward-supplier      # filter by type (matches subtypes too)
-extole components --name "gift card"          # filter by name substring
+extole components                                  # all components, account-wide
+extole components --program <id>                   # scoped to one program
+extole components --filter-type reward-supplier    # filter by type (matches subtypes too)
+extole components --filter "gift card"             # filter by name substring
 
-extole components get <component-id>          # full config + variables
-extole components get <component-id> --tree   # downstream subtree (recursive)
-extole components get <component-id> --sockets  # socket references to other components
+extole components get <component-id>               # full config + variables
+extole components get <component-id> --tree        # downstream subtree (recursive)
+extole components get <component-id> --sockets     # socket references to other components
 
-extole components types                        # all concrete types in this account
-extole components types --parent rule          # subtypes of a given parent type
-extole components types --parent rule --tree   # rendered as a hierarchy
+extole components types                            # all concrete types in this account
+extole components types --parent rule              # subtypes of a given parent type
+extole components types --parent rule --tree       # rendered as a hierarchy
 ```
 
-`--type` does substring matching against the full type hierarchy, so `--type reward` matches `reward-v10.0`, `reward-rule-v10.0`, `reward-email-v10.0`, etc.
+`--filter-type` does substring matching against the full type hierarchy, so `--filter-type reward` matches `reward-v10.0`, `reward-rule-v10.0`, `reward-email-v10.0`, etc.
 
 `--tree` on `get` shows the full downstream subgraph — useful for understanding a reward flow or rule chain without querying each child individually.
+
+### Creating integration components
+
+`components create` creates a component attached to a campaign. The primary use case is building webhook integrations: the component holds configuration, discovers its webhook(s) by tag at publish time, and routes dispatches internally.
+
+```
+# Minimal — component with no webhook wiring
+extole components create --name my_integration --campaign <id>
+
+# With webhook discovery — component finds the webhook by tag when campaign is published
+extole components create \
+  --name iterable_integration \
+  --display-name "Iterable" \
+  --campaign <campaign-id> \
+  --description "Sends referral events to Iterable" \
+  --webhook-tag "iterable-events"
+
+# Multiple webhooks (auto-named from tag)
+extole components create \
+  --name my_integration \
+  --campaign <campaign-id> \
+  --webhook-tag "my-integration-events" \
+  --webhook-tag "my-integration-subscriptions"
+
+# Explicit variable name (varName:tag)
+extole components create \
+  --name my_integration \
+  --campaign <campaign-id> \
+  --webhook-tag "eventsWebhookId:my-integration-events"
+
+# Delete a component
+extole components delete <component-id>
+```
+
+Each `--webhook-tag` generates a `javascript@buildtime` variable that resolves the webhook ID from the tag when the campaign is published. The component stores the resolved ID — not the tag — so there is no runtime tag lookup overhead. See `templates/webhook-component.md` for the full pattern including request scripts and payload mapping.
 
 ## AI (extole mcp)
 

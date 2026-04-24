@@ -4,9 +4,24 @@ A component-driven webhook wires an external API call into Extole's event flow.
 The component owns the configuration and business logic. The webhook is the outbound
 HTTP primitive. They are linked by **tags**.
 
-This pattern is used for integrations like Iterable, Pendo, Salesforce, etc.
+This pattern is used for integrations like Iterable, Tango, Pendo, Salesforce, etc.
 It is more powerful than the controller/trigger model because the component can
 handle multiple webhooks, complex payload mapping, and event filtering in one place.
+
+---
+
+## Verification status
+
+| Claim | Status | Source |
+|---|---|---|
+| `/v1/components` is a real creation endpoint | **Confirmed** | Recent tests + release notes explicitly reference it |
+| All four webhook types (GENERIC, CLIENT, REWARD, PARTNER) supported | **Confirmed** | `ComponentBundleElementsConfiguration` maps each to a distinct `ExternalElementType` |
+| `response_body_handler` only applies to PARTNER type | **Confirmed** | Only `PartnerWebhookBuilder` applies it |
+| `javascript@buildtime` tag discovery pattern is real | **Confirmed** | Tango integration PR uses `context.getComponent().createElementsQuery().withType('WEBHOOK').withTag(...).list()` |
+| `campaign_id` is always required | **Unverified** | Observed in all tested flows; no proof there's no account-level scope |
+| Omitting `types` bypasses schema enforcement | **Observed** | Works in practice; exact bypass mechanism not confirmed from code |
+| CLIENT only fires for browser/SDK events | **Observed** | Runtime behavior, not code-backed |
+| `api.extole.io` normalizes CLIENT→GENERIC; `my.extole.com/api` preserves it | **Observed** | Confirmed via request/response testing, not traced in code |
 
 ---
 
@@ -16,14 +31,19 @@ handle multiple webhooks, complex payload mapping, and event filtering in one pl
   [ Extole Event ]
         │
         ▼
-  [ Component ]  ←── owns configuration, event routing logic
-        │               discovers webhooks by tag at build time
+  [ Component ]  ←── owns configuration; build-time evaluatables resolve
+        │               tagged external elements during campaign build/publish
         ▼
   [ Webhook ]    ←── outbound HTTP call
         │               request script maps payload + injects auth
         ▼
   [ External API ]
 ```
+
+The component references webhooks by **tag**, not by ID. At campaign build/publish
+time, the `javascript@buildtime` expression in each variable runs once, resolves
+the matching webhook by tag, and stores the ID. This makes the component portable —
+the webhook can be recreated or swapped without editing the component.
 
 ---
 
@@ -55,6 +75,16 @@ discover it at build time.
 **One webhook per outbound endpoint/purpose.** If the integration has separate
 endpoints for events, subscriptions, and unsubscribes, create three webhooks with
 distinct tags.
+
+**CLI:**
+```bash
+extole webhooks create \
+  --name "My Integration Events" \
+  --url "https://destination.example.com/api/events" \
+  --type GENERIC \
+  --tag "my-integration-events" \
+  --tag "internal:app_type=my-integration.com"
+```
 
 ---
 
@@ -140,12 +170,18 @@ controller trigger.
 The component owns the integration. It holds configuration variables (API keys,
 list IDs, feature flags) and discovers the webhooks it needs by tag at build time.
 
+The `javascript@buildtime` expression runs once during campaign build/publish —
+not on every event. It resolves the webhook ID by tag and stores it as the
+variable's value for runtime use.
+
+**Component API shape:**
 ```json
 {
   "name": "my_integration",
   "display_name": "My Integration",
-  "description": "Sends referral events and subscription changes to My Integration",
-  "variables": [
+  "description": "Sends referral events to My Integration",
+  "campaign_id": "<campaign-id>",
+  "settings": [
 
     // ── Configuration ──────────────────────────────────────────────────────
     {
@@ -155,32 +191,16 @@ list IDs, feature flags) and discovers the webhooks it needs by tag at build tim
       "values": { "default": "REPLACE_ME" },
       "tags": ["category:Configuration"]
     },
-    {
-      "name": "sendEvents",
-      "display_name": "Send Events",
-      "type": "BOOLEAN",
-      "values": { "default": true },
-      "tags": ["category:Configuration"]
-    },
 
     // ── Webhook discovery ──────────────────────────────────────────────────
-    // These variables resolve at build time by finding webhooks tagged with
-    // the matching tag. The component stores the resolved ID, not the tag.
+    // Resolved at build/publish time by finding webhooks tagged with the
+    // matching tag. Stores the resolved ID, not the tag.
     {
       "name": "eventsWebhookId",
-      "display_name": "Events Webhook ID",
+      "display_name": "Events Webhook Id",
       "type": "STRING",
       "values": {
         "default": "javascript@buildtime:(function(){ var items = Java.from(context.getComponent().createElementsQuery().withType('WEBHOOK').withTag('my-integration-events').list()); return items && items.length > 0 ? items[0].getId() : null; })()"
-      },
-      "tags": ["category:Webhooks"]
-    },
-    {
-      "name": "subscriptionWebhookId",
-      "display_name": "Subscription Webhook ID",
-      "type": "STRING",
-      "values": {
-        "default": "javascript@buildtime:(function(){ var items = Java.from(context.getComponent().createElementsQuery().withType('WEBHOOK').withTag('my-integration-subscription').list()); return items && items.length > 0 ? items[0].getId() : null; })()"
       },
       "tags": ["category:Webhooks"]
     }
@@ -189,47 +209,82 @@ list IDs, feature flags) and discovers the webhooks it needs by tag at build tim
 }
 ```
 
-**The `javascript@buildtime` pattern:**
-```javascript
-javascript@buildtime:(function(){
-    var items = Java.from(
-        context.getComponent()
-            .createElementsQuery()
-            .withType('WEBHOOK')
-            .withTag('my-integration-events')
-            .list()
-    );
-    return items && items.length > 0 ? items[0].getId() : null;
-})()
-```
+**Note on `types`:** Registered types (`extension`, `integration-v1`) enforce a
+JSON schema that requires specific UI display settings (`short.description`, `icon`,
+etc.). Omitting `types` bypasses schema enforcement and is appropriate for custom or
+programmatic components. If you want the component to appear in the Partners UI, use
+`extension` or `integration-v1` and supply all required settings.
 
-- Runs once when the component is built/published, not on every event
-- `Java.from(...)` converts a Java list to a JS array
-- `.withType('WEBHOOK')` scopes the query to webhooks
-- `.withTag('...')` matches the tag on the webhook definition
-- Returns the webhook's ID, which is then stored as the variable value
+**CLI (creates component + webhook discovery in one step):**
+```bash
+# Single webhook tag
+extole components create \
+  --name "my_integration" \
+  --display-name "My Integration" \
+  --campaign "<campaign-id>" \
+  --description "Sends referral events to My Integration" \
+  --webhook-tag "my-integration-events"
+
+# Multiple webhooks — auto-derives varName from tag
+extole components create \
+  --name "my_integration" \
+  --campaign "<campaign-id>" \
+  --webhook-tag "my-integration-events" \
+  --webhook-tag "my-integration-subscriptions"
+
+# Explicit varName:tag syntax
+extole components create \
+  --name "my_integration" \
+  --campaign "<campaign-id>" \
+  --webhook-tag "eventsWebhookId:my-integration-events"
+```
 
 ---
 
-## 4. Checklist
+## 4. Webhook types
+
+| Type | Trigger | Unique field | CLI notes |
+|---|---|---|---|
+| `GENERIC` | Any event routed by component or controller | — | Default; use for backend/API events |
+| `CLIENT` | Browser/mobile SDK events only | — | Must be created via `my.extole.com/api`, not `api.extole.io` |
+| `REWARD` | Reward fulfillment events | `filters` | Reward-specific filtering |
+| `PARTNER` | Partner/integration flows | `response_body_handler` | Parses HTTP response body into structured data |
+
+All types share: `name`, `type`, `url`, `client_key_id`, `tags`, `request`,
+`response_handler`, `enabled`, `description`, `default_method`, `retry_intervals`,
+`component_ids`, `component_references`.
+
+---
+
+## 5. Checklist
 
 Before deploying:
 
-- [ ] Webhooks created in Tech Center → Outbound Webhooks with correct tags
+- [ ] Webhooks created with correct tags
 - [ ] Client key created in Security Center and assigned to each webhook
-- [ ] `request` script tested with `extole webhooks listen` against a sandbox event
-- [ ] Component variables verified — `eventsWebhookId` etc. should resolve to real IDs (not null)
-- [ ] `sendEvents` / feature flag variables default to `false` for safe rollout
+- [ ] `request` script tested against a real event (use `webhook-listen.js` + tunnel)
+- [ ] Component variables verified — `eventsWebhookId` etc. resolve to real IDs after publish
+- [ ] Feature flag variables default to `false` for safe rollout
 - [ ] `retry_intervals` set appropriately for the destination API's tolerance
-- [ ] Webhooks tagged with `internal:app_type=<domain>` for dispatch filtering
+- [ ] Webhooks tagged with `internal:app_type=<domain>` for dispatch grouping
 
 ---
 
-## 5. Debugging
+## 6. Open questions (unverified)
+
+1. Is `/v1/components` the intended stable external creation endpoint, or an internal surface that happens to work?
+2. Does omitting `types` skip schema enforcement by design, or is it a side effect?
+3. Does build-time tag lookup behave correctly through a full publish → install → republish cycle, including webhook swaps?
+4. Are all components campaign-scoped in the product model, or only in the flows exercised here?
+5. Is `api.extole.io` vs `my.extole.com/api` webhook type behavior (CLIENT normalization) a supported distinction or an artifact of which controller is being hit?
+
+---
+
+## 7. Debugging
 
 ```bash
 # Verify webhooks exist with correct tags
-extole webhooks --json | jq '.[] | {name, tags, enabled}'
+extole webhooks --filter-type GENERIC --json | jq '.[] | {name, tags, enabled}'
 
 # Check dispatch attempts
 extole webhooks dispatches <webhook-id>
@@ -237,8 +292,9 @@ extole webhooks dispatches <webhook-id>
 # Check HTTP outcomes (response codes, error bodies)
 extole webhooks dispatch-results <webhook-id>
 
-# Live tail during testing
-extole webhooks listen --url https://your-server.com/hook --campaign <id> --event signed_up
+# Local HTTP server + public tunnel for live testing
+node ~/projects/webhook-listen.js
+node ~/projects/webhook-listen.js --create-webhook --account "Demo Data Finserv"
 
 # Stream events to confirm they're arriving
 extole stream --event-type INPUT --filter signed_up
