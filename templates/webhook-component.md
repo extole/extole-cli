@@ -15,12 +15,18 @@ handle multiple webhooks, complex payload mapping, and event filtering in one pl
 | Claim | Status | Source |
 |---|---|---|
 | `/v1/components` is a real creation endpoint | **Confirmed** | Recent tests + release notes explicitly reference it |
-| All four webhook types (GENERIC, CLIENT, REWARD, PARTNER) supported | **Confirmed** | `ComponentBundleElementsConfiguration` maps each to a distinct `ExternalElementType` |
-| `response_body_handler` only applies to PARTNER type | **Confirmed** | Only `PartnerWebhookBuilder` applies it |
-| `javascript@buildtime` tag discovery pattern is real | **Confirmed** | Tango integration PR uses `context.getComponent().createElementsQuery().withType('WEBHOOK').withTag(...).list()` |
+| All four webhook types (GENERIC, CLIENT, REWARD, PARTNER) supported | **Confirmed** | `WebhookType.java` enum; `WebhookEndpoints.java` accepts all four |
+| `GENERIC` is internally named `CONSUMER` | **Confirmed** | `WebhookDispatchEndpointsImpl.toWebhookType()`: `case CONSUMER → GENERIC` |
+| CLIENT webhooks fire for admin/operational events | **Confirmed** | `ClientWebhookEventProducer.java` wraps `ClientEvent`; `ClientWebhookRuntimeContext.getClientEvent()` |
+| GENERIC webhooks fire for person/consumer journey events | **Confirmed** | `ConsumerWebhookDispatchBuilder.java`; `ConsumerWebhookRuntimeContext.getData()` |
+| REWARD webhooks fire on reward state transitions | **Confirmed** | `RewardWebhookDispatchBuilder.java`; `RewardWebhookRuntimeContext.getReward()` |
+| PARTNER webhooks are manual-dispatch only | **Confirmed** | `PartnerWebhookDispatcher` only called from `WebhookDispatchEndpointsImpl.sendSyncWebhookEvent()` — no event-triggered path |
+| `response_body_handler` only applies to PARTNER type | **Confirmed** | Only `PartnerWebhookBuilder` applies it; absent from other builders |
+| `javascript@buildtime` tag discovery pattern is real | **Confirmed** | Used in Tango, BHN, SessionM integration components: `context.getComponent().createElementsQuery().withType('WEBHOOK').withTag(...).list()` |
+| Reward filter types: STATE, SUPPLIER, TAGS, EXPRESSION | **Confirmed** | `RewardWebhookFilterType.java` enum |
+| Reward state filter values | **Confirmed** | `DetailedRewardState.java`: EARNED, FULFILLED, FULFILL_FAILED, SENT, REDEEMED, FAILED, CANCELED, REVOKED |
 | `campaign_id` is always required | **Unverified** | Observed in all tested flows; no proof there's no account-level scope |
 | Omitting `types` bypasses schema enforcement | **Observed** | Works in practice; exact bypass mechanism not confirmed from code |
-| CLIENT only fires for browser/SDK events | **Observed** | Runtime behavior, not code-backed |
 | `api.extole.io` normalizes CLIENT→GENERIC; `my.extole.com/api` preserves it | **Observed** | Confirmed via request/response testing, not traced in code |
 
 ---
@@ -47,14 +53,205 @@ the webhook can be recreated or swapped without editing the component.
 
 ---
 
-## 1. Webhooks
+## 1. Webhook types
+
+There are four types. Each fires under different conditions and exposes a different
+runtime context in the `request` script.
+
+| Type | Internal name | Trigger | Runtime context | Unique field |
+|---|---|---|---|---|
+| `GENERIC` | `CONSUMER` | Person/consumer journey events (referral, share, purchase, custom) | `ConsumerWebhookRuntimeContext` | — |
+| `CLIENT` | `CLIENT` | Admin/operational `ClientEvent`s (config change, report complete, campaign started, webhook failure, etc.) | `ClientWebhookRuntimeContext` | — |
+| `REWARD` | `REWARD` | Reward state transitions (EARNED, FULFILLED, FAILED, etc.) | `RewardWebhookRuntimeContext` extends CONSUMER | `filters` |
+| `PARTNER` | `PARTNER` | Manual dispatch only via `POST /v6/webhooks/events/send` | base `WebhookRuntimeContext` | `response_body_handler` |
+
+**GENERIC** is the right default for integrations that receive person journey events.
+**CLIENT** is for operational callbacks — e.g. notify a system when a campaign goes live
+or when a report finishes. **REWARD** is for fulfillment integrations that need to act
+on reward state changes. **PARTNER** has no automatic trigger — only used when you
+want to manually fire a webhook via the API.
+
+---
+
+## 2. Request script context by type
+
+### GENERIC (`ConsumerWebhookRuntimeContext`)
+
+```javascript
+javascript@runtime:(function () {
+    var requestBuilder = context.createRequestBuilder();
+
+    // getData() — the Extole event payload as Map<String, Object>
+    var data = context.getData();
+    var eventData = JSON.parse(
+        context.getGlobalServices().getJsonService().toJsonString(data)
+    );
+
+    // Helper: unwrap Extole's { value: "..." } field wrappers if present
+    function unwrap(obj) {
+        var out = {};
+        for (var k in obj) {
+            if (obj.hasOwnProperty(k)) {
+                out[k] = obj[k] && obj[k].value != null ? obj[k].value : obj[k];
+            }
+        }
+        return out;
+    }
+    var d = unwrap(eventData);
+
+    // Optional: filter by event name or sandbox
+    // var sandbox = context.getSandbox(); // "true"/"false"
+
+    var body = {
+        email:     d.email      || null,
+        firstName: d.first_name || null,
+        lastName:  d.last_name  || null,
+        timestamp: new Date().getTime()
+    };
+
+    return requestBuilder
+        .withMethod("POST")
+        .addHeader("Content-Type", "application/json")
+        .addHeader("Authorization", "Bearer " + context.getWebhook().getClientKey().getKey())
+        .withBody(JSON.stringify(body))
+        .build();
+})();
+```
+
+**GENERIC context API:**
+
+| Method | Returns |
+|---|---|
+| `context.getData()` | `Map<String, Object>` — the event payload |
+| `context.getSandbox()` | `Sandbox` — sandbox flag |
+| `context.getWebhook()` | The webhook config object |
+| `context.getWebhook().getClientKey().getKey()` | Secret from Security Center |
+| `context.getAttemptCount()` | Number of prior retry attempts |
+| `context.createRequestBuilder()` | Builder for the outbound HTTP request |
+
+Returning `null` suppresses the dispatch entirely — no HTTP call, no dispatch record.
+Use this to filter events inside the script.
+
+---
+
+### CLIENT (`ClientWebhookRuntimeContext`)
+
+```javascript
+javascript@runtime:(function () {
+    var clientEvent = context.getClientEvent();
+    var eventName = String(clientEvent.getName());
+
+    // CLIENT events worth acting on — see ClientEvent.java constants
+    var watchedEvents = ["report_completed", "campaign_started", "webhook_dispatch_failed"];
+    if (watchedEvents.indexOf(eventName) === -1) return null;
+
+    var data = JSON.parse(
+        context.getGlobalServices().getJsonService().toJsonString(clientEvent.getData())
+    );
+
+    var body = {
+        event:     eventName,
+        clientId:  String(clientEvent.getClientId()),
+        level:     String(clientEvent.getLevel()),  // INFO / WARN / ERROR
+        message:   clientEvent.getMessage(),
+        timestamp: new Date().getTime()
+    };
+
+    return context.createRequestBuilder()
+        .withMethod("POST")
+        .addHeader("Content-Type", "application/json")
+        .withBody(JSON.stringify(body))
+        .build();
+})();
+```
+
+**CLIENT context API (extends base):**
+
+| Method | Returns |
+|---|---|
+| `context.getClientEvent()` | The `ClientEvent` — name, tags, level, message, data, userId, clientId |
+| `clientEvent.getName()` | String event name (e.g. `"report_completed"`) |
+| `clientEvent.getLevel()` | `INFO`, `WARN`, or `ERROR` |
+| `clientEvent.getMessage()` | Human-readable message |
+| `clientEvent.getData()` | `Map<String, DataValue>` — structured data fields |
+
+**Named CLIENT event constants** (from `ClientEvent.java`):
+
+```
+config_change            report_completed         report_failed
+campaign_started         campaign_published        webhook_created
+webhook_dispatch_failed  webhook_dispatch_failed   reward_fulfillment_failed
+reward_not_fulfillable   coupon_balance_warn_limit_reached
+audience_created         batch_job_created         erasure_request
+user_login               user_first_login
+```
+
+---
+
+### REWARD (`RewardWebhookRuntimeContext`)
+
+```javascript
+javascript@runtime:(function () {
+    var reward = context.getReward();
+
+    // State at dispatch time
+    var state = reward.getType();   // "EARNED", "FULFILLED", "FAILED", etc.
+
+    var body = {
+        rewardId:         reward.getRewardId(),
+        state:            state,
+        personId:         reward.getPersonId(),
+        partnerUserId:    reward.getPartnerUserId(),
+        rewardSupplier:   reward.getRewardSupplierName(),
+        faceValue:        reward.getFaceValue(),
+        faceValueType:    reward.getFaceValueType(),
+        partnerRewardId:  reward.getPartnerRewardId(),  // null until FULFILLED
+        data:             reward.getData()
+    };
+
+    return context.createRequestBuilder()
+        .withMethod("POST")
+        .addHeader("Content-Type", "application/json")
+        .withBody(JSON.stringify(body))
+        .build();
+})();
+```
+
+**REWARD context API (extends GENERIC):**
+
+| Method | Returns |
+|---|---|
+| `context.getReward()` | `PublicReward` — full reward snapshot at dispatch time |
+| `reward.getType()` | State string: `EARNED`, `FULFILLED`, `SENT`, `REDEEMED`, `FAILED`, `FAILED_FULFILLMENT`, `CANCELED`, `REVOKED` |
+| `reward.getRewardId()` | Extole reward ID |
+| `reward.getPersonId()` | Extole person ID |
+| `reward.getPartnerUserId()` | Partner's user identifier |
+| `reward.getRewardSupplierName()` | Name of the reward supplier |
+| `reward.getFaceValue()` / `getFaceValueType()` | Reward amount + currency/type |
+| `reward.getPartnerRewardId()` | Supplier's ID for the reward (non-null after FULFILLED) |
+| `reward.getData()` | `Map<String, Object>` — custom data attached to the reward |
+
+**REWARD webhook filters** (`/v4/webhooks/reward/{id}/filters` — types: STATE, SUPPLIER, TAGS, EXPRESSION):
+
+```json
+"webhook_filters": [
+    { "reward_supplier_ids_filter": ["<supplier-id-1>", "<supplier-id-2>"] },
+    { "reward_state_filter": ["EARNED"] }
+]
+```
+
+Reward filter states: `EARNED`, `FULFILLED`, `FULFILL_FAILED`, `SENT`, `REDEEMED`, `FAILED`, `CANCELED`, `REVOKED`
+
+---
+
+## 3. Webhooks — creation
 
 Each webhook is a named outbound HTTP endpoint. Tag it so the component can
 discover it at build time.
 
 ```json
 {
-  "name": "My Integration — Events",
+  "name": "My Integration - Events",
   "type": "GENERIC",
   "url": "https://destination.example.com/api/events",
   "enabled": true,
@@ -88,84 +285,7 @@ extole webhooks create \
 
 ---
 
-## 2. The `request` script
-
-The `request` field is a `javascript@runtime` script that runs on every potential
-dispatch. It builds the outbound HTTP request — or returns `null` to suppress it.
-
-This is where payload mapping, auth injection, and event filtering live.
-
-```javascript
-javascript@runtime:(function () {
-    var requestBuilder = context.createRequestBuilder();
-
-    // ── Event filtering ────────────────────────────────────────────────────
-    // Return null to suppress the dispatch for non-matching events.
-    var clientEvent = context.getClientEvent();
-    if (!clientEvent) return null;
-
-    var eventName = String(clientEvent.getName());
-    var allowedEvents = ["signed_up", "referred_purchase"];
-    if (allowedEvents.indexOf(eventName) === -1) return null;
-
-    // ── Auth ───────────────────────────────────────────────────────────────
-    // The client key is configured in Security Center and referenced here.
-    var apiKey = context.getWebhook().getClientKey().getKey();
-
-    // ── Payload mapping ────────────────────────────────────────────────────
-    // context.getData() returns the Extole event payload.
-    // Map it to whatever shape the destination API expects.
-    var raw = JSON.parse(
-        context.getGlobalServices().getJsonService().toJsonString(clientEvent.getData())
-    );
-
-    // Helper: unwrap Extole's { value: "..." } field wrappers
-    function unwrap(obj) {
-        var out = {};
-        for (var k in obj) {
-            if (obj.hasOwnProperty(k)) {
-                out[k] = obj[k] && obj[k].value != null ? obj[k].value : obj[k];
-            }
-        }
-        return out;
-    }
-    var data = unwrap(raw);
-
-    var body = {
-        event:     eventName,
-        email:     data.email       || null,
-        firstName: data.first_name  || null,
-        lastName:  data.last_name   || null,
-        clientId:  String(clientEvent.getClientId()),
-        timestamp: new Date().getTime()
-    };
-
-    return requestBuilder
-        .withMethod("POST")
-        .addHeader("Content-Type", "application/json")
-        .addHeader("Authorization", "Bearer " + apiKey)
-        .withBody(JSON.stringify(body))
-        .build();
-})();
-```
-
-**Key context objects:**
-
-| Object | What it gives you |
-|---|---|
-| `context.getClientEvent()` | The triggering event — name, data, userId, clientId |
-| `context.getWebhook().getClientKey().getKey()` | The secret from Security Center |
-| `context.getGlobalServices().getJsonService().toJsonString(x)` | Serialize a Java object to JSON string |
-| `context.getData()` | Shorthand for event data (same as `clientEvent.getData()`) |
-| `context.createRequestBuilder()` | Builder for the outbound HTTP request |
-
-**Returning `null` suppresses the dispatch entirely** — no HTTP call, no dispatch
-record. Use this to filter events inside the script rather than relying on a
-controller trigger.
-
----
-
-## 3. The component
+## 4. The component
 
 The component owns the integration. It holds configuration variables (API keys,
 list IDs, feature flags) and discovers the webhooks it needs by tag at build time.
@@ -241,26 +361,11 @@ extole components create \
 
 ---
 
-## 4. Webhook types
-
-| Type | Trigger | Unique field | CLI notes |
-|---|---|---|---|
-| `GENERIC` | Any event routed by component or controller | — | Default; use for backend/API events |
-| `CLIENT` | Browser/mobile SDK events only | — | Must be created via `my.extole.com/api`, not `api.extole.io` |
-| `REWARD` | Reward fulfillment events | `filters` | Reward-specific filtering |
-| `PARTNER` | Partner/integration flows | `response_body_handler` | Parses HTTP response body into structured data |
-
-All types share: `name`, `type`, `url`, `client_key_id`, `tags`, `request`,
-`response_handler`, `enabled`, `description`, `default_method`, `retry_intervals`,
-`component_ids`, `component_references`.
-
----
-
 ## 5. Checklist
 
 Before deploying:
 
-- [ ] Webhooks created with correct tags
+- [ ] Webhooks created with correct tags and correct type (GENERIC for person events, CLIENT for admin events, REWARD for reward state)
 - [ ] Client key created in Security Center and assigned to each webhook
 - [ ] `request` script tested against a real event (use `webhook-listen.js` + tunnel)
 - [ ] Component variables verified — `eventsWebhookId` etc. resolve to real IDs after publish
@@ -270,17 +375,7 @@ Before deploying:
 
 ---
 
-## 6. Open questions (unverified)
-
-1. Is `/v1/components` the intended stable external creation endpoint, or an internal surface that happens to work?
-2. Does omitting `types` skip schema enforcement by design, or is it a side effect?
-3. Does build-time tag lookup behave correctly through a full publish → install → republish cycle, including webhook swaps?
-4. Are all components campaign-scoped in the product model, or only in the flows exercised here?
-5. Is `api.extole.io` vs `my.extole.com/api` webhook type behavior (CLIENT normalization) a supported distinction or an artifact of which controller is being hit?
-
----
-
-## 7. Debugging
+## 6. Debugging
 
 ```bash
 # Verify webhooks exist with correct tags
@@ -291,6 +386,9 @@ extole webhooks dispatches <webhook-id>
 
 # Check HTTP outcomes (response codes, error bodies)
 extole webhooks dispatch-results <webhook-id>
+
+# List built (buildtime-evaluated) webhooks — resolves all javascript@buildtime expressions
+# GET /v6/webhooks/built — useful to verify tag resolution worked
 
 # Local HTTP server + public tunnel for live testing
 node ~/projects/webhook-listen.js

@@ -129,7 +129,7 @@ export function webhooksCommand() {
   // ── create ────────────────────────────────────────────────────────────────
 
   const createCmd = new Command('create')
-    .description('Create an outbound webhook. GENERIC fires for any routed event (default); CLIENT fires for browser/mobile SDK events only; REWARD for reward fulfillment; PARTNER adds response body parsing for partner flows. Use --tag to enable build-time discovery by a component.')
+    .description('Create an outbound webhook. GENERIC fires for consumer/person journey events (default); CLIENT fires for admin/operational events (config change, report complete, campaign started); REWARD fires on reward state transitions; PARTNER is manual-dispatch only. Use --tag to enable build-time discovery by a component.')
     .option('--name <name>', 'Webhook name')
     .option('--url <url>', 'Destination URL')
     .option('--type <type>', 'Webhook type: GENERIC | CLIENT | REWARD | PARTNER', 'GENERIC')
@@ -137,13 +137,19 @@ export function webhooksCommand() {
     .option('--description <text>', 'Optional description')
     .option('--method <method>', 'HTTP method (POST, PUT)', 'POST')
     .option('--tag <tag>', 'Tag (repeatable) — used by components to discover this webhook at build time', (val, acc) => [...acc, val], [])
+    .option('--filter-state <state>', '(REWARD only) Filter to specific reward states (repeatable): EARNED, FULFILLED, FULFILL_FAILED, SENT, REDEEMED, FAILED, CANCELED, REVOKED', (val, acc) => [...acc, val], [])
     .option('--request <script>', 'javascript@runtime request script (inline) — runs per dispatch, return null to suppress')
     .option('--request-file <path>', 'Path to a file containing the request script')
+    .option('--built', 'Show resolved (built) representation of the webhook after creation')
     .action(async (opts) => {
       if (!opts.name) { console.error('error: --name is required'); process.exit(2); }
       if (!opts.url)  { console.error('error: --url is required');  process.exit(2); }
       if (opts.request && opts.requestFile) {
         console.error('error: --request and --request-file are mutually exclusive');
+        process.exit(2);
+      }
+      if (opts.filterState?.length && opts.type !== 'REWARD') {
+        console.error('error: --filter-state is only valid with --type REWARD');
         process.exit(2);
       }
       const token = resolveToken(opts);
@@ -185,21 +191,42 @@ export function webhooksCommand() {
         process.exit(1);
       }
       const w = JSON.parse(text);
-      if (opts.json) { printJson(w, opts); return; }
-      console.log(`created: ${w.webhook_id || w.id}`);
-      console.log(`name:    ${w.name}`);
-      console.log(`url:     ${w.url}`);
-      console.log(`type:    ${w.type}`);
-      console.log(`enabled: ${w.enabled}`);
+      const webhookId = w.webhook_id || w.id;
+
+      // Add state filters for REWARD webhooks
+      if (opts.filterState?.length) {
+        const filterRes = await apiFetch(`/v4/webhooks/reward/${webhookId}/filters/state`, token, {
+          method: 'POST',
+          body: JSON.stringify({ states: opts.filterState }),
+          verbose: opts.verbose,
+          baseUrl: PERSON_BASE,
+        });
+        const filterText = await filterRes.text();
+        if (!filterRes.ok) {
+          console.error(`Warning: webhook created (${webhookId}) but state filter failed ${filterRes.status}: ${filterText.slice(0, 300)}`);
+        }
+      }
+
+      // Optionally fetch built representation
+      const display = opts.built ? await fetchWebhook(webhookId, token, true, opts.verbose) : w;
+
+      if (opts.json) { printJson(display, opts); return; }
+      console.log(`created: ${webhookId}`);
+      console.log(`name:    ${display.name}`);
+      console.log(`url:     ${display.url}`);
+      console.log(`type:    ${display.type}`);
+      console.log(`enabled: ${display.enabled}`);
+      if (opts.filterState?.length) console.log(`filters: state=${opts.filterState.join(', ')}`);
     });
 
   addGlobalOptions(createCmd, {
     output: true,
     examples: [
       'extole webhooks create --name "SFDC Events" --url https://example.com/hook',
-      'extole webhooks create --name "Reward Hook" --url https://example.com/hook --type REWARD',
+      'extole webhooks create --name "Reward Hook" --url https://example.com/hook --type REWARD --filter-state EARNED',
+      'extole webhooks create --name "Reward Hook" --url https://example.com/hook --type REWARD --filter-state EARNED --filter-state FULFILLED',
       'extole webhooks create --name "Iterable Events" --url https://api.iterable.com/api/events/track --type CLIENT --tag iterable-events --request-file request.js',
-      'extole webhooks create --name "Test" --url https://example.com/hook --json',
+      'extole webhooks create --name "Test" --url https://example.com/hook --built --json',
     ],
   });
 
