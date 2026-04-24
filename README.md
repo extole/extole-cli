@@ -48,13 +48,17 @@ extole auth su --token SU_TOKEN --client CLIENT_ID --account acme --set-default
 
 When it expires (2 hours), run the same command again to re-mint.
 
-## ping
+## ping / whoami
 
 ```
-extole ping
+extole ping                                # verify connectivity (exit 0 = OK)
+extole whoami                              # show current account, token, and base URLs
+extole whoami --ping                       # same + connectivity check with latency
+extole whoami --account other-client      # check a non-default account
+extole whoami --json
 ```
 
-Verifies connectivity. Exit 0 = OK, exit 1 = failure.
+`whoami` reads from local config — no API call unless `--ping` is passed. Useful when switching between multiple saved accounts.
 
 ## Rewards
 
@@ -113,10 +117,10 @@ Outbound webhooks send Extole events to external systems via HTTP POST. Four typ
 
 | Type | When it fires | Unique field |
 |---|---|---|
-| `GENERIC` | Any event routed by a component or campaign controller | — |
-| `CLIENT` | Browser/mobile SDK events only | — |
-| `REWARD` | Reward fulfillment events | `filters` |
-| `PARTNER` | Partner/integration flows | `response_body_handler` (parses HTTP response body) |
+| `GENERIC` | Person/consumer journey events (referral, share, purchase, custom input events) | — |
+| `CLIENT` | Admin/operational events — config change, report complete, campaign started, webhook failure, etc. | — |
+| `REWARD` | Reward state transitions (EARNED, FULFILLED, FAILED, etc.) | `filters` |
+| `PARTNER` | Manual dispatch only — no automatic trigger | `response_body_handler` (parses HTTP response body) |
 
 ```
 extole webhooks                                    # list all webhooks with URL
@@ -126,11 +130,15 @@ extole webhooks --json
 
 extole webhooks get <webhook-id>                   # full config: URL, method, tags, retry intervals
 extole webhooks get <webhook-id> --built           # show with inherited defaults applied
+                                                   # (REWARD webhooks also show state/supplier filters)
 
 extole webhooks create --name "SFDC Events" --url https://example.com/hook
 extole webhooks create --name "SFDC Events" --url https://example.com/hook --type GENERIC
 extole webhooks create --name "Iterable Events" --url https://api.iterable.com/api/events/track \
   --type CLIENT --tag iterable-events --request-file request.js
+extole webhooks create --name "Reward Hook" --url https://example.com/hook \
+  --type REWARD --filter-state EARNED --filter-state FULFILLED
+extole webhooks create --name "Test" --url https://example.com/hook --dry-run  # print payload, no POST
 
 extole webhooks delete <webhook-id>                # archive (fails if still wired to a campaign)
 ```
@@ -156,7 +164,7 @@ extole components create \
 
 When the campaign is published, the component resolves the webhook ID from the tag and stores it. The component owns the routing logic — no separate campaign controller needed.
 
-See `templates/webhook-component.md` for a full annotated walkthrough including request scripts, payload mapping, and the context object reference.
+See `~/projects/webhook-component.md` for a full annotated walkthrough including request scripts, payload mapping, and the context object reference per webhook type.
 
 ### Attaching webhooks to campaigns (controller model)
 
@@ -379,11 +387,14 @@ extole components create \
   --campaign <campaign-id> \
   --webhook-tag "eventsWebhookId:my-integration-events"
 
+# Print payload without creating (useful for verifying buildtime expressions)
+extole components create --name my_integration --campaign <id> --webhook-tag my-events --dry-run
+
 # Delete a component
 extole components delete <component-id>
 ```
 
-Each `--webhook-tag` generates a `javascript@buildtime` variable that resolves the webhook ID from the tag when the campaign is published. The component stores the resolved ID — not the tag — so there is no runtime tag lookup overhead. See `templates/webhook-component.md` for the full pattern including request scripts and payload mapping.
+Each `--webhook-tag` generates a `javascript@buildtime` variable that resolves the webhook ID from the tag when the campaign is published. The component stores the resolved ID — not the tag — so there is no runtime tag lookup overhead. See `~/projects/webhook-component.md` for the full pattern including request scripts and payload mapping.
 
 ## AI (extole mcp)
 
