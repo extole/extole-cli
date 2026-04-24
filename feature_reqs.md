@@ -51,6 +51,41 @@ Wraps `/v1/audiences` and `/v1/audiences/{id}/operations`. Primary use case: tes
 
 ---
 
+## 6. Component template library
+
+Build a library of annotated component templates by inspecting known-good live instances
+and stripping client-specific values. Each template explains the structure, required
+variables, and how pieces wire together — for both humans and agents building integrations.
+
+Priority templates (in order):
+
+1. **`webhook-component`** ✓ — done. GENERIC/CLIENT webhook + owning component, tag-based
+   discovery, `request` script patterns (filter via `return null`, payload mapping, auth).
+
+2. **`integration-v10.1`** — the Partners UI card. Type `integration-v10.1`, `internal:ui-display`
+   tagged variables drive the card (short.description, categories, logo, imageKey, URLs),
+   `CLIENT_KEY` variable type for Security Center keys, `MULTI_SOCKET` sockets for child
+   components. BHN (`7597354224252648223`) is the canonical example.
+
+3. **`event-stream-view-v10.0`** — the monitoring tabs inside a partner card (usage graph,
+   live events, etc.). Socketed into the `views` MULTI_SOCKET on integration components.
+   Four instances on BHN: `7626642088441783792`, `7626642090081238543`,
+   `7629768086440970382`, `7629781326299192934`.
+
+4. **`bhn-reward-supplier-v10.0`** — reward supplier config component, socketed into
+   `rewardSuppliers` on the integration. Contains fulfillment webhook wiring.
+
+5. **`role-v4`** — top-level program container. Showed up in PolicyGenius as the
+   root of the component tree.
+
+Templates live in `templates/`. Each is a markdown file with annotated JSON examples,
+context object reference, and a checklist.
+
+**Expression type reference (discovered so far):**
+- `javascript@runtime` — runs on every event dispatch; return null to suppress
+- `javascript@buildtime` — runs once at publish; used for tag-based webhook discovery
+- `spel@buildtime` — Spring Expression Language; used for asset URL lookups
+
 ## 5. Webhook listen — Extole-managed relay URL
 
 Currently `extole webhooks listen` requires `--url` pointing at a publicly reachable server. Once Extole builds relay infrastructure (similar to Stripe's `stripe listen`), the `--url` flag becomes optional and the CLI provisions the endpoint automatically:
