@@ -1,11 +1,14 @@
 import fetch from 'node-fetch';
-import { BASE_URL, getSuClientForToken } from './config.js';
+import { API_BASE, getSuClientForToken } from './config.js';
 import { logRequest } from './utils.js';
 
 const REQUEST_TIMEOUT_MS = 30_000;
+const APP_TYPE = 'extole-cli';
 
 export async function apiFetch(path, token, options = {}, fetchFn = fetch) {
-  const url = `${options.baseUrl || BASE_URL}${path}`;
+  const baseUrl = options.baseUrl || API_BASE;
+  const sep = path.includes('?') ? '&' : '?';
+  const url = `${baseUrl}${path}${sep}app_type=${APP_TYPE}`;
   logRequest(options.verbose, options.method || 'GET', url, {
     headers: {
       'Authorization': `Bearer ${token}`,
@@ -24,6 +27,7 @@ export async function apiFetch(path, token, options = {}, fetchFn = fetch) {
         'Authorization': `Bearer ${token}`,
         'Content-Type': 'application/json',
         'Accept': 'application/json',
+        'x-extole-app-type': APP_TYPE,
         ...(options.headers || {}),
       },
     });

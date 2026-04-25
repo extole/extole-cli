@@ -1,12 +1,12 @@
 import { Command } from 'commander';
-import { resolveToken, PERSON_BASE } from '../config.js';
+import { resolveToken, API_BASE } from '../config.js';
 import { apiJson } from '../api.js';
 import { printJson } from '../output.js';
 import { addGlobalOptions } from '../utils.js';
 
 // TODO: replace with /v4/programs once the v4 endpoint bug is fixed
 async function fetchPrograms(token, verbose) {
-  return apiJson('/v2/campaign-summaries', token, { verbose, baseUrl: PERSON_BASE });
+  return apiJson('/v2/campaign-summaries', token, { verbose, baseUrl: API_BASE });
 }
 
 function groupPrograms(campaigns) {

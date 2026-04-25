@@ -40,8 +40,7 @@ Do NOT run `node src/...` directly — the entry point is `bin/extole.js` and re
 
 | Export | Value | Used for |
 |---|---|---|
-| `BASE_URL` | `https://my.extole.com` | Campaign, controller, webhook CRUD |
-| `PERSON_BASE` | `https://api.extole.io` | Person, component, event-stream, built-webhook endpoints |
+| `API_BASE` | `https://api.extole.io` | All Extole API requests |
 | `AUTH_BASE` | `https://api.extole.com` | Token auth |
 
 ## Known gotchas
@@ -50,15 +49,6 @@ Do NOT run `node src/...` directly — the entry point is `bin/extole.js` and re
 Parent command options silently consume subcommand options of the same name before the subcommand sees them. Example: if `webhooks` (list) has `--type` and `webhooks create` also has `--type`, the parent consumes it and `create` gets the default.
 
 **Fix:** name parent list-filter options distinctively — `--filter-type`, `--filter` — so they don't collide with subcommand options.
-
-### Webhook type routing
-`CLIENT`, `REWARD`, and `PARTNER` webhooks must be created via `BASE_URL + /api/v6/webhooks`. The `PERSON_BASE + /v6/webhooks` path normalizes them to `GENERIC` silently.
-
-```javascript
-const isTyped = ['CLIENT', 'REWARD', 'PARTNER'].includes(opts.type);
-const webhookBase = isTyped ? BASE_URL : PERSON_BASE;
-const webhookPath = isTyped ? '/api/v6/webhooks' : '/v6/webhooks';
-```
 
 ### REWARD webhook filters are a separate API call
 The `/v6/webhooks` create endpoint does not accept `webhook_filters`. State filters are created after the webhook via `POST /v4/webhooks/reward/{id}/filters/state` with body `{ "states": [...] }`.

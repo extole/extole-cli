@@ -1,7 +1,7 @@
 import { readFileSync } from 'fs';
 import { Command } from 'commander';
 import { createInterface } from 'readline';
-import { resolveToken, PERSON_BASE, BASE_URL } from '../config.js';
+import { resolveToken, API_BASE } from '../config.js';
 import { apiJson, apiFetch } from '../api.js';
 import { printJson } from '../output.js';
 import { addGlobalOptions } from '../utils.js';
@@ -18,24 +18,24 @@ function confirm(question) {
 async function fetchWebhooks(token, params, verbose) {
   const qs = new URLSearchParams(params);
   const path = `/v6/webhooks/built${qs.toString() ? '?' + qs : ''}`;
-  return apiJson(path, token, { verbose, baseUrl: PERSON_BASE });
+  return apiJson(path, token, { verbose, baseUrl: API_BASE });
 }
 
 async function fetchWebhook(id, token, built, verbose) {
   const path = `/v6/webhooks/${id}${built ? '/built' : ''}`;
-  return apiJson(path, token, { verbose, baseUrl: PERSON_BASE });
+  return apiJson(path, token, { verbose, baseUrl: API_BASE });
 }
 
 async function fetchDispatches(id, token, params, verbose) {
   const qs = new URLSearchParams(params);
   const path = `/v6/webhooks/${id}/dispatches/recent${qs.toString() ? '?' + qs : ''}`;
-  return apiJson(path, token, { verbose, baseUrl: PERSON_BASE });
+  return apiJson(path, token, { verbose, baseUrl: API_BASE });
 }
 
 async function fetchDispatchResults(id, token, params, verbose) {
   const qs = new URLSearchParams(params);
   const path = `/v6/webhooks/${id}/dispatch-results/recent${qs.toString() ? '?' + qs : ''}`;
-  return apiJson(path, token, { verbose, baseUrl: PERSON_BASE });
+  return apiJson(path, token, { verbose, baseUrl: API_BASE });
 }
 
 // ── webhooks (list) ────────────────────────────────────────────────────────────
@@ -98,7 +98,7 @@ export function webhooksCommand() {
       let rewardFilters = null;
       if ((w.type || '').toUpperCase() === 'REWARD') {
         try {
-          rewardFilters = await apiJson(`/v4/webhooks/reward/${w.webhook_id || w.id}/filters`, token, { verbose: opts.verbose, baseUrl: PERSON_BASE });
+          rewardFilters = await apiJson(`/v4/webhooks/reward/${w.webhook_id || w.id}/filters`, token, { verbose: opts.verbose, baseUrl: API_BASE });
         } catch (_) { /* non-fatal */ }
       }
 
@@ -208,15 +208,11 @@ export function webhooksCommand() {
         return;
       }
 
-      // CLIENT, REWARD, PARTNER types must be created via my.extole.com/api — api.extole.io normalizes them to GENERIC
-      const isTyped = ['CLIENT', 'REWARD', 'PARTNER'].includes(opts.type);
-      const webhookBase = isTyped ? BASE_URL : PERSON_BASE;
-      const webhookPath = isTyped ? '/api/v6/webhooks' : '/v6/webhooks';
-      const res = await apiFetch(webhookPath, token, {
+      const res = await apiFetch('/v6/webhooks', token, {
         method: 'POST',
         body: JSON.stringify(payload),
         verbose: opts.verbose,
-        baseUrl: webhookBase,
+        baseUrl: API_BASE,
       });
       const text = await res.text();
       if (!res.ok) {
@@ -232,7 +228,7 @@ export function webhooksCommand() {
           method: 'POST',
           body: JSON.stringify({ states: opts.filterState }),
           verbose: opts.verbose,
-          baseUrl: PERSON_BASE,
+          baseUrl: API_BASE,
         });
         const filterText = await filterRes.text();
         if (!filterRes.ok) {
@@ -273,7 +269,7 @@ export function webhooksCommand() {
       const res = await apiFetch(`/v6/webhooks/${webhookId}`, token, {
         method: 'DELETE',
         verbose: opts.verbose,
-        baseUrl: PERSON_BASE,
+        baseUrl: API_BASE,
       });
       if (!res.ok) {
         const text = await res.text();
@@ -317,7 +313,7 @@ export function webhooksCommand() {
       let controllerId = opts.controller;
 
       if (!controllerId) {
-        const res = await apiFetch(`/api/v2/campaigns/${opts.campaign}/controllers`, token, {
+        const res = await apiFetch(`/v2/campaigns/${opts.campaign}/controllers`, token, {
           method: 'POST',
           body: JSON.stringify({
             type: 'CONTROLLER',
@@ -328,7 +324,7 @@ export function webhooksCommand() {
             scope: 'PUBLIC',
           }),
           verbose: opts.verbose,
-          baseUrl: BASE_URL,
+          baseUrl: API_BASE,
         });
         const text = await res.text();
         if (!res.ok) { console.error(`Error creating controller ${res.status}: ${text.slice(0, 300)}`); process.exit(1); }
@@ -340,7 +336,7 @@ export function webhooksCommand() {
       }
 
       const trigRes = await apiFetch(
-        `/api/v2/campaigns/${opts.campaign}/controllers/${controllerId}/triggers/events`,
+        `/v2/campaigns/${opts.campaign}/controllers/${controllerId}/triggers/events`,
         token,
         {
           method: 'POST',
@@ -352,7 +348,7 @@ export function webhooksCommand() {
             enabled: true,
           }),
           verbose: opts.verbose,
-          baseUrl: BASE_URL,
+          baseUrl: API_BASE,
         }
       );
       const trigText = await trigRes.text();
@@ -361,13 +357,13 @@ export function webhooksCommand() {
       if (!opts.json) console.log(`added trigger:      ${trigger.trigger_id}  (${opts.event} / ${opts.eventType.toUpperCase()})`);
 
       const actRes = await apiFetch(
-        `/api/v2/campaigns/${opts.campaign}/controllers/${controllerId}/actions/webhooks`,
+        `/v2/campaigns/${opts.campaign}/controllers/${controllerId}/actions/webhooks`,
         token,
         {
           method: 'POST',
           body: JSON.stringify({ webhook_id: opts.webhook, quality: opts.quality.toUpperCase(), enabled: true }),
           verbose: opts.verbose,
-          baseUrl: BASE_URL,
+          baseUrl: API_BASE,
         }
       );
       const actText = await actRes.text();
@@ -376,10 +372,10 @@ export function webhooksCommand() {
       if (!opts.json) console.log(`added action:       ${action.action_id}  (WEBHOOK / ${opts.quality.toUpperCase()})`);
 
       if (!opts.skipPublish) {
-        const pubRes = await apiFetch(`/api/v2/campaigns/${opts.campaign}/live`, token, {
+        const pubRes = await apiFetch(`/v2/campaigns/${opts.campaign}/live`, token, {
           method: 'POST',
           verbose: opts.verbose,
-          baseUrl: BASE_URL,
+          baseUrl: API_BASE,
         });
         const pubText = await pubRes.text();
         if (!pubRes.ok) { console.error(`Error publishing ${pubRes.status}: ${pubText.slice(0, 300)}`); process.exit(1); }
@@ -434,7 +430,7 @@ export function webhooksCommand() {
         method: 'POST',
         body: JSON.stringify({ name: `listen-${opts.event}-${Date.now()}`, url: opts.url, type: 'GENERIC', enabled: true, default_method: 'POST' }),
         verbose: opts.verbose,
-        baseUrl: PERSON_BASE,
+        baseUrl: API_BASE,
       });
       const wText = await wRes.text();
       if (!wRes.ok) { console.error(`Error creating webhook ${wRes.status}: ${wText.slice(0, 300)}`); process.exit(1); }
@@ -443,15 +439,15 @@ export function webhooksCommand() {
       console.log(`created webhook:    ${webhookId}`);
 
       // Create controller
-      const ctrlRes = await apiFetch(`/api/v2/campaigns/${opts.campaign}/controllers`, token, {
+      const ctrlRes = await apiFetch(`/v2/campaigns/${opts.campaign}/controllers`, token, {
         method: 'POST',
         body: JSON.stringify({ type: 'CONTROLLER', name: `listen-${opts.event}-webhook`, enabled: true, enabled_on_states: ['LIVE'], selectors: ['TARGET'], scope: 'PUBLIC' }),
         verbose: opts.verbose,
-        baseUrl: BASE_URL,
+        baseUrl: API_BASE,
       });
       const ctrlText = await ctrlRes.text();
       if (!ctrlRes.ok) {
-        await apiFetch(`/v6/webhooks/${webhookId}`, token, { method: 'DELETE', baseUrl: PERSON_BASE });
+        await apiFetch(`/v6/webhooks/${webhookId}`, token, { method: 'DELETE', baseUrl: API_BASE });
         console.error(`Error creating controller ${ctrlRes.status}: ${ctrlText.slice(0, 300)}`); process.exit(1);
       }
       const ctrl = JSON.parse(ctrlText);
@@ -460,13 +456,13 @@ export function webhooksCommand() {
 
       // Add event trigger
       const trigRes = await apiFetch(
-        `/api/v2/campaigns/${opts.campaign}/controllers/${controllerId}/triggers/events`, token,
-        { method: 'POST', body: JSON.stringify({ event_names: [opts.event], event_type: opts.eventType.toUpperCase(), trigger_phase: 'MATCHING', trigger_name: `${opts.event}-trigger`, enabled: true }), verbose: opts.verbose, baseUrl: BASE_URL }
+        `/v2/campaigns/${opts.campaign}/controllers/${controllerId}/triggers/events`, token,
+        { method: 'POST', body: JSON.stringify({ event_names: [opts.event], event_type: opts.eventType.toUpperCase(), trigger_phase: 'MATCHING', trigger_name: `${opts.event}-trigger`, enabled: true }), verbose: opts.verbose, baseUrl: API_BASE }
       );
       const trigText = await trigRes.text();
       if (!trigRes.ok) {
-        await apiFetch(`/api/v2/campaigns/${opts.campaign}/controllers/${controllerId}`, token, { method: 'DELETE', baseUrl: BASE_URL });
-        await apiFetch(`/v6/webhooks/${webhookId}`, token, { method: 'DELETE', baseUrl: PERSON_BASE });
+        await apiFetch(`/v2/campaigns/${opts.campaign}/controllers/${controllerId}`, token, { method: 'DELETE', baseUrl: API_BASE });
+        await apiFetch(`/v6/webhooks/${webhookId}`, token, { method: 'DELETE', baseUrl: API_BASE });
         console.error(`Error adding trigger ${trigRes.status}: ${trigText.slice(0, 300)}`); process.exit(1);
       }
       const trigger = JSON.parse(trigText);
@@ -474,24 +470,24 @@ export function webhooksCommand() {
 
       // Add webhook action
       const actRes = await apiFetch(
-        `/api/v2/campaigns/${opts.campaign}/controllers/${controllerId}/actions/webhooks`, token,
-        { method: 'POST', body: JSON.stringify({ webhook_id: webhookId, quality: opts.quality.toUpperCase(), enabled: true }), verbose: opts.verbose, baseUrl: BASE_URL }
+        `/v2/campaigns/${opts.campaign}/controllers/${controllerId}/actions/webhooks`, token,
+        { method: 'POST', body: JSON.stringify({ webhook_id: webhookId, quality: opts.quality.toUpperCase(), enabled: true }), verbose: opts.verbose, baseUrl: API_BASE }
       );
       const actText = await actRes.text();
       if (!actRes.ok) {
-        await apiFetch(`/api/v2/campaigns/${opts.campaign}/controllers/${controllerId}`, token, { method: 'DELETE', baseUrl: BASE_URL });
-        await apiFetch(`/v6/webhooks/${webhookId}`, token, { method: 'DELETE', baseUrl: PERSON_BASE });
+        await apiFetch(`/v2/campaigns/${opts.campaign}/controllers/${controllerId}`, token, { method: 'DELETE', baseUrl: API_BASE });
+        await apiFetch(`/v6/webhooks/${webhookId}`, token, { method: 'DELETE', baseUrl: API_BASE });
         console.error(`Error adding action ${actRes.status}: ${actText.slice(0, 300)}`); process.exit(1);
       }
       const action = JSON.parse(actText);
       console.log(`added action:       ${action.action_id}`);
 
       // Publish
-      const pubRes = await apiFetch(`/api/v2/campaigns/${opts.campaign}/live`, token, { method: 'POST', verbose: opts.verbose, baseUrl: BASE_URL });
+      const pubRes = await apiFetch(`/v2/campaigns/${opts.campaign}/live`, token, { method: 'POST', verbose: opts.verbose, baseUrl: API_BASE });
       const pubText = await pubRes.text();
       if (!pubRes.ok) {
-        await apiFetch(`/api/v2/campaigns/${opts.campaign}/controllers/${controllerId}`, token, { method: 'DELETE', baseUrl: BASE_URL });
-        await apiFetch(`/v6/webhooks/${webhookId}`, token, { method: 'DELETE', baseUrl: PERSON_BASE });
+        await apiFetch(`/v2/campaigns/${opts.campaign}/controllers/${controllerId}`, token, { method: 'DELETE', baseUrl: API_BASE });
+        await apiFetch(`/v6/webhooks/${webhookId}`, token, { method: 'DELETE', baseUrl: API_BASE });
         console.error(`Error publishing ${pubRes.status}: ${pubText.slice(0, 300)}`); process.exit(1);
       }
       const campaign = JSON.parse(pubText);
@@ -504,11 +500,11 @@ export function webhooksCommand() {
         if (cleaningUp) return;
         cleaningUp = true;
         console.log('\nCleaning up...');
-        await apiFetch(`/api/v2/campaigns/${opts.campaign}/controllers/${controllerId}`, token, { method: 'DELETE', baseUrl: BASE_URL });
+        await apiFetch(`/v2/campaigns/${opts.campaign}/controllers/${controllerId}`, token, { method: 'DELETE', baseUrl: API_BASE });
         console.log(`deleted controller: ${controllerId}`);
-        await apiFetch(`/v6/webhooks/${webhookId}`, token, { method: 'DELETE', baseUrl: PERSON_BASE });
+        await apiFetch(`/v6/webhooks/${webhookId}`, token, { method: 'DELETE', baseUrl: API_BASE });
         console.log(`deleted webhook:    ${webhookId}`);
-        await apiFetch(`/api/v2/campaigns/${opts.campaign}/live`, token, { method: 'POST', baseUrl: BASE_URL });
+        await apiFetch(`/v2/campaigns/${opts.campaign}/live`, token, { method: 'POST', baseUrl: API_BASE });
         console.log(`republished:        campaign ${opts.campaign}`);
       }
 

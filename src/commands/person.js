@@ -1,5 +1,5 @@
 import { Command } from 'commander';
-import { resolveToken, PERSON_BASE } from '../config.js';
+import { resolveToken, API_BASE } from '../config.js';
 import { apiJson } from '../api.js';
 import { printJson } from '../output.js';
 import { addGlobalOptions, SEEN_MAX_SIZE, SEEN_KEEP_SIZE, POLL_INTERVAL_MS, isValidEmail, formatEventTime } from '../utils.js';
@@ -24,8 +24,8 @@ export function personCommand() {
         process.exit(1);
       }
       const [profile, dataEntries] = await Promise.all([
-        apiJson(`/v5/persons/${match.id}`, token, { verbose: opts.verbose, baseUrl: PERSON_BASE }),
-        apiJson(`/v5/persons/${match.id}/data`, token, { verbose: opts.verbose, baseUrl: PERSON_BASE }).catch(() => ({})),
+        apiJson(`/v5/persons/${match.id}`, token, { verbose: opts.verbose, baseUrl: API_BASE }),
+        apiJson(`/v5/persons/${match.id}/data`, token, { verbose: opts.verbose, baseUrl: API_BASE }).catch(() => ({})),
       ]);
       const data = {};
       for (const [key, entry] of Object.entries(dataEntries)) {

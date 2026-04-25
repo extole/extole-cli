@@ -1,5 +1,5 @@
 import { Command } from 'commander';
-import { resolveToken, PERSON_BASE } from '../config.js';
+import { resolveToken, API_BASE } from '../config.js';
 import { apiJson } from '../api.js';
 import { printJson } from '../output.js';
 import { addGlobalOptions } from '../utils.js';
@@ -53,19 +53,19 @@ function checkLine(label, check) {
 }
 
 async function fetchEmailDomains(token, verbose) {
-  return apiJson('/v4/email-domains', token, { verbose, baseUrl: PERSON_BASE });
+  return apiJson('/v4/email-domains', token, { verbose, baseUrl: API_BASE });
 }
 
 async function fetchEmailDomainValidation(id, token, verbose) {
-  return apiJson(`/v4/email-domains/${id}/validate`, token, { verbose, baseUrl: PERSON_BASE });
+  return apiJson(`/v4/email-domains/${id}/validate`, token, { verbose, baseUrl: API_BASE });
 }
 
 async function fetchPrograms(token, verbose) {
-  return apiJson('/v2/programs', token, { verbose, baseUrl: PERSON_BASE });
+  return apiJson('/v2/programs', token, { verbose, baseUrl: API_BASE });
 }
 
 async function fetchProgramDomainValidation(programId, token, verbose) {
-  return apiJson(`/v2/programs/${programId}/validate`, token, { verbose, baseUrl: PERSON_BASE });
+  return apiJson(`/v2/programs/${programId}/validate`, token, { verbose, baseUrl: API_BASE });
 }
 
 export function healthCommand() {

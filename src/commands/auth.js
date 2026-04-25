@@ -2,7 +2,7 @@ import { createServer } from 'http';
 import { randomBytes, createHash } from 'crypto';
 import { exec } from 'child_process';
 import { Command, Option } from 'commander';
-import { loadConfig, saveConfig, setProfile, getProfile, getDefaultAccount, setDefaultAccount, AUTH_BASE, BASE_URL } from '../config.js';
+import { loadConfig, saveConfig, setProfile, getProfile, getDefaultAccount, setDefaultAccount, AUTH_BASE, API_BASE } from '../config.js';
 import { apiFetch, apiJson } from '../api.js';
 
 const IDP_BASE = 'https://idp.extole.com';
@@ -67,7 +67,7 @@ Examples:
           const tokenInfo = await apiJson('/v4/tokens', trimmedToken, { baseUrl: AUTH_BASE });
           const clientId = tokenInfo?.client_id;
           if (clientId) {
-            const clientInfo = await apiJson(`/v4/clients/${clientId}`, trimmedToken, { baseUrl: BASE_URL });
+            const clientInfo = await apiJson(`/v4/clients/${clientId}`, trimmedToken, { baseUrl: API_BASE });
             account = clientInfo?.short_name;
           }
         } catch (_) { /* fall through to default */ }

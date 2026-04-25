@@ -1,5 +1,5 @@
 import { Command } from 'commander';
-import { resolveToken, PERSON_BASE } from '../config.js';
+import { resolveToken, API_BASE } from '../config.js';
 import { apiFetch, apiJson } from '../api.js';
 import { printJson } from '../output.js';
 import { collect, addGlobalOptions, SEEN_MAX_SIZE, SEEN_KEEP_SIZE, POLL_INTERVAL_MS } from '../utils.js';
@@ -14,7 +14,7 @@ async function createStream(token, verbose) {
   return apiJson('/v6/event-streams', token, {
     method: 'POST',
     body: JSON.stringify({ name: 'extole-cli', tags: ['cli'], stop_at }),
-    baseUrl: PERSON_BASE,
+    baseUrl: API_BASE,
     verbose,
   });
 }
@@ -23,7 +23,7 @@ async function addFilter(streamId, filter, token, verbose) {
   return apiJson(`/v6/event-streams/${streamId}/filters`, token, {
     method: 'POST',
     body: JSON.stringify(filter),
-    baseUrl: PERSON_BASE,
+    baseUrl: API_BASE,
     verbose,
   });
 }
@@ -32,7 +32,7 @@ async function deleteStream(streamId, token, verbose) {
   try {
     await apiFetch(`/v6/event-streams/${streamId}/delete`, token, {
       method: 'POST',
-      baseUrl: PERSON_BASE,
+      baseUrl: API_BASE,
       verbose,
     });
   } catch (e) {
@@ -44,7 +44,7 @@ async function readEvents(streamId, token, since, verbose) {
   const params = new URLSearchParams({ limit: '50', offset: '0' });
   if (since) params.set('start_date', since);
   return apiJson(`/v6/event-streams/${streamId}/events?${params}`, token, {
-    baseUrl: PERSON_BASE,
+    baseUrl: API_BASE,
     verbose,
   });
 }

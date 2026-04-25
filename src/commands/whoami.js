@@ -1,5 +1,5 @@
 import { Command } from 'commander';
-import { resolveToken, loadConfig, getDefaultAccount, BASE_URL, PERSON_BASE } from '../config.js';
+import { resolveToken, loadConfig, getDefaultAccount, API_BASE } from '../config.js';
 import { apiFetch } from '../api.js';
 import { printJson } from '../output.js';
 import { addGlobalOptions } from '../utils.js';
@@ -37,7 +37,7 @@ export function whoamiCommand() {
         }
 
         if (opts.json) {
-          const out = { account: accountName, token: masked, api: PERSON_BASE, my: BASE_URL };
+          const out = { account: accountName, token: masked, api: API_BASE };
           if (suClient) out.su_client = suClient;
           if (pingMs !== null) out.ping = pingOk ? `${pingMs}ms` : 'FAIL';
           printJson(out, opts);
@@ -47,8 +47,7 @@ export function whoamiCommand() {
         console.log(`account:  ${accountName}`);
         if (suClient) console.log(`client:   ${suClient}`);
         console.log(`token:    ${masked}`);
-        console.log(`api:      ${PERSON_BASE}`);
-        console.log(`my:       ${BASE_URL}`);
+        console.log(`api:      ${API_BASE}`);
         if (pingMs !== null) console.log(`ping:     ${pingOk ? `${pingMs}ms — OK` : 'FAIL'}`);
       }),
     {

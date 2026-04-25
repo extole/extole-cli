@@ -1,5 +1,5 @@
 import { Command } from 'commander';
-import { resolveToken, PERSON_BASE } from '../config.js';
+import { resolveToken, API_BASE } from '../config.js';
 
 const VALID_REWARD_STATES = new Set(['EARNED', 'FULFILLED', 'SENT', 'REDEEMED', 'CANCELED', 'FAILED', 'EXPIRED']);
 import { apiJson } from '../api.js';
@@ -57,7 +57,7 @@ export function rewardsCommand() {
       const params = new URLSearchParams({ limit: String(limit) });
       if (opts.status) params.set('state', opts.status.toUpperCase());
 
-      const rewards = await apiJson(`/v5/persons/${match.id}/rewards?${params}`, token, { verbose: opts.verbose, baseUrl: PERSON_BASE });
+      const rewards = await apiJson(`/v5/persons/${match.id}/rewards?${params}`, token, { verbose: opts.verbose, baseUrl: API_BASE });
 
       if (!Array.isArray(rewards) || rewards.length === 0) {
         console.error(`No rewards found for ${opts.email}`);
@@ -102,7 +102,7 @@ export function rewardsCommand() {
       const opts = this.optsWithGlobals();
       const token = resolveToken(opts);
 
-      const r = await apiJson(`/v2/rewards/${rewardId}`, token, { verbose: opts.verbose, baseUrl: PERSON_BASE });
+      const r = await apiJson(`/v2/rewards/${rewardId}`, token, { verbose: opts.verbose, baseUrl: API_BASE });
 
       if (opts.json) {
         if (opts.steps && r.person_id) {

@@ -1,20 +1,20 @@
 import { Command } from 'commander';
-import { resolveToken, PERSON_BASE } from '../config.js';
+import { resolveToken, API_BASE } from '../config.js';
 import { apiJson, apiFetch } from '../api.js';
 import { printJson } from '../output.js';
 import { addGlobalOptions } from '../utils.js';
 
 async function fetchAllComponents(token, params, verbose) {
   const qs = new URLSearchParams({ limit: '500', ...params });
-  return apiJson(`/v1/components?${qs}`, token, { verbose, baseUrl: PERSON_BASE });
+  return apiJson(`/v1/components?${qs}`, token, { verbose, baseUrl: API_BASE });
 }
 
 async function fetchComponent(id, token, verbose) {
-  return apiJson(`/v1/components/${id}`, token, { verbose, baseUrl: PERSON_BASE });
+  return apiJson(`/v1/components/${id}`, token, { verbose, baseUrl: API_BASE });
 }
 
 async function fetchComponentTree(id, token, verbose) {
-  return apiJson(`/v1/components/${id}/tree`, token, { verbose, baseUrl: PERSON_BASE });
+  return apiJson(`/v1/components/${id}/tree`, token, { verbose, baseUrl: API_BASE });
 }
 
 // Match if any entry in the types array contains the filter string (substring, case-insensitive).
@@ -297,7 +297,7 @@ export function componentsCommand() {
         method: 'POST',
         body: JSON.stringify(payload),
         verbose: opts.verbose,
-        baseUrl: PERSON_BASE,
+        baseUrl: API_BASE,
       });
       const text = await res.text();
       if (!res.ok) {
@@ -342,7 +342,7 @@ export function componentsCommand() {
       const res = await apiFetch(`/v1/components/${componentId}`, token, {
         method: 'DELETE',
         verbose: opts.verbose,
-        baseUrl: PERSON_BASE,
+        baseUrl: API_BASE,
       });
       if (!res.ok) {
         const text = await res.text();
