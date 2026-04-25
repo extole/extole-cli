@@ -25,6 +25,7 @@ import { componentsCommand } from '../src/commands/components.js';
 import { webhooksCommand } from '../src/commands/webhooks.js';
 import { healthCommand } from '../src/commands/health.js';
 import { whoamiCommand } from '../src/commands/whoami.js';
+import { feedbackCommand } from '../src/commands/feedback.js';
 
 const program = new Command();
 
@@ -48,5 +49,6 @@ program.addCommand(webhooksCommand());
 program.addCommand(healthCommand());
 program.addCommand(reportsCommand());
 program.addCommand(mcpCommand());
+program.addCommand(feedbackCommand());
 
 program.parse();

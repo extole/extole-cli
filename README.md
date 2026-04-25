@@ -11,6 +11,7 @@ npm install -g github:cduskin-cpu/extole-cli
 ## Auth
 
 ```
+extole auth login --token TOKEN                                # save token (account name derived from client)
 extole auth login --token TOKEN --account acme --set-default   # save token, set as default
 extole auth login --token TOKEN --account staging              # save additional account
 extole auth default acme                                   # change default account
@@ -395,6 +396,15 @@ extole components delete <component-id>
 ```
 
 Each `--webhook-tag` generates a `javascript@buildtime` variable that resolves the webhook ID from the tag when the campaign is published. The component stores the resolved ID — not the tag — so there is no runtime tag lookup overhead. See `~/projects/webhook-component.md` for the full pattern including request scripts and payload mapping.
+
+## Feedback
+
+```
+extole feedback the --filter-state flag should mention it is REWARD-only in the help text
+extole feedback auth login flow was confusing at first, needed to read the README
+```
+
+Sends a message directly to the Extole CLI team's Slack channel. Includes your account name and CLI version automatically — no sign-up or setup required.
 
 ## AI (extole mcp)
 
