@@ -2,7 +2,7 @@ import { createServer } from 'http';
 import { randomBytes, createHash } from 'crypto';
 import { exec } from 'child_process';
 import { Command, Option } from 'commander';
-import { loadConfig, saveConfig, setProfile, getProfile, getDefaultAccount, setDefaultAccount, AUTH_BASE } from '../config.js';
+import { loadConfig, saveConfig, setProfile, getProfile, getDefaultAccount, setDefaultAccount, AUTH_BASE, BASE_URL } from '../config.js';
 import { apiFetch, apiJson } from '../api.js';
 
 const IDP_BASE = 'https://idp.extole.com';
@@ -45,21 +45,38 @@ export function authCommand() {
     .command('login')
     .description('Save a token for an account')
     .allowExcessArguments(false)
-    .requiredOption('--account <name>', 'Account name to save token under')
+    .option('--account <name>', 'Account name to save token under (defaults to "default")')
     .requiredOption('--token <token>', 'Extole bearer token')
     .option('--set-default', 'Set this account as the default')
     .addHelpText('after', `
 Examples:
+  extole auth login --token TOKEN
   extole auth login --token TOKEN --account acme --set-default
   extole auth login --token TOKEN --account staging`)
-    .action(function() {
-      const { token, account } = this.opts();
-      const isDefault = this.opts().setDefault;
-      const trimmedToken = token.trim();
+    .action(async function() {
+      const opts = this.opts();
+      const trimmedToken = opts.token.trim();
       if (!trimmedToken || trimmedToken.length < 10) {
         console.error('Error: token appears invalid (too short).');
         process.exit(2);
       }
+
+      let account = opts.account;
+      if (!account) {
+        try {
+          const tokenInfo = await apiJson('/v4/tokens', trimmedToken, { baseUrl: AUTH_BASE });
+          const clientId = tokenInfo?.client_id;
+          if (clientId) {
+            const clientInfo = await apiJson(`/v4/clients/${clientId}`, trimmedToken, { baseUrl: BASE_URL });
+            account = clientInfo?.short_name;
+          }
+        } catch (_) { /* fall through to default */ }
+        account = account || 'default';
+      }
+
+      const config = loadConfig();
+      const isFirst = Object.keys(config).filter(k => k !== '_default' && k !== '_mcp').length === 0;
+      const isDefault = opts.setDefault || !opts.account || isFirst;
       setProfile(account, { token: trimmedToken });
       if (isDefault) {
         setDefaultAccount(account);
@@ -127,7 +144,7 @@ Examples:
     .action(() => {
       const config = loadConfig();
       const defaultAccount = getDefaultAccount();
-      const accounts = Object.keys(config).filter(k => k !== '_default');
+      const accounts = Object.keys(config).filter(k => !k.startsWith('_'));
       if (accounts.length === 0) {
         console.log('No accounts saved. Run `extole auth login --token TOKEN --account NAME` to add one.');
         return;
