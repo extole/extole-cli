@@ -14,6 +14,7 @@ export function programsCommand() {
     .description('List campaigns. Shows all types by default; filter with --type.')
     .option('--all', 'Include NOT_LAUNCHED campaigns (default: LIVE only)')
     .option('--type <type>', 'Filter by campaign type (e.g. MARKETING, INTEGRATION, EXTENSION)')
+    .option('--filter <substr>', 'Filter by name substring (case-insensitive)')
     .action(async (opts) => {
       const token = resolveToken(opts);
       const raw = await fetchPrograms(token, opts.verbose);
@@ -22,6 +23,10 @@ export function programsCommand() {
       let rows = list.filter(c => c.state !== 'ARCHIVED');
       if (!opts.all) rows = rows.filter(c => c.state === 'LIVE');
       if (opts.type) rows = rows.filter(c => (c.campaign_type || '').toUpperCase() === opts.type.toUpperCase());
+      if (opts.filter) {
+        const sub = opts.filter.toLowerCase();
+        rows = rows.filter(c => (c.program_label || c.name || '').toLowerCase().includes(sub));
+      }
 
       rows.sort((a, b) => {
         const ta = a.campaign_type || '';
@@ -78,6 +83,7 @@ export function programsCommand() {
       'extole programs --all',
       'extole programs --type integration',
       'extole programs --type marketing --all',
+      'extole programs --filter demo',
       'extole programs --json',
     ],
   });
