@@ -1,6 +1,6 @@
 import { Command } from 'commander';
 import { loadConfig, saveConfig } from '../config.js';
-import { addGlobalOptions } from '../utils.js';
+import { addGlobalOptions, fetchWithTimeout } from '../utils.js';
 
 const AGENT_URL = 'https://agent.extole.com';
 const IDP_TOKEN_URL = 'https://idp.extole.com/oauth2/token';
@@ -26,7 +26,7 @@ async function resolveMcpToken() {
     process.exit(1);
   }
 
-  const res = await fetch(IDP_TOKEN_URL, {
+  const res = await fetchWithTimeout(IDP_TOKEN_URL, {
     method: 'POST',
     headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
     body: new URLSearchParams({
@@ -64,14 +64,14 @@ export function mcpCommand() {
 
       let res;
       try {
-        res = await fetch(`${AGENT_URL}/conversation:send`, {
+        res = await fetchWithTimeout(`${AGENT_URL}/conversation:send`, {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',
             'Authorization': `Bearer ${token}`,
           },
           body: JSON.stringify({ userPrompt: prompt }),
-        });
+        }, 120_000);
       } catch {
         console.error('Error: Extole AI agent server is unavailable');
         process.exit(1);

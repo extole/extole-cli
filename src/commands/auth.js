@@ -4,6 +4,7 @@ import { exec } from 'child_process';
 import { Command, Option } from 'commander';
 import { loadConfig, saveConfig, setProfile, getProfile, getDefaultAccount, setDefaultAccount, AUTH_BASE, API_BASE } from '../config.js';
 import { apiFetch, apiJson } from '../api.js';
+import { fetchWithTimeout } from '../utils.js';
 
 const IDP_BASE = 'https://idp.extole.com';
 const MCP_CLIENT_ID = 'extole-cli';
@@ -345,7 +346,7 @@ Examples:
       }
 
       // Exchange code for tokens
-      const tokenRes = await fetch(`${IDP_BASE}/oauth2/token`, {
+      const tokenRes = await fetchWithTimeout(`${IDP_BASE}/oauth2/token`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
         body: new URLSearchParams({

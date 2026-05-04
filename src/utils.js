@@ -5,6 +5,19 @@ import { getDefaultAccount } from './config.js';
 // without re-reading the config file.
 const _defaultAccount = getDefaultAccount();
 
+export async function fetchWithTimeout(url, options = {}, timeoutMs = 30_000) {
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), timeoutMs);
+  try {
+    return await fetch(url, { ...options, signal: controller.signal });
+  } catch (e) {
+    if (e.name === 'AbortError') throw new Error(`Request timed out after ${timeoutMs / 1000}s`);
+    throw e;
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
 export function collect(val, prev) {
   return prev.concat([val]);
 }

@@ -11,12 +11,12 @@ async function fetchPrograms(token, verbose) {
 
 function groupPrograms(campaigns) {
   const list = Array.isArray(campaigns) ? campaigns : (campaigns?.campaigns || []);
-  const filtered = list.filter(
-    c => c.campaign_type === 'MARKETING' && c.state !== 'ARCHIVED'
-  );
+  const filtered = list.filter(c => c.state !== 'ARCHIVED');
   const groups = {};
   for (const c of filtered) {
-    const label = c.program_label || '(unlabeled)';
+    const label = c.campaign_type === 'MARKETING'
+      ? (c.program_label || '(unlabeled)')
+      : `[${c.campaign_type || 'UNKNOWN'}]`;
     if (!groups[label]) groups[label] = [];
     groups[label].push(c);
   }
@@ -25,7 +25,7 @@ function groupPrograms(campaigns) {
 
 export function programsCommand() {
   const cmd = new Command('programs')
-    .description('List programs and their campaigns')
+    .description('List all campaigns grouped by type (MARKETING by program label, others by campaign type)')
     .option('--all', 'Include NOT_LAUNCHED campaigns (default: LIVE only)')
     .action(async (opts) => {
       const token = resolveToken(opts);
@@ -39,6 +39,7 @@ export function programsCommand() {
             campaign_id: c.campaign_id,
             name: c.name,
             state: c.state,
+            campaign_type: c.campaign_type,
             theme_name: c.theme_name,
           })),
         }));

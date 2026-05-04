@@ -88,8 +88,13 @@ export function healthCommand() {
       if (filtered.length > 0) {
         if (!opts.json) console.log('\n\x1b[1mEmail Domains\x1b[0m\n');
 
-        for (const d of filtered) {
-          const v = await fetchEmailDomainValidation(d.id, token, opts.verbose);
+        const emailValidations = await Promise.all(
+          filtered.map(d => fetchEmailDomainValidation(d.id, token, opts.verbose))
+        );
+
+        for (let i = 0; i < filtered.length; i++) {
+          const d = filtered[i];
+          const v = emailValidations[i];
           if (v.domain_validation_status === 'FAIL') anyFail = true;
           results.email_domains.push({ domain: d.domain, validation: v });
 
@@ -127,9 +132,14 @@ export function healthCommand() {
       if (programsWithDomains.length > 0) {
         if (!opts.json) console.log('\x1b[1mProgram Domains\x1b[0m\n');
 
-        for (const p of programsWithDomains) {
+        const programValidations = await Promise.all(
+          programsWithDomains.map(p => fetchProgramDomainValidation(p.program_id || p.id, token, opts.verbose))
+        );
+
+        for (let i = 0; i < programsWithDomains.length; i++) {
+          const p = programsWithDomains[i];
           const id = p.program_id || p.id;
-          const v = await fetchProgramDomainValidation(id, token, opts.verbose);
+          const v = programValidations[i];
           if (v.domain_validation_status === 'FAIL') anyFail = true;
           results.program_domains.push({ program_id: id, name: p.name, validation: v });
 

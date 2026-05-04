@@ -17,5 +17,9 @@
     "node": ">=18"
   },
   "type": "module",
-  "private": true
+  "private": true,
+  "files": [
+    "bin",
+    "src"
+  ]
 }

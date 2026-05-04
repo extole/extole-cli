@@ -219,7 +219,11 @@ export function webhooksCommand() {
         console.error(`Error ${res.status}: ${text.slice(0, 300)}`);
         process.exit(1);
       }
-      const w = JSON.parse(text);
+      let w;
+      try { w = JSON.parse(text); } catch {
+        console.error(`Unexpected non-JSON response (${res.status}): ${text.slice(0, 200)}`);
+        process.exit(1);
+      }
       const webhookId = w.webhook_id || w.id;
 
       // Add state filters for REWARD webhooks
@@ -328,7 +332,11 @@ export function webhooksCommand() {
         });
         const text = await res.text();
         if (!res.ok) { console.error(`Error creating controller ${res.status}: ${text.slice(0, 300)}`); process.exit(1); }
-        const ctrl = JSON.parse(text);
+        let ctrl;
+        try { ctrl = JSON.parse(text); } catch {
+          console.error(`Unexpected non-JSON response creating controller: ${text.slice(0, 200)}`);
+          process.exit(1);
+        }
         controllerId = ctrl.id;
         if (!opts.json) console.log(`created controller: ${controllerId}`);
       } else {
@@ -353,7 +361,10 @@ export function webhooksCommand() {
       );
       const trigText = await trigRes.text();
       if (!trigRes.ok) { console.error(`Error adding trigger ${trigRes.status}: ${trigText.slice(0, 300)}`); process.exit(1); }
-      const trigger = JSON.parse(trigText);
+      let trigger;
+      try { trigger = JSON.parse(trigText); } catch {
+        console.error(`Unexpected non-JSON response adding trigger: ${trigText.slice(0, 200)}`); process.exit(1);
+      }
       if (!opts.json) console.log(`added trigger:      ${trigger.trigger_id}  (${opts.event} / ${opts.eventType.toUpperCase()})`);
 
       const actRes = await apiFetch(
@@ -368,7 +379,10 @@ export function webhooksCommand() {
       );
       const actText = await actRes.text();
       if (!actRes.ok) { console.error(`Error adding action ${actRes.status}: ${actText.slice(0, 300)}`); process.exit(1); }
-      const action = JSON.parse(actText);
+      let action;
+      try { action = JSON.parse(actText); } catch {
+        console.error(`Unexpected non-JSON response adding action: ${actText.slice(0, 200)}`); process.exit(1);
+      }
       if (!opts.json) console.log(`added action:       ${action.action_id}  (WEBHOOK / ${opts.quality.toUpperCase()})`);
 
       if (!opts.skipPublish) {
@@ -379,7 +393,10 @@ export function webhooksCommand() {
         });
         const pubText = await pubRes.text();
         if (!pubRes.ok) { console.error(`Error publishing ${pubRes.status}: ${pubText.slice(0, 300)}`); process.exit(1); }
-        const campaign = JSON.parse(pubText);
+        let campaign;
+        try { campaign = JSON.parse(pubText); } catch {
+          console.error(`Unexpected non-JSON response publishing: ${pubText.slice(0, 200)}`); process.exit(1);
+        }
         if (!opts.json) console.log(`published:          campaign ${opts.campaign}  state=${campaign.state}`);
       }
 
@@ -434,7 +451,10 @@ export function webhooksCommand() {
       });
       const wText = await wRes.text();
       if (!wRes.ok) { console.error(`Error creating webhook ${wRes.status}: ${wText.slice(0, 300)}`); process.exit(1); }
-      const webhook = JSON.parse(wText);
+      let webhook;
+      try { webhook = JSON.parse(wText); } catch {
+        console.error(`Unexpected non-JSON response creating webhook: ${wText.slice(0, 200)}`); process.exit(1);
+      }
       const webhookId = webhook.webhook_id || webhook.id;
       console.log(`created webhook:    ${webhookId}`);
 
@@ -450,7 +470,11 @@ export function webhooksCommand() {
         await apiFetch(`/v6/webhooks/${webhookId}`, token, { method: 'DELETE', baseUrl: API_BASE });
         console.error(`Error creating controller ${ctrlRes.status}: ${ctrlText.slice(0, 300)}`); process.exit(1);
       }
-      const ctrl = JSON.parse(ctrlText);
+      let ctrl;
+      try { ctrl = JSON.parse(ctrlText); } catch {
+        console.error(`Unexpected non-JSON response creating controller: ${ctrlText.slice(0, 200)}`);
+        process.exit(1);
+      }
       const controllerId = ctrl.id;
       console.log(`created controller: ${controllerId}`);
 
@@ -465,7 +489,10 @@ export function webhooksCommand() {
         await apiFetch(`/v6/webhooks/${webhookId}`, token, { method: 'DELETE', baseUrl: API_BASE });
         console.error(`Error adding trigger ${trigRes.status}: ${trigText.slice(0, 300)}`); process.exit(1);
       }
-      const trigger = JSON.parse(trigText);
+      let trigger;
+      try { trigger = JSON.parse(trigText); } catch {
+        console.error(`Unexpected non-JSON response adding trigger: ${trigText.slice(0, 200)}`); process.exit(1);
+      }
       console.log(`added trigger:      ${trigger.trigger_id}`);
 
       // Add webhook action
@@ -479,7 +506,10 @@ export function webhooksCommand() {
         await apiFetch(`/v6/webhooks/${webhookId}`, token, { method: 'DELETE', baseUrl: API_BASE });
         console.error(`Error adding action ${actRes.status}: ${actText.slice(0, 300)}`); process.exit(1);
       }
-      const action = JSON.parse(actText);
+      let action;
+      try { action = JSON.parse(actText); } catch {
+        console.error(`Unexpected non-JSON response adding action: ${actText.slice(0, 200)}`); process.exit(1);
+      }
       console.log(`added action:       ${action.action_id}`);
 
       // Publish
@@ -490,7 +520,10 @@ export function webhooksCommand() {
         await apiFetch(`/v6/webhooks/${webhookId}`, token, { method: 'DELETE', baseUrl: API_BASE });
         console.error(`Error publishing ${pubRes.status}: ${pubText.slice(0, 300)}`); process.exit(1);
       }
-      const campaign = JSON.parse(pubText);
+      let campaign;
+      try { campaign = JSON.parse(pubText); } catch {
+        console.error(`Unexpected non-JSON response publishing: ${pubText.slice(0, 200)}`); process.exit(1);
+      }
       console.log(`published:          campaign ${opts.campaign}  state=${campaign.state}`);
       console.log(`\nListening for "${opts.event}" dispatches... (Ctrl-C to stop and clean up)\n`);
 

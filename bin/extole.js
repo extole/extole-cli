@@ -4,14 +4,6 @@ import { readFileSync } from 'fs';
 import { fileURLToPath } from 'url';
 import { dirname, join } from 'path';
 import { Command } from 'commander';
-
-const __dirname = dirname(fileURLToPath(import.meta.url));
-const { version } = JSON.parse(readFileSync(join(__dirname, '../package.json'), 'utf8'));
-
-process.on('unhandledRejection', (err) => {
-  console.error(`Error: ${err?.message || err}`);
-  process.exit(1);
-});
 import { authCommand } from '../src/commands/auth.js';
 import { mcpCommand } from '../src/commands/mcp.js';
 import { pingCommand } from '../src/commands/ping.js';
@@ -26,6 +18,14 @@ import { webhooksCommand } from '../src/commands/webhooks.js';
 import { healthCommand } from '../src/commands/health.js';
 import { whoamiCommand } from '../src/commands/whoami.js';
 import { feedbackCommand } from '../src/commands/feedback.js';
+
+const __dirname = dirname(fileURLToPath(import.meta.url));
+const { version } = JSON.parse(readFileSync(join(__dirname, '../package.json'), 'utf8'));
+
+process.on('unhandledRejection', (err) => {
+  console.error(`Error: ${err?.message || err}`);
+  process.exit(1);
+});
 
 const program = new Command();
 

@@ -390,12 +390,49 @@ extole components create \
 
 # Print payload without creating (useful for verifying buildtime expressions)
 extole components create --name my_integration --campaign <id> --webhook-tag my-events --dry-run
-
-# Delete a component
-extole components delete <component-id>
 ```
 
 Each `--webhook-tag` generates a `javascript@buildtime` variable that resolves the webhook ID from the tag when the campaign is published. The component stores the resolved ID — not the tag — so there is no runtime tag lookup overhead. See `~/projects/webhook-component.md` for the full pattern including request scripts and payload mapping.
+
+### Deploying integration bundles
+
+`components deploy` bundles a local directory and uploads it to the platform. Use this for full integration components — `integration-v10.0`, `extension`, and similar typed bundles — where the component, its sub-components, webhooks, and evaluatable scripts all live together as a directory tree.
+
+```
+# Deploy a new bundle (creates its own campaign)
+extole components deploy --source ./my_integration
+
+# Deploy and publish immediately
+extole components deploy --source ./my_integration --publish
+
+# Update an existing component in place
+extole components deploy --source ./my_integration --component <component-id>
+
+# Update and publish
+extole components deploy --source ./my_integration --component <component-id> --publish
+
+# Preview what would be sent without uploading
+extole components deploy --source ./my_integration --dry-run
+
+# Show full API error details on failure
+extole components deploy --source ./my_integration --verbose
+```
+
+Running `deploy` without `--component` always creates a new campaign. Pass `--component` with the ID from the first deploy to update in place.
+
+Settings values can reference external files using `%{/path/to/file.js}%` — the CLI inlines the file content before uploading. Webhook `request` and `response_handler` scripts must start with `javascript@runtime:`; build-time-only values use `javascript@buildtime:`.
+
+### Deleting components
+
+```
+extole components delete <component-id>             # prompts for confirmation
+extole components delete <component-id> --confirm   # skip prompt (for scripts)
+extole components delete <component-id> --dry-run   # show what would be deleted
+```
+
+Deleting a root component archives its entire campaign. The CLI shows the component name and type and warns if it's a root before prompting.
+
+For a full walkthrough of the bundle format, sub-component structure, and deployment workflow, see `~/projects/extole-component-developer-guide-cli.md`.
 
 ## Feedback
 

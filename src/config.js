@@ -70,7 +70,3 @@ export function getSuClientForToken(token) {
 
 export const API_BASE = 'https://api.extole.io';
 export const AUTH_BASE = 'https://api.extole.com';
-
-// Deprecated aliases — use API_BASE
-export const BASE_URL = API_BASE;
-export const PERSON_BASE = API_BASE;

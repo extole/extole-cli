@@ -1,3 +1,9 @@
+import { readFileSync, writeFileSync, copyFileSync, mkdirSync, readdirSync, statSync, existsSync } from 'fs';
+import { mkdtempSync, rmSync } from 'fs';
+import { join, resolve, basename } from 'path';
+import { tmpdir } from 'os';
+import { execSync } from 'child_process';
+import { createInterface } from 'readline';
 import { Command } from 'commander';
 import { resolveToken, API_BASE } from '../config.js';
 import { apiJson, apiFetch } from '../api.js';
@@ -335,10 +341,41 @@ export function componentsCommand() {
   // ── delete ─────────────────────────────────────────────────────────────────
 
   const deleteCmd = new Command('delete')
-    .description('Delete a component by ID.')
+    .description('Delete a component by ID. Deleting the root component archives the entire campaign.')
     .argument('<component-id>', 'Component ID to delete')
+    .option('--confirm', 'Skip the interactive confirmation prompt')
+    .option('--dry-run', 'Show what would be deleted without deleting')
     .action(async (componentId, opts) => {
       const token = resolveToken(opts);
+
+      const c = await fetchComponent(componentId, token, opts.verbose);
+      const type = c.type || (c.types || [])[0] || '(unknown type)';
+      const name = c.display_name || c.name || componentId;
+      const isRoot = c.name === 'root';
+      const campaignId = c.campaign_id;
+
+      console.log(`component:  ${c.id}`);
+      console.log(`type:       ${type}`);
+      console.log(`name:       ${name}`);
+      if (campaignId) console.log(`campaign:   ${campaignId}`);
+      if (isRoot) console.log(`\nWarning: this is the root component — deleting it will archive the entire campaign.`);
+
+      if (opts.dryRun) {
+        console.log('\nDry run — nothing deleted.');
+        return;
+      }
+
+      if (!opts.confirm) {
+        const answer = await new Promise(res => {
+          const rl = createInterface({ input: process.stdin, output: process.stdout });
+          rl.question('\nDelete this component? [y/N] ', ans => { rl.close(); res(ans.trim().toLowerCase()); });
+        });
+        if (answer !== 'y' && answer !== 'yes') {
+          console.log('Cancelled.');
+          return;
+        }
+      }
+
       const res = await apiFetch(`/v1/components/${componentId}`, token, {
         method: 'DELETE',
         verbose: opts.verbose,
@@ -357,10 +394,175 @@ export function componentsCommand() {
     output: true,
     examples: [
       'extole components delete <component-id>',
+      'extole components delete <component-id> --dry-run',
+      'extole components delete <component-id> --confirm',
     ],
   });
 
   components.addCommand(deleteCmd);
 
+  // ── deploy ─────────────────────────────────────────────────────────────────
+
+  const deployCmd = new Command('deploy')
+    .description('Bundle a local component directory and upload it to the platform')
+    .requiredOption('--source <dir>', 'Local directory containing component.json (root of bundle)')
+    .option('--component <id>', 'Existing component ID to update (omit to create new)')
+    .option('--publish', 'Publish the campaign after uploading')
+    .option('--dry-run', 'Show resolved bundle file tree without uploading')
+    .action(async (opts) => {
+      const sourceDir = resolve(opts.source);
+      if (!existsSync(sourceDir)) {
+        console.error(`Error: source directory not found: ${sourceDir}`);
+        process.exit(2);
+      }
+      if (!existsSync(join(sourceDir, 'component.json'))) {
+        console.error(`Error: no component.json found in ${sourceDir}`);
+        process.exit(2);
+      }
+
+      const bundleName = basename(sourceDir);
+      const tmpDir = mkdtempSync(join(tmpdir(), 'extole-deploy-'));
+      const stagingDir = join(tmpDir, bundleName);
+      try {
+        processDir(sourceDir, stagingDir, sourceDir);
+
+        if (opts.dryRun) {
+          console.log('Bundle contents (includes resolved):');
+          listDir(stagingDir, tmpDir);
+          return;
+        }
+
+        const bundlePath = join(tmpDir, 'bundle.zip');
+        try {
+          execSync(`cd "${tmpDir}" && zip -r bundle.zip "${bundleName}"`, { stdio: 'pipe' });
+        } catch (e) {
+          console.error(`Error creating bundle zip: ${e.message}`);
+          process.exit(1);
+        }
+
+        const token = resolveToken(opts);
+        const zipBuffer = readFileSync(bundlePath);
+        const formData = new FormData();
+        formData.append('file', new Blob([zipBuffer], { type: 'application/zip' }), 'bundle.zip');
+
+        const isUpdate = !!opts.component;
+        const path = isUpdate ? `/v1/components/${opts.component}` : '/v1/components';
+        const method = isUpdate ? 'PUT' : 'POST';
+
+        process.stderr.write(`${isUpdate ? 'Updating' : 'Uploading'} bundle...\n`);
+        const res = await apiFetch(path, token, {
+          method,
+          body: formData,
+          verbose: opts.verbose,
+          baseUrl: API_BASE,
+        });
+        const text = await res.text();
+        if (!res.ok) {
+          try {
+            const errJson = JSON.parse(text);
+            const params = errJson?.parameters || {};
+            const detail = params.validation_result || params.details || errJson?.message || text;
+            console.error(`Error ${res.status}: ${errJson?.code || res.status}`);
+            console.error(detail);
+            if (opts.verbose) console.error(JSON.stringify(errJson, null, 2));
+          } catch {
+            console.error(`Error ${res.status}: ${text.slice(0, 2000)}`);
+          }
+          process.exit(1);
+        }
+
+        let component;
+        try { component = JSON.parse(text); } catch {
+          console.error(`Unexpected non-JSON response: ${text.slice(0, 200)}`);
+          process.exit(1);
+        }
+
+        const campaignId = component.campaign_id;
+        if (opts.json) {
+          printJson(component, opts);
+        } else {
+          console.log(`component:  ${component.id}`);
+          console.log(`name:       ${component.name || ''}`);
+          if (campaignId) console.log(`campaign:   ${campaignId}`);
+          if (component.campaign_state) console.log(`state:      ${component.campaign_state}`);
+          if (!opts.publish) console.log(`\nStaged as draft. Publish via my.extole or re-run with --publish.`);
+        }
+
+        if (opts.publish) {
+          if (!campaignId) {
+            console.error('Warning: cannot publish — no campaign_id in response');
+          } else {
+            const pubRes = await apiFetch(`/v2/campaigns/${campaignId}/publish`, token, {
+              method: 'POST',
+              body: JSON.stringify({}),
+              verbose: opts.verbose,
+              baseUrl: API_BASE,
+            });
+            if (!pubRes.ok) {
+              const pubText = await pubRes.text();
+              console.error(`Warning: uploaded but publish failed ${pubRes.status}: ${pubText.slice(0, 300)}`);
+            } else {
+              console.log(`published`);
+            }
+          }
+        }
+      } finally {
+        rmSync(tmpDir, { recursive: true, force: true });
+      }
+    });
+
+  addGlobalOptions(deployCmd, {
+    output: true,
+    examples: [
+      'extole components deploy --source ./my_integration',
+      'extole components deploy --source ./my_integration --publish',
+      'extole components deploy --source ./my_integration --component <id>',
+      'extole components deploy --source ./my_integration --dry-run',
+    ],
+  });
+
+  components.addCommand(deployCmd);
+
   return components;
+}
+
+function processDir(srcDir, destDir, bundleRoot) {
+  mkdirSync(destDir, { recursive: true });
+  for (const entry of readdirSync(srcDir)) {
+    const srcPath = join(srcDir, entry);
+    const destPath = join(destDir, entry);
+    if (statSync(srcPath).isDirectory()) {
+      processDir(srcPath, destPath, bundleRoot);
+    } else if (entry === 'component.json') {
+      let content = readFileSync(srcPath, 'utf8');
+      content = content.replace(/%\{([^}]+)\}%/g, (_, filePath) => {
+        const abs = join(bundleRoot, filePath.startsWith('/') ? filePath.slice(1) : filePath);
+        try {
+          return readFileSync(abs, 'utf8')
+            .replace(/\\/g, '\\\\')
+            .replace(/"/g, '\\"')
+            .replace(/\r\n/g, '\\n')
+            .replace(/\n/g, '\\n')
+            .replace(/\r/g, '\\n')
+            .replace(/\t/g, '\\t');
+        } catch {
+          throw new Error(`Cannot resolve include "${filePath}" in ${srcPath}`);
+        }
+      });
+      writeFileSync(destPath, content);
+    } else {
+      copyFileSync(srcPath, destPath);
+    }
+  }
+}
+
+function listDir(dir, root) {
+  for (const entry of readdirSync(dir)) {
+    const p = join(dir, entry);
+    if (statSync(p).isDirectory()) {
+      listDir(p, root);
+    } else {
+      console.log(`  ${p.slice(root.length + 1)}`);
+    }
+  }
 }
