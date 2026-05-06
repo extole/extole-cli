@@ -60,7 +60,8 @@ export function rewardsCommand() {
       const rewards = await apiJson(`/v5/persons/${match.id}/rewards?${params}`, token, { verbose: opts.verbose, baseUrl: API_BASE });
 
       if (!Array.isArray(rewards) || rewards.length === 0) {
-        console.error(`No rewards found for ${opts.email}`);
+        const suffix = opts.status ? ` with state=${opts.status.toUpperCase()}` : '';
+        console.error(`No rewards found for ${opts.email} (person ID: ${match.id})${suffix}`);
         return;
       }
 

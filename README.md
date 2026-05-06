@@ -75,6 +75,10 @@ extole rewards get <reward_id> --json
 
 Reward states: `EARNED`, `FULFILLED`, `SENT`, `REDEEMED`, `CANCELED`, `FAILED`, `EXPIRED`
 
+Error messages are unambiguous about whether the person exists:
+- `No person found for jane@example.com` — email not in Extole
+- `No rewards found for jane@example.com (person ID: abc123)` — person exists, genuinely zero rewards
+
 ## Programs
 
 ```
