@@ -18,6 +18,7 @@ import { webhooksCommand } from '../src/commands/webhooks.js';
 import { healthCommand } from '../src/commands/health.js';
 import { whoamiCommand } from '../src/commands/whoami.js';
 import { feedbackCommand } from '../src/commands/feedback.js';
+import { zonesCommand } from '../src/commands/zones.js';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const { version } = JSON.parse(readFileSync(join(__dirname, '../package.json'), 'utf8'));
@@ -50,5 +51,6 @@ program.addCommand(healthCommand());
 program.addCommand(reportsCommand());
 program.addCommand(mcpCommand());
 program.addCommand(feedbackCommand());
+program.addCommand(zonesCommand());
 
 program.parse();
