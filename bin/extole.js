@@ -19,7 +19,7 @@ import { healthCommand } from '../src/commands/health.js';
 import { whoamiCommand } from '../src/commands/whoami.js';
 import { feedbackCommand } from '../src/commands/feedback.js';
 import { zonesCommand } from '../src/commands/zones.js';
-import { shareablesCommand } from '../src/commands/shareables.js';
+import { shareLinksCommand } from '../src/commands/share-links.js';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const { version } = JSON.parse(readFileSync(join(__dirname, '../package.json'), 'utf8'));
@@ -53,6 +53,6 @@ program.addCommand(reportsCommand());
 program.addCommand(mcpCommand());
 program.addCommand(feedbackCommand());
 program.addCommand(zonesCommand());
-program.addCommand(shareablesCommand());
+program.addCommand(shareLinksCommand());
 
 program.parse();

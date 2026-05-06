@@ -473,6 +473,20 @@ extole auth mcp-login
 
 Opens a browser for login. Token is saved automatically and refreshed as needed. Re-run `mcp-login` if the session expires.
 
+## Share Links
+
+```
+extole share-links --email jane@example.com
+extole share-links --email jane@example.com --label credit-cards
+extole share-links --email jane@example.com --json
+```
+
+Returns the share links for a person — label, code, and full URL. Use `--label` to filter when a person has links across multiple programs (e.g. verifying a backfill wrote the correct label).
+
+Error messages distinguish person-not-found from person-has-no-links:
+- `No person found for jane@example.com` — email not in Extole
+- `No share links found for jane@example.com (person ID: abc123)` — person exists, no links
+
 ## Output conventions
 
 - Human-readable by default; `--json` on all commands

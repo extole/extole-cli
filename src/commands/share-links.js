@@ -5,9 +5,9 @@ import { printJson } from '../output.js';
 import { addGlobalOptions, isValidEmail } from '../utils.js';
 import { findPerson } from '../person-api.js';
 
-export function shareablesCommand() {
-  const cmd = new Command('shareables')
-    .description('Look up shareables (share links) by email')
+export function shareLinksCommand() {
+  const cmd = new Command('share-links')
+    .description('Look up share links by email')
     .allowExcessArguments(false)
     .option('--email <email>', 'Email address to look up')
     .option('--label <label>', 'Filter by label')
@@ -31,26 +31,26 @@ export function shareablesCommand() {
       const all = await apiJson(`/v5/persons/${match.id}/shareables`, token, { verbose: opts.verbose, baseUrl: API_BASE });
 
       if (!Array.isArray(all) || all.length === 0) {
-        console.error(`No shareables found for ${opts.email} (person ID: ${match.id})`);
+        console.error(`No share links found for ${opts.email} (person ID: ${match.id})`);
         return;
       }
 
-      const shareables = opts.label
+      const links = opts.label
         ? all.filter(s => s.label === opts.label || s.key === opts.label)
         : all;
 
-      if (shareables.length === 0) {
-        console.error(`No shareables found for ${opts.email} with label=${opts.label}`);
+      if (links.length === 0) {
+        console.error(`No share links found for ${opts.email} with label=${opts.label}`);
         return;
       }
 
       if (opts.json) {
-        printJson(shareables, opts);
+        printJson(links, opts);
         return;
       }
 
-      const labelW = Math.max(5, ...shareables.map(s => (s.label || '').length));
-      const codeW  = Math.max(4, ...shareables.map(s => (s.code  || '').length));
+      const labelW = Math.max(5, ...links.map(s => (s.label || '').length));
+      const codeW  = Math.max(4, ...links.map(s => (s.code  || '').length));
 
       console.log(
         'label'.padEnd(labelW) + '  ' +
@@ -59,7 +59,7 @@ export function shareablesCommand() {
       );
       console.log('─'.repeat(labelW) + '  ' + '─'.repeat(codeW) + '  ' + '─'.repeat(40));
 
-      for (const s of shareables) {
+      for (const s of links) {
         console.log(
           (s.label || '').padEnd(labelW) + '  ' +
           (s.code  || '').padEnd(codeW)  + '  ' +
@@ -71,9 +71,9 @@ export function shareablesCommand() {
   return addGlobalOptions(cmd, {
     output: true,
     examples: [
-      'extole shareables --email jane@example.com',
-      'extole shareables --email jane@example.com --label credit-cards',
-      'extole shareables --email jane@example.com --json',
+      'extole share-links --email jane@example.com',
+      'extole share-links --email jane@example.com --label credit-cards',
+      'extole share-links --email jane@example.com --json',
     ],
   });
 }
