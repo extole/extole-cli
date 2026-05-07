@@ -1,6 +1,6 @@
 import { Command } from 'commander';
-import { resolveToken } from '../config.js';
-import { apiFetch } from '../api.js';
+import { resolveToken, API_BASE } from '../config.js';
+import { apiFetch, apiJson } from '../api.js';
 import { printJson, printJsonText } from '../output.js';
 import { collect, sleep, addGlobalOptions, POLL_INTERVAL_MS, isValidEmail, formatEventTime } from '../utils.js';
 import { findPerson, getPersonSteps } from '../person-api.js';
@@ -22,6 +22,9 @@ export function eventsCommand() {
     .option('--dry-run', 'Print request payload without sending')
     .option('--watch', 'After firing, tail the event stream for this email for 15s')
     .option('--watch-timeout <seconds>', 'How long to tail when using --watch', '15')
+    .option('--route', 'After firing, trace which campaigns the event reached. Requires --email.')
+    .option('--route-timeout <seconds>', 'Seconds to wait for steps to appear when using --route', '8')
+    .option('--route-webhook <id>', 'With --route, also check this webhook for dispatches caused by the event')
     .action(async (eventName, opts) => {
       if (opts.live && opts.sandbox) {
         console.error('Error: --live and --sandbox are mutually exclusive.');
@@ -68,6 +71,130 @@ export function eventsCommand() {
         printJsonText(text, opts);
       } else {
         console.error(`OK  ${res.status}  fired ${eventName}`);
+      }
+
+      let firedEventId = null;
+      try { firedEventId = JSON.parse(text)?.id || null; } catch { /* ignore */ }
+
+      if (opts.route) {
+        if (opts.watch) {
+          console.error('Error: --route and --watch are mutually exclusive.');
+          process.exit(2);
+        }
+        if (!opts.email) {
+          console.error('Error: --route requires --email.');
+          process.exit(2);
+        }
+        if (!firedEventId) {
+          console.error('Error: could not extract event ID from fire response — cannot trace route.');
+          process.exit(1);
+        }
+
+        const routeTimeout = parseInt(opts.routeTimeout, 10);
+        if (isNaN(routeTimeout) || routeTimeout <= 0) {
+          console.error('--route-timeout must be a positive integer');
+          process.exit(2);
+        }
+
+        const match = await findPerson(opts.email, token, opts.verbose);
+        if (!match) {
+          console.error(`No person found for ${opts.email} — cannot trace route`);
+          process.exit(1);
+        }
+
+        console.error(`\nTracing route for event ${firedEventId} (waiting up to ${routeTimeout}s for steps)...`);
+
+        const deadline = Date.now() + routeTimeout * 1000;
+        const stepsById = new Map();
+        let stableCount = 0;
+        while (Date.now() < deadline) {
+          await sleep(POLL_INTERVAL_MS);
+          let steps = [];
+          try {
+            steps = await getPersonSteps(match.id, token, 200, opts.verbose);
+          } catch (e) {
+            console.error(`poll error: ${e.message}`);
+            continue;
+          }
+          const sizeBefore = stepsById.size;
+          for (const s of (steps || [])) {
+            if (s.cause_event_id === firedEventId || s.root_event_id === firedEventId) {
+              stepsById.set(s.id, s);
+            }
+          }
+          if (stepsById.size === sizeBefore && stepsById.size > 0) {
+            stableCount++;
+            if (stableCount >= 2) break;
+          } else {
+            stableCount = 0;
+          }
+        }
+
+        const allSteps = [...stepsById.values()];
+        const campaignSteps = allSteps.filter(s => s.campaign_id);
+        const orphanSteps  = allSteps.filter(s => !s.campaign_id);
+
+        if (allSteps.length === 0) {
+          console.log(`\nNo steps caused by event ${firedEventId} after ${routeTimeout}s.`);
+          console.log('  → event was not accepted, or processing has not completed. Try increasing --route-timeout.');
+        } else if (campaignSteps.length === 0) {
+          console.log(`\nNo campaigns matched.`);
+          console.log(`  → event was accepted (${orphanSteps.length} processing step(s) recorded), but no campaign was triggered.`);
+          console.log('  → check campaign targeting: program_label, audience filters, sandbox vs live, journey assignment.');
+        } else {
+          const byCampaign = new Map();
+          for (const s of campaignSteps) {
+            if (!byCampaign.has(s.campaign_id)) byCampaign.set(s.campaign_id, []);
+            byCampaign.get(s.campaign_id).push(s);
+          }
+
+          console.log(`\nReached ${byCampaign.size} campaign(s):\n`);
+          for (const [campaignId, steps] of byCampaign) {
+            const program = steps[0].program || '';
+            console.log(`  Campaign ${campaignId}${program ? `  (${program})` : ''}`);
+            const sorted = steps.slice().sort((a, b) =>
+              new Date(a.event_date || a.created_date) - new Date(b.event_date || b.created_date)
+            );
+            for (const s of sorted) {
+              const time = formatEventTime(s.event_date || s.created_date);
+              console.log(`    ${time}  ${s.name || ''}`);
+            }
+            console.log('');
+          }
+
+          if (orphanSteps.length > 0) {
+            console.log(`  (plus ${orphanSteps.length} pre-campaign processing step(s))\n`);
+          }
+        }
+
+        if (opts.routeWebhook) {
+          console.log(`Checking webhook ${opts.routeWebhook} for dispatches...`);
+          let dispatches = [];
+          try {
+            dispatches = await apiJson(
+              `/v6/webhooks/${opts.routeWebhook}/dispatch-results/recent?limit=50`,
+              token,
+              { verbose: opts.verbose, baseUrl: API_BASE }
+            );
+          } catch (e) {
+            console.log(`  → could not fetch dispatches: ${e.message}`);
+          }
+          const list = Array.isArray(dispatches) ? dispatches : (dispatches?.results || []);
+          const matching = list.filter(d => d.cause_event_id === firedEventId);
+          if (matching.length === 0) {
+            console.log(`  → no dispatches found for cause_event_id=${firedEventId}`);
+            console.log(`    (webhook had ${list.length} recent dispatches, none caused by this event)`);
+          } else {
+            for (const d of matching) {
+              const status = d.response_status_code || 'no-response';
+              const attempts = d.attempt_count != null ? `  attempts=${d.attempt_count}` : '';
+              const url = d.url ? `  ${d.url}` : '';
+              console.log(`  ✓ status=${status}${attempts}${url}`);
+            }
+          }
+        }
+
+        return;
       }
 
       if (!opts.watch) return;
@@ -131,6 +258,8 @@ export function eventsCommand() {
       'extole events fire lead_created --email jane@example.com --sandbox',
       'extole events fire conversion -p amount=500 --live',
       'extole events fire lead_created --email jane@example.com --live --watch',
+      'extole events fire lead_created --email jane@example.com --live --route',
+      'extole events fire signed_up --email jane@example.com --live --route --route-webhook <id>',
     ],
   });
 

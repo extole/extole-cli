@@ -280,11 +280,39 @@ extole events fire <event_name> --param key=value [--param key=value ...] --live
 extole events fire <event_name> --dry-run                     # print payload without sending
 extole events fire <event_name> --live --watch                # fire then tail steps for --email for 15s
 extole events fire <event_name> --live --watch --watch-timeout 30
+
+extole events fire <event_name> --email <e> --live --route                         # trace which campaigns the event reached
+extole events fire <event_name> --email <e> --live --route --route-webhook <id>    # also check that webhook for dispatches caused by this event
+extole events fire <event_name> --email <e> --live --route --route-timeout 15      # wait longer for slower processing
 ```
 
 Either `--live` or `--sandbox` is required to send an event. Use `--dry-run` to preview the payload safely.
 
 `--sandbox` adds a `sandbox` param to the event data (default: `production-test`). Pass a value to target a different sandbox: `--sandbox my-sandbox`.
+
+### Route tracing (`--route`)
+
+Use `--route` after firing to see exactly which campaigns the event reached. Steps are filtered by `cause_event_id` matching the fired event, then grouped by campaign:
+
+```
+Reached 1 campaign(s):
+
+  Campaign 6864724277439576317  (credit-cards)
+    16:20:02  advocate_code_created
+    16:20:02  advocate_mobile_experience_rendered
+```
+
+If the event was accepted but no campaign matched, the output is explicit:
+
+```
+No campaigns matched.
+  → event was accepted (5 processing step(s) recorded), but no campaign was triggered.
+  → check campaign targeting: program_label, audience filters, sandbox vs live, journey assignment.
+```
+
+That message is the diagnostic for the most common debugging case: "I fired the event, I saw it in the stream, but my webhook didn't fire" — meaning the event got accepted but no campaign's targeting rules matched.
+
+Pair with `--route-webhook <id>` to also check whether a specific webhook dispatched for this event. The webhook's recent dispatches are filtered client-side by `cause_event_id`.
 
 ## Person
 
