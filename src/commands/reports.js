@@ -78,7 +78,7 @@ export function reportsCommand() {
     .allowExcessArguments(false)
     .action(async (opts) => {
       const token = resolveToken(opts);
-      const data = await apiJson('/v4/report-types', token, { verbose: opts.verbose });
+      const data = await apiJson('/v6/report-types', token, { verbose: opts.verbose });
       const types = Array.isArray(data) ? data : (data.report_types || []);
       if (opts.json) {
         printJson(types, opts);
@@ -195,7 +195,7 @@ export function reportsCommand() {
         process.exit(2);
       }
       const token = resolveToken(opts);
-      const data = await apiJson(`/v4/report-types/${encodeURIComponent(opts.type)}`, token, { verbose: opts.verbose });
+      const data = await apiJson(`/v6/report-types/${encodeURIComponent(opts.type)}`, token, { verbose: opts.verbose });
 
       if (opts.json) {
         printJson(data, opts);

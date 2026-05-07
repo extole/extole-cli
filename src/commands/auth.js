@@ -258,7 +258,7 @@ Examples:
       console.log(`Token:   ${masked}`);
       try {
         const start = Date.now();
-        await apiJson('/v4/report-types?limit=1', token);
+        await apiJson('/v6/report-types?limit=1', token);
         const ms = Date.now() - start;
         console.log(`Ping:    ${ms}ms — OK`);
       } catch (e) {

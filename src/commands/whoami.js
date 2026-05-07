@@ -28,7 +28,7 @@ export function whoamiCommand() {
         if (opts.ping && token) {
           try {
             const start = Date.now();
-            const res = await apiFetch('/v4/report-types?limit=1', token, { verbose: opts.verbose });
+            const res = await apiFetch('/v6/report-types?limit=1', token, { verbose: opts.verbose });
             pingMs = Date.now() - start;
             pingOk = res.ok;
           } catch (e) {
