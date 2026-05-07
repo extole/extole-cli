@@ -302,15 +302,27 @@ Reached 1 campaign(s):
     16:20:02  advocate_mobile_experience_rendered
 ```
 
-If the event was accepted but no campaign matched, the output is explicit:
+If no campaign matched, `--route` checks `/v2/campaigns/built` to determine *why* and reports the actual cause rather than speculating:
 
+**Case A — event isn't wired to any campaign:**
+```
+No steps caused by event 7637... after 8s.
+  → cause: no campaign subscribes to event "lead_created". The event has no controllers wired to it.
+  → fix: attach a webhook to a campaign with --event lead_created, or check that an existing controller's event_names actually includes this name.
+```
+
+**Case B — campaigns subscribe but targeting filtered the person out:**
 ```
 No campaigns matched.
   → event was accepted (5 processing step(s) recorded), but no campaign was triggered.
-  → check campaign targeting: program_label, audience filters, sandbox vs live, journey assignment.
+  → 4 campaign(s) DO subscribe to "signed_up" but none triggered for this person. Likely a targeting filter.
+  → LIVE subscribers (2):
+      68647...  Loans
+      76264...  Refer a Friend with Branch
+  → check: program_label, audience filters, sandbox vs live, journey assignment for the matching campaigns.
 ```
 
-That message is the diagnostic for the most common debugging case: "I fired the event, I saw it in the stream, but my webhook didn't fire" — meaning the event got accepted but no campaign's targeting rules matched.
+This distinction is the difference between "your wiring is wrong" and "your wiring is right but a filter excluded the test person" — two very different fixes.
 
 Pair with `--route-webhook <id>` to also check whether a specific webhook dispatched for this event. The webhook's recent dispatches are filtered client-side by `cause_event_id`.
 

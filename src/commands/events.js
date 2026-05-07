@@ -134,13 +134,62 @@ export function eventsCommand() {
         const campaignSteps = allSteps.filter(s => s.campaign_id);
         const orphanSteps  = allSteps.filter(s => !s.campaign_id);
 
+        const findSubscribers = async () => {
+          try {
+            const built = await apiJson('/v2/campaigns/built', token, { verbose: opts.verbose, baseUrl: API_BASE });
+            const list = Array.isArray(built) ? built : [];
+            const subs = [];
+            for (const c of list) {
+              const matched = (c.steps || []).some(step =>
+                (step.triggers || []).some(trig => (trig.event_names || []).includes(eventName))
+              );
+              if (matched) subs.push({ id: c.campaign_id, name: c.name, state: c.state });
+            }
+            return subs;
+          } catch (e) {
+            console.log(`  → could not check event subscribers: ${e.message}`);
+            return null;
+          }
+        };
+
+        const reportSubscribers = (subscribers) => {
+          if (subscribers === null) return;
+          if (subscribers.length === 0) {
+            console.log(`  → cause: no campaign subscribes to event "${eventName}". The event has no controllers wired to it.`);
+            console.log(`  → fix: attach a webhook to a campaign with --event ${eventName}, or check that an existing controller's event_names actually includes this name.`);
+          } else {
+            const live = subscribers.filter(s => s.state === 'LIVE');
+            const others = subscribers.filter(s => s.state !== 'LIVE');
+            console.log(`  → ${subscribers.length} campaign(s) DO subscribe to "${eventName}" but none triggered for this person. Likely a targeting filter.`);
+            if (live.length) {
+              console.log(`  → LIVE subscribers (${live.length}):`);
+              for (const s of live.slice(0, 8)) console.log(`      ${s.id}  ${s.name}`);
+            }
+            if (others.length) {
+              console.log(`  → Non-LIVE subscribers (${others.length}): may not process events depending on state.`);
+              for (const s of others.slice(0, 4)) console.log(`      ${s.id}  ${s.name}  [${s.state}]`);
+            }
+            console.log(`  → check: program_label, audience filters, sandbox vs live, journey assignment for the matching campaigns.`);
+          }
+        };
+
         if (allSteps.length === 0) {
           console.log(`\nNo steps caused by event ${firedEventId} after ${routeTimeout}s.`);
-          console.log('  → event was not accepted, or processing has not completed. Try increasing --route-timeout.');
+          const subscribers = await findSubscribers();
+          if (subscribers !== null && subscribers.length === 0) {
+            reportSubscribers(subscribers);
+          } else {
+            console.log('  → event may have been rejected, processing may be incomplete, or the API call did not produce step records.');
+            console.log('  → try increasing --route-timeout, or fire with --verbose to see the API response.');
+            if (subscribers !== null && subscribers.length > 0) {
+              console.log(`  → ${subscribers.length} campaign(s) subscribe to "${eventName}" but no steps were generated — unusual; try --route-timeout 30.`);
+            }
+          }
         } else if (campaignSteps.length === 0) {
           console.log(`\nNo campaigns matched.`);
           console.log(`  → event was accepted (${orphanSteps.length} processing step(s) recorded), but no campaign was triggered.`);
-          console.log('  → check campaign targeting: program_label, audience filters, sandbox vs live, journey assignment.');
+          const subscribers = await findSubscribers();
+          reportSubscribers(subscribers);
         } else {
           const byCampaign = new Map();
           for (const s of campaignSteps) {
