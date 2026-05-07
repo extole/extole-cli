@@ -143,12 +143,42 @@ export function eventsCommand() {
               const matched = (c.steps || []).some(step =>
                 (step.triggers || []).some(trig => (trig.event_names || []).includes(eventName))
               );
-              if (matched) subs.push({ id: c.campaign_id, name: c.name, state: c.state });
+              if (matched) subs.push({
+                id: c.campaign_id,
+                name: c.name,
+                state: c.state,
+                program_label: c.program_label || null,
+              });
             }
             return subs;
           } catch (e) {
             console.log(`  → could not check event subscribers: ${e.message}`);
             return null;
+          }
+        };
+
+        const compareEventVsSubscribers = (sample, subscribers) => {
+          if (!sample || !subscribers || subscribers.length === 0) return;
+          const live = subscribers.filter(s => s.state === 'LIVE');
+          if (live.length === 0) return;
+
+          console.log('');
+          console.log(`  → event landed: container=${sample.container || '?'}  program=${sample.program || 'none'}  journey=${sample.journey_name || 'none'}`);
+
+          if (!sample.program) {
+            const labels = [...new Set(live.map(s => s.program_label).filter(Boolean))];
+            if (labels.length > 0) {
+              console.log(`  → likely cause: the event landed unattributed to any program, but LIVE subscribers are program-scoped: {${labels.join(', ')}}. Program-scoped campaigns only process events tagged with their program_label.`);
+              console.log(`  → program assignment usually comes from a label injector, the person's journey membership, or a matching site_pattern — not the event payload alone. Verify the integration's pre-event data setup.`);
+            }
+          }
+
+          if (!sample.journey_name) {
+            console.log(`  → also: event has no journey assignment. Campaigns scoped to a specific journey (ADVOCATE / FRIEND) require the person to be enrolled in that journey first.`);
+          }
+
+          if (sample.container === 'test' && opts.sandbox) {
+            console.log(`  → also: --sandbox routed to container=test. By default campaigns accept both containers, but if a LIVE campaign has been restricted to container=production it won't see this event. Check campaign config if other diagnostics don't explain the miss.`);
           }
         };
 
@@ -190,6 +220,7 @@ export function eventsCommand() {
           console.log(`  → event was accepted (${orphanSteps.length} processing step(s) recorded), but no campaign was triggered.`);
           const subscribers = await findSubscribers();
           reportSubscribers(subscribers);
+          compareEventVsSubscribers(orphanSteps[0], subscribers);
         } else {
           const byCampaign = new Map();
           for (const s of campaignSteps) {
