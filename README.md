@@ -307,36 +307,35 @@ If no campaign matched, `--route` checks `/v2/campaigns/built` to determine *why
 **Case A — event isn't wired to any campaign:**
 ```
 No steps caused by event 7637... after 8s.
-  → cause: no campaign subscribes to event "lead_created". The event has no controllers wired to it.
+  → cause: no campaign uses event "lead_created". The event has no controllers wired to it.
   → fix: attach a webhook to a campaign with --event lead_created, or check that an existing controller's event_names actually includes this name.
 ```
 
-**Case B — campaigns subscribe but targeting filtered the person out:**
+**Case B — campaigns use the event but targeting filtered the person out:**
 ```
 No campaigns matched.
   → event was accepted (5 processing step(s) recorded), but no campaign was triggered.
-  → 4 campaign(s) DO subscribe to "signed_up" but none triggered for this person.
-  → LIVE subscribers (2):
+  → 4 campaign(s) DO use "signed_up" but none triggered for this person.
+  → LIVE campaigns using this event (2):
       68647...  Loans                       program=loans                journey=participant
       76264...  Refer a Friend with Branch  program=refer-a-member-flow  journey=FRIEND|participant
 
   → person is in: ADVOCATE@credit-cards
-  → LIVE subscribers require journey ∈ {participant, FRIEND}
-  → cause: no overlap. Person isn't enrolled in any journey that the subscribing campaigns target.
+  → LIVE campaigns using this event require journey ∈ {participant, FRIEND}
+  → cause: no overlap. Person isn't enrolled in any journey that the campaigns using this event target.
 
-  → referral flow detected: subscribers require friend-side journey {FRIEND, participant}.
-     friend-side events only fire for people who arrived via a share link. To exercise this end-to-end:
-       1. advocate shares a link
-       2. friend visits the link  (creates the friend-journey membership tied to the advocate)
-       3. friend fires this event  (now with referral context)
+  → friend-side journey required: FRIEND, participant. Person must be enrolled in one of these for the event to qualify them.
+     typical enrollment path: advocate share → friend visits link → friend journey created.
+     other paths exist (direct API enrollment, custom journey assignment, integration-driven membership).
+     to test: simulate the share→click flow, or fire as an email already enrolled in one of these journeys.
 
-  Probing 2 webhook(s) attached to subscribing campaigns:
-    edb70dc4...  → 0 dispatches caused by this event  (0 recent dispatches on this webhook)
+  Probing 2 webhook(s) attached to campaigns using this event:
+    edb70dc4...  HubSpot Advocate Sync  → 0 dispatches caused by this event  (0 recent dispatches on this webhook)
 ```
 
 This distinction is the difference between "your wiring is wrong" and "your wiring is right but a filter excluded the test person" — two very different fixes.
 
-`--route` automatically discovers webhooks attached to subscribing campaigns and probes each for dispatches caused by the fired event. Use `--route-webhook <id>` to override and check a specific webhook directly.
+`--route` automatically discovers webhooks attached to campaigns using this event and probes each for dispatches caused by the fired event. Use `--route-webhook <id>` to override and check a specific webhook directly.
 
 ## Person
 

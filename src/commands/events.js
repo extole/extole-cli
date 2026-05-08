@@ -103,7 +103,7 @@ export function eventsCommand() {
           console.error(`\nThe fire succeeded (HTTP 200), but person lookup didn't return a record for ${opts.email}.`);
           console.error(`  → most likely: identity-key index hasn't propagated yet (race after fire — common right after first contact)`);
           console.error(`  → less likely: the email is genuinely new and not yet indexed, or has lookup ambiguity`);
-          console.error(`  → person-level diagnostics (step trace, journey check) are skipped; running subscriber-only diagnostics`);
+          console.error(`  → person-level diagnostics (step trace, journey check) are skipped; running campaign-wiring diagnostics only`);
         }
 
         const deadline = Date.now() + routeTimeout * 1000;
@@ -214,16 +214,16 @@ export function eventsCommand() {
 
           console.log('');
           if (personJourneys.length === 0) {
-            console.log(`  → cause: person has no journey memberships, but LIVE subscribers require {${[...requiredJourneys].join(', ')}}.`);
+            console.log(`  → cause: person has no journey memberships, but LIVE campaigns using this event require {${[...requiredJourneys].join(', ')}}.`);
             foundJourneyBlocker = true;
           } else {
             const personDescription = personJourneys
               .map(j => `${j.name}${j.program ? `@${j.program}` : ''}`)
               .join(', ');
             console.log(`  → person is in: ${personDescription}`);
-            console.log(`  → LIVE subscribers require journey ∈ {${[...requiredJourneys].join(', ')}}`);
+            console.log(`  → LIVE campaigns using this event require journey ∈ {${[...requiredJourneys].join(', ')}}`);
             if (overlap.length === 0) {
-              console.log(`  → cause: no overlap. Person isn't enrolled in any journey that the subscribing campaigns target.`);
+              console.log(`  → cause: no overlap. Person isn't enrolled in any journey that the campaigns using this event target.`);
               foundJourneyBlocker = true;
             } else {
               console.log(`  → overlap: {${overlap.join(', ')}} — journey is satisfied; the miss is from another targeting filter.`);
@@ -342,7 +342,7 @@ export function eventsCommand() {
           if (!sample.program) {
             const labels = [...new Set(live.map(s => s.program_label).filter(Boolean))];
             if (labels.length > 0) {
-              console.log(`  → likely cause: the event landed unattributed to any program, but LIVE subscribers are program-scoped: {${labels.join(', ')}}. Program-scoped campaigns only process events tagged with their program_label.`);
+              console.log(`  → likely cause: the event landed unattributed to any program, but LIVE campaigns using this event are program-scoped: {${labels.join(', ')}}. Program-scoped campaigns only process events tagged with their program_label.`);
               console.log(`  → program assignment usually comes from a label injector, the person's journey membership, or a matching site_pattern — not the event payload alone. Verify the integration's pre-event data setup.`);
               foundProgramBlocker = true;
             }
@@ -372,18 +372,18 @@ export function eventsCommand() {
         const reportSubscribers = (subscribers) => {
           if (subscribers === null) return;
           if (subscribers.length === 0) {
-            console.log(`  → cause: no campaign subscribes to event "${eventName}". The event has no controllers wired to it.`);
+            console.log(`  → cause: no campaign uses event "${eventName}". The event has no controllers wired to it.`);
             console.log(`  → fix: attach a webhook to a campaign with --event ${eventName}, or check that an existing controller's event_names actually includes this name.`);
           } else {
             const live = subscribers.filter(s => s.state === 'LIVE');
             const others = subscribers.filter(s => s.state !== 'LIVE');
-            console.log(`  → ${subscribers.length} campaign(s) DO subscribe to "${eventName}" but none triggered for this person.`);
+            console.log(`  → ${subscribers.length} campaign(s) DO use "${eventName}" but none triggered for this person.`);
             if (live.length) {
-              console.log(`  → LIVE subscribers (${live.length}):`);
+              console.log(`  → LIVE campaigns using this event (${live.length}):`);
               for (const s of live.slice(0, 8)) console.log(formatSubscriberLine(s));
             }
             if (others.length) {
-              console.log(`  → Non-LIVE subscribers (${others.length}): may not process events depending on state.`);
+              console.log(`  → Non-LIVE campaigns using this event (${others.length}): may not process events depending on state.`);
               for (const s of others.slice(0, 4)) console.log(`${formatSubscriberLine(s)}  [${s.state}]`);
             }
           }
@@ -393,19 +393,19 @@ export function eventsCommand() {
           console.log(`\n[Subscriber wiring check — person diagnostics skipped due to lookup miss]`);
           const subscribers = await findSubscribers();
           if (subscribers === null) {
-            console.log(`  → could not load campaigns/built; can't check subscribers either.`);
+            console.log(`  → could not load campaigns/built; can't check which campaigns use this event either.`);
           } else if (subscribers.length === 0) {
             reportSubscribers(subscribers);
           } else {
             const live = subscribers.filter(s => s.state === 'LIVE');
             const others = subscribers.filter(s => s.state !== 'LIVE');
-            console.log(`  → ${subscribers.length} campaign(s) subscribe to "${eventName}":`);
+            console.log(`  → ${subscribers.length} campaign(s) use "${eventName}":`);
             if (live.length) {
-              console.log(`  → LIVE subscribers (${live.length}):`);
+              console.log(`  → LIVE campaigns using this event (${live.length}):`);
               for (const s of live.slice(0, 8)) console.log(formatSubscriberLine(s));
             }
             if (others.length) {
-              console.log(`  → Non-LIVE subscribers (${others.length}):`);
+              console.log(`  → Non-LIVE campaigns using this event (${others.length}):`);
               for (const s of others.slice(0, 4)) console.log(`${formatSubscriberLine(s)}  [${s.state}]`);
             }
             console.log('');
@@ -421,7 +421,7 @@ export function eventsCommand() {
             console.log('  → event may have been rejected, processing may be incomplete, or the API call did not produce step records.');
             console.log('  → try increasing --route-timeout, or fire with --verbose to see the API response.');
             if (subscribers !== null && subscribers.length > 0) {
-              console.log(`  → ${subscribers.length} campaign(s) subscribe to "${eventName}" but no steps were generated — unusual; try --route-timeout 30.`);
+              console.log(`  → ${subscribers.length} campaign(s) use "${eventName}" but no steps were generated — unusual; try --route-timeout 30.`);
             }
           }
         } else if (campaignSteps.length === 0) {
@@ -454,7 +454,7 @@ export function eventsCommand() {
             }
             if (probes.length > 0) {
               console.log('');
-              console.log(`  Probing ${probes.length} webhook(s) attached to subscribing campaigns:`);
+              console.log(`  Probing ${probes.length} webhook(s) attached to campaigns using this event:`);
               for (const { webhook, campaign } of probes) {
                 const result = await checkWebhookForEvent(webhook.webhook_id);
                 if (result.matching && result.matching.length > 0) {
