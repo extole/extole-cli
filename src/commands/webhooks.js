@@ -307,7 +307,7 @@ export function webhooksCommand() {
     .requiredOption('--webhook <id>', 'Webhook ID to attach')
     .requiredOption('--campaign <id>', 'Campaign ID to wire the webhook into')
     .requiredOption('--event <name>', 'Event name that triggers dispatch (e.g. signed_up, lead_created)')
-    .option('--event-type <type>', 'INPUT (business event fired by an integration) or STEP (internal Extole processing step). Default: INPUT', 'INPUT')
+    .option('--event-type <type>', 'Trigger discriminator. Common values: INPUT (business event from an integration), STEP (internal processing step), SHAREABLE (share-link generation), SHARE (share action), REWARD (reward state transition). Must match the event_type the campaign expects. Default: INPUT', 'INPUT')
     .option('--controller <id>', 'Use an existing controller ID instead of creating a new one')
     .option('--quality <q>', 'Dispatch priority: HIGH (normal), LOW (best-effort), ALWAYS (bypasses targeting rules). Default: HIGH', 'HIGH')
     .option('--skip-publish', 'Skip publishing the campaign after wiring. Use when attaching multiple events — pass --skip-publish on all but the last call to publish once at the end.')
@@ -424,7 +424,7 @@ export function webhooksCommand() {
     .requiredOption('--url <url>', 'Publicly reachable URL to receive webhook POSTs')
     .requiredOption('--campaign <id>', 'Campaign ID to wire the webhook into')
     .requiredOption('--event <name>', 'Event name that triggers dispatch (e.g. signed_up)')
-    .option('--event-type <type>', 'INPUT (business event) or STEP (internal processing step). Default: INPUT', 'INPUT')
+    .option('--event-type <type>', 'Trigger discriminator. Common values: INPUT, STEP, SHAREABLE, SHARE, REWARD. Must match the event_type the campaign expects. Default: INPUT', 'INPUT')
     .option('--quality <q>', 'Dispatch priority: HIGH (normal), LOW (best-effort), ALWAYS (bypasses targeting rules). Default: HIGH', 'HIGH')
     .option('-y, --yes', 'Skip confirmation prompt')
     .action(async (opts) => {
