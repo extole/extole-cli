@@ -315,16 +315,28 @@ No steps caused by event 7637... after 8s.
 ```
 No campaigns matched.
   → event was accepted (5 processing step(s) recorded), but no campaign was triggered.
-  → 4 campaign(s) DO subscribe to "signed_up" but none triggered for this person. Likely a targeting filter.
+  → 4 campaign(s) DO subscribe to "signed_up" but none triggered for this person.
   → LIVE subscribers (2):
-      68647...  Loans
-      76264...  Refer a Friend with Branch
-  → check: program_label, audience filters, sandbox vs live, journey assignment for the matching campaigns.
+      68647...  Loans                       program=loans                journey=participant
+      76264...  Refer a Friend with Branch  program=refer-a-member-flow  journey=FRIEND|participant
+
+  → person is in: ADVOCATE@credit-cards
+  → LIVE subscribers require journey ∈ {participant, FRIEND}
+  → cause: no overlap. Person isn't enrolled in any journey that the subscribing campaigns target.
+
+  → referral flow detected: subscribers require friend-side journey {FRIEND, participant}.
+     friend-side events only fire for people who arrived via a share link. To exercise this end-to-end:
+       1. advocate shares a link
+       2. friend visits the link  (creates the friend-journey membership tied to the advocate)
+       3. friend fires this event  (now with referral context)
+
+  Probing 2 webhook(s) attached to subscribing campaigns:
+    edb70dc4...  → 0 dispatches caused by this event  (0 recent dispatches on this webhook)
 ```
 
 This distinction is the difference between "your wiring is wrong" and "your wiring is right but a filter excluded the test person" — two very different fixes.
 
-Pair with `--route-webhook <id>` to also check whether a specific webhook dispatched for this event. The webhook's recent dispatches are filtered client-side by `cause_event_id`.
+`--route` automatically discovers webhooks attached to subscribing campaigns and probes each for dispatches caused by the fired event. Use `--route-webhook <id>` to override and check a specific webhook directly.
 
 ## Person
 

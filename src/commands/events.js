@@ -134,33 +134,182 @@ export function eventsCommand() {
         const campaignSteps = allSteps.filter(s => s.campaign_id);
         const orphanSteps  = allSteps.filter(s => !s.campaign_id);
 
-        const findSubscribers = async () => {
+        // Cache campaigns/built — used by subscriber discovery, audience checks, and webhook auto-discovery
+        let _builtCache = undefined;
+        const getBuilt = async () => {
+          if (_builtCache !== undefined) return _builtCache;
           try {
-            const built = await apiJson('/v2/campaigns/built', token, { verbose: opts.verbose, baseUrl: API_BASE });
-            const list = Array.isArray(built) ? built : [];
-            const subs = [];
-            for (const c of list) {
-              const matched = (c.steps || []).some(step =>
-                (step.triggers || []).some(trig => (trig.event_names || []).includes(eventName))
-              );
-              if (matched) subs.push({
-                id: c.campaign_id,
-                name: c.name,
-                state: c.state,
-                program_label: c.program_label || null,
-              });
-            }
-            return subs;
+            const data = await apiJson('/v2/campaigns/built', token, { verbose: opts.verbose, baseUrl: API_BASE });
+            _builtCache = Array.isArray(data) ? data : [];
           } catch (e) {
-            console.log(`  → could not check event subscribers: ${e.message}`);
+            console.log(`  → could not load campaigns/built: ${e.message}`);
+            _builtCache = null;
+          }
+          return _builtCache;
+        };
+
+        const findSubscribers = async () => {
+          const built = await getBuilt();
+          if (!built) return null;
+          const subs = [];
+          for (const c of built) {
+            // Collect journey_names from the specific steps that subscribe to our event
+            const matchingJourneys = new Set();
+            let matched = false;
+            for (const step of (c.steps || [])) {
+              const stepMatches = (step.triggers || []).some(trig => (trig.event_names || []).includes(eventName));
+              if (stepMatches) {
+                matched = true;
+                for (const j of (step.journey_names || [])) matchingJourneys.add(j);
+              }
+            }
+            if (matched) subs.push({
+              id: c.campaign_id,
+              name: c.name,
+              state: c.state,
+              program_label: c.program_label || null,
+              journey_names: [...matchingJourneys],
+            });
+          }
+          return subs;
+        };
+
+        const getPersonJourneys = async (personId) => {
+          try {
+            const data = await apiJson(
+              `/v5/persons/${personId}/journeys`,
+              token,
+              { verbose: opts.verbose, baseUrl: API_BASE }
+            );
+            return Array.isArray(data) ? data : [];
+          } catch (e) {
             return null;
           }
         };
 
-        const compareEventVsSubscribers = (sample, subscribers) => {
-          if (!sample || !subscribers || subscribers.length === 0) return;
+        // Friend-side journey names that imply referral flow (share→click required to enroll)
+        const FRIEND_JOURNEY_PATTERN = /^(friend|participant)$/i;
+
+        const reportJourneyMismatch = async (subscribers) => {
+          if (!subscribers || subscribers.length === 0) return null;
           const live = subscribers.filter(s => s.state === 'LIVE');
-          if (live.length === 0) return;
+          if (live.length === 0) return null;
+          const requiredJourneys = new Set();
+          for (const s of live) for (const j of (s.journey_names || [])) requiredJourneys.add(j);
+          if (requiredJourneys.size === 0) return null;
+
+          const personJourneys = await getPersonJourneys(match.id);
+          if (personJourneys === null) {
+            console.log(`  → could not fetch person's journey memberships.`);
+            return null;
+          }
+
+          const personJourneyNames = new Set(personJourneys.map(j => j.name));
+          const overlap = [...requiredJourneys].filter(j => personJourneyNames.has(j));
+
+          let foundJourneyBlocker = false;
+
+          console.log('');
+          if (personJourneys.length === 0) {
+            console.log(`  → cause: person has no journey memberships, but LIVE subscribers require {${[...requiredJourneys].join(', ')}}.`);
+            foundJourneyBlocker = true;
+          } else {
+            const personDescription = personJourneys
+              .map(j => `${j.name}${j.program ? `@${j.program}` : ''}`)
+              .join(', ');
+            console.log(`  → person is in: ${personDescription}`);
+            console.log(`  → LIVE subscribers require journey ∈ {${[...requiredJourneys].join(', ')}}`);
+            if (overlap.length === 0) {
+              console.log(`  → cause: no overlap. Person isn't enrolled in any journey that the subscribing campaigns target.`);
+              foundJourneyBlocker = true;
+            } else {
+              console.log(`  → overlap: {${overlap.join(', ')}} — journey is satisfied; the miss is from another targeting filter.`);
+            }
+          }
+
+          // Referral-flow hint: if any required journey is a friend-side journey AND person isn't in it,
+          // explain the share→click prerequisite.
+          const friendRequired = [...requiredJourneys].filter(j => FRIEND_JOURNEY_PATTERN.test(j));
+          const personInFriendJourney = [...personJourneyNames].some(j => FRIEND_JOURNEY_PATTERN.test(j));
+          if (friendRequired.length > 0 && !personInFriendJourney) {
+            console.log('');
+            console.log(`  → referral flow detected: subscribers require friend-side journey {${friendRequired.join(', ')}}.`);
+            console.log(`     friend-side events only fire for people who arrived via a share link. To exercise this end-to-end:`);
+            console.log(`       1. advocate shares a link  (extole share-links --email <advocate>)`);
+            console.log(`       2. friend visits the link  (creates the friend-journey membership tied to the advocate)`);
+            console.log(`       3. friend fires this event  (now with referral context)`);
+            console.log(`     Firing "${eventName}" for an unrelated person won't qualify because no advocate→friend relationship exists.`);
+          }
+
+          return foundJourneyBlocker ? 'journey' : null;
+        };
+
+        // Walk a campaign's actions to find WEBHOOK actions; returns [{webhook_id, action_id, enabled, event_names}]
+        const getCampaignWebhooks = (built, campaignId) => {
+          if (!built) return [];
+          const c = built.find(c => c.campaign_id === campaignId);
+          if (!c) return [];
+          const webhooks = [];
+          for (const step of (c.steps || [])) {
+            const eventNames = new Set();
+            for (const trig of (step.triggers || [])) {
+              for (const n of (trig.event_names || [])) eventNames.add(n);
+            }
+            for (const action of (step.actions || [])) {
+              if (action.action_type === 'WEBHOOK' && action.webhook_id) {
+                webhooks.push({
+                  webhook_id: action.webhook_id,
+                  action_id: action.action_id,
+                  enabled: action.enabled,
+                  event_names: [...eventNames],
+                });
+              }
+            }
+          }
+          return webhooks;
+        };
+
+        // Fetch a webhook's recent dispatches and filter by our event ID
+        const checkWebhookForEvent = async (webhookId) => {
+          try {
+            const data = await apiJson(
+              `/v6/webhooks/${webhookId}/dispatch-results/recent?limit=50`,
+              token,
+              { verbose: opts.verbose, baseUrl: API_BASE }
+            );
+            const list = Array.isArray(data) ? data : (data?.results || []);
+            return {
+              total: list.length,
+              matching: list.filter(d => d.cause_event_id === firedEventId || d.root_event_id === firedEventId),
+            };
+          } catch (e) {
+            return { error: e.message };
+          }
+        };
+
+        const renderWebhookResult = (webhook, result, indent = '    ') => {
+          if (result.error) {
+            console.log(`${indent}${webhook.webhook_id}  → could not fetch dispatches (${result.error})`);
+            return;
+          }
+          if (result.matching.length === 0) {
+            console.log(`${indent}${webhook.webhook_id}  → 0 dispatches caused by this event  (${result.total} recent dispatch${result.total === 1 ? '' : 'es'} on this webhook)`);
+            return;
+          }
+          for (const d of result.matching) {
+            const status = d.response_status_code || 'no-response';
+            const attempts = d.attempt_count != null ? `  attempts=${d.attempt_count}` : '';
+            const url = d.url ? `  ${d.url}` : '';
+            console.log(`${indent}${webhook.webhook_id}  ✓ status=${status}${attempts}${url}`);
+          }
+        };
+
+        const compareEventVsSubscribers = (sample, subscribers) => {
+          if (!sample || !subscribers || subscribers.length === 0) return null;
+          const live = subscribers.filter(s => s.state === 'LIVE');
+          if (live.length === 0) return null;
+
+          let foundProgramBlocker = false;
 
           console.log('');
           console.log(`  → event landed: container=${sample.container || '?'}  program=${sample.program || 'none'}  journey=${sample.journey_name || 'none'}`);
@@ -170,6 +319,7 @@ export function eventsCommand() {
             if (labels.length > 0) {
               console.log(`  → likely cause: the event landed unattributed to any program, but LIVE subscribers are program-scoped: {${labels.join(', ')}}. Program-scoped campaigns only process events tagged with their program_label.`);
               console.log(`  → program assignment usually comes from a label injector, the person's journey membership, or a matching site_pattern — not the event payload alone. Verify the integration's pre-event data setup.`);
+              foundProgramBlocker = true;
             }
           }
 
@@ -180,6 +330,18 @@ export function eventsCommand() {
           if (sample.container === 'test' && opts.sandbox) {
             console.log(`  → also: --sandbox routed to container=test. By default campaigns accept both containers, but if a LIVE campaign has been restricted to container=production it won't see this event. Check campaign config if other diagnostics don't explain the miss.`);
           }
+
+          return foundProgramBlocker ? 'program' : null;
+        };
+
+        const formatSubscriberLine = (s) => {
+          const parts = [];
+          if (s.program_label) parts.push(`program=${s.program_label}`);
+          if (s.journey_names && s.journey_names.length > 0) {
+            parts.push(`journey=${s.journey_names.join('|')}`);
+          }
+          const constraints = parts.length ? `  ${parts.join('  ')}` : '';
+          return `      ${s.id}  ${s.name}${constraints}`;
         };
 
         const reportSubscribers = (subscribers) => {
@@ -190,16 +352,15 @@ export function eventsCommand() {
           } else {
             const live = subscribers.filter(s => s.state === 'LIVE');
             const others = subscribers.filter(s => s.state !== 'LIVE');
-            console.log(`  → ${subscribers.length} campaign(s) DO subscribe to "${eventName}" but none triggered for this person. Likely a targeting filter.`);
+            console.log(`  → ${subscribers.length} campaign(s) DO subscribe to "${eventName}" but none triggered for this person.`);
             if (live.length) {
               console.log(`  → LIVE subscribers (${live.length}):`);
-              for (const s of live.slice(0, 8)) console.log(`      ${s.id}  ${s.name}`);
+              for (const s of live.slice(0, 8)) console.log(formatSubscriberLine(s));
             }
             if (others.length) {
               console.log(`  → Non-LIVE subscribers (${others.length}): may not process events depending on state.`);
-              for (const s of others.slice(0, 4)) console.log(`      ${s.id}  ${s.name}  [${s.state}]`);
+              for (const s of others.slice(0, 4)) console.log(`${formatSubscriberLine(s)}  [${s.state}]`);
             }
-            console.log(`  → check: program_label, audience filters, sandbox vs live, journey assignment for the matching campaigns.`);
           }
         };
 
@@ -220,7 +381,43 @@ export function eventsCommand() {
           console.log(`  → event was accepted (${orphanSteps.length} processing step(s) recorded), but no campaign was triggered.`);
           const subscribers = await findSubscribers();
           reportSubscribers(subscribers);
-          compareEventVsSubscribers(orphanSteps[0], subscribers);
+          const findings = [];
+          const programFinding = compareEventVsSubscribers(orphanSteps[0], subscribers);
+          if (programFinding) findings.push(programFinding);
+          const journeyFinding = await reportJourneyMismatch(subscribers);
+          if (journeyFinding) findings.push(journeyFinding);
+          if (findings.length >= 2) {
+            console.log('');
+            console.log(`  → multiple constraints unmet — ${findings.join(' AND ')} would each block independently.`);
+          }
+
+          // Even though no campaign matched, probe subscribing campaigns' webhooks — if any DID dispatch
+          // despite no step record, that's a surprising signal worth surfacing.
+          if (!opts.routeWebhook && subscribers && subscribers.length > 0) {
+            const built = await getBuilt();
+            const checked = new Set();
+            const probes = [];
+            for (const sub of subscribers) {
+              for (const wh of getCampaignWebhooks(built, sub.id)) {
+                if (checked.has(wh.webhook_id)) continue;
+                checked.add(wh.webhook_id);
+                probes.push({ webhook: wh, campaign: sub });
+              }
+            }
+            if (probes.length > 0) {
+              console.log('');
+              console.log(`  Probing ${probes.length} webhook(s) attached to subscribing campaigns:`);
+              for (const { webhook, campaign } of probes) {
+                const result = await checkWebhookForEvent(webhook.webhook_id);
+                if (result.matching && result.matching.length > 0) {
+                  console.log(`    ⚠ webhook ${webhook.webhook_id} (campaign ${campaign.name}) DID dispatch for this event despite no step record:`);
+                  renderWebhookResult(webhook, result, '      ');
+                } else {
+                  renderWebhookResult(webhook, result, '    ');
+                }
+              }
+            }
+          }
         } else {
           const byCampaign = new Map();
           for (const s of campaignSteps) {
@@ -238,6 +435,19 @@ export function eventsCommand() {
             for (const s of sorted) {
               const time = formatEventTime(s.event_date || s.created_date);
               console.log(`    ${time}  ${s.name || ''}`);
+            }
+
+            // Auto-discover webhooks for this campaign and report dispatch outcomes
+            if (!opts.routeWebhook) {
+              const built = await getBuilt();
+              const webhooks = getCampaignWebhooks(built, campaignId);
+              if (webhooks.length > 0) {
+                console.log(`    Webhooks (${webhooks.length}):`);
+                for (const wh of webhooks) {
+                  const result = await checkWebhookForEvent(wh.webhook_id);
+                  renderWebhookResult(wh, result, '      ');
+                }
+              }
             }
             console.log('');
           }
