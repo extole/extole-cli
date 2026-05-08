@@ -245,6 +245,25 @@ export function eventsCommand() {
           return foundJourneyBlocker ? 'journey' : null;
         };
 
+        // Cache webhook id → name lookup; one bulk fetch
+        let _webhookNameCache = undefined;
+        const getWebhookName = async (webhookId) => {
+          if (_webhookNameCache === undefined) {
+            try {
+              const data = await apiJson(
+                '/v6/webhooks?limit=200&include_archived=false',
+                token,
+                { verbose: opts.verbose, baseUrl: API_BASE }
+              );
+              const list = Array.isArray(data) ? data : (data?.webhooks || data?.results || []);
+              _webhookNameCache = new Map(list.map(w => [w.id || w.webhook_id, w.name]));
+            } catch {
+              _webhookNameCache = new Map();
+            }
+          }
+          return _webhookNameCache.get(webhookId) || null;
+        };
+
         // Walk a campaign's actions to find WEBHOOK actions; returns [{webhook_id, action_id, enabled, event_names}]
         const getCampaignWebhooks = (built, campaignId) => {
           if (!built) return [];
@@ -288,20 +307,22 @@ export function eventsCommand() {
           }
         };
 
-        const renderWebhookResult = (webhook, result, indent = '    ') => {
+        const renderWebhookResult = async (webhook, result, indent = '    ') => {
+          const name = await getWebhookName(webhook.webhook_id);
+          const label = name ? `${webhook.webhook_id}  ${name}` : webhook.webhook_id;
           if (result.error) {
-            console.log(`${indent}${webhook.webhook_id}  → could not fetch dispatches (${result.error})`);
+            console.log(`${indent}${label}  → could not fetch dispatches (${result.error})`);
             return;
           }
           if (result.matching.length === 0) {
-            console.log(`${indent}${webhook.webhook_id}  → 0 dispatches caused by this event  (${result.total} recent dispatch${result.total === 1 ? '' : 'es'} on this webhook)`);
+            console.log(`${indent}${label}  → 0 dispatches caused by this event  (${result.total} recent dispatch${result.total === 1 ? '' : 'es'} on this webhook)`);
             return;
           }
           for (const d of result.matching) {
             const status = d.response_status_code || 'no-response';
             const attempts = d.attempt_count != null ? `  attempts=${d.attempt_count}` : '';
             const url = d.url ? `  ${d.url}` : '';
-            console.log(`${indent}${webhook.webhook_id}  ✓ status=${status}${attempts}${url}`);
+            console.log(`${indent}${label}  ✓ status=${status}${attempts}${url}`);
           }
         };
 
@@ -313,7 +334,10 @@ export function eventsCommand() {
           let foundProgramBlocker = false;
 
           console.log('');
-          console.log(`  → event landed: container=${sample.container || '?'}  program=${sample.program || 'none'}  journey=${sample.journey_name || 'none'}`);
+          const containerLabel = sample.container === 'test' ? 'test (sandbox)'
+            : sample.container === 'production' ? 'production (live)'
+            : (sample.container || '?');
+          console.log(`  → event landed: container=${containerLabel}  program=${sample.program || 'none'}  journey=${sample.journey_name || 'none'}`);
 
           if (!sample.program) {
             const labels = [...new Set(live.map(s => s.program_label).filter(Boolean))];
@@ -435,9 +459,9 @@ export function eventsCommand() {
                 const result = await checkWebhookForEvent(webhook.webhook_id);
                 if (result.matching && result.matching.length > 0) {
                   console.log(`    ⚠ webhook ${webhook.webhook_id} (campaign ${campaign.name}) DID dispatch for this event despite no step record:`);
-                  renderWebhookResult(webhook, result, '      ');
+                  await renderWebhookResult(webhook, result, '      ');
                 } else {
-                  renderWebhookResult(webhook, result, '    ');
+                  await renderWebhookResult(webhook, result, '    ');
                 }
               }
             }
@@ -469,7 +493,7 @@ export function eventsCommand() {
                 console.log(`    Webhooks (${webhooks.length}):`);
                 for (const wh of webhooks) {
                   const result = await checkWebhookForEvent(wh.webhook_id);
-                  renderWebhookResult(wh, result, '      ');
+                  await renderWebhookResult(wh, result, '      ');
                 }
               }
             }
