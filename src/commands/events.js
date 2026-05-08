@@ -97,17 +97,19 @@ export function eventsCommand() {
         }
 
         const match = await findPerson(opts.email, token, opts.verbose);
-        if (!match) {
-          console.error(`No person found for ${opts.email} — cannot trace route`);
-          process.exit(1);
+        if (match) {
+          console.error(`\nTracing route for event ${firedEventId} (waiting up to ${routeTimeout}s for steps)...`);
+        } else {
+          console.error(`\nThe fire succeeded (HTTP 200), but person lookup didn't return a record for ${opts.email}.`);
+          console.error(`  → most likely: identity-key index hasn't propagated yet (race after fire — common right after first contact)`);
+          console.error(`  → less likely: the email is genuinely new and not yet indexed, or has lookup ambiguity`);
+          console.error(`  → person-level diagnostics (step trace, journey check) are skipped; running subscriber-only diagnostics`);
         }
-
-        console.error(`\nTracing route for event ${firedEventId} (waiting up to ${routeTimeout}s for steps)...`);
 
         const deadline = Date.now() + routeTimeout * 1000;
         const stepsById = new Map();
         let stableCount = 0;
-        while (Date.now() < deadline) {
+        while (match && Date.now() < deadline) {
           await sleep(POLL_INTERVAL_MS);
           let steps = [];
           try {
@@ -192,6 +194,7 @@ export function eventsCommand() {
 
         const reportJourneyMismatch = async (subscribers) => {
           if (!subscribers || subscribers.length === 0) return null;
+          if (!match) return null;
           const live = subscribers.filter(s => s.state === 'LIVE');
           if (live.length === 0) return null;
           const requiredJourneys = new Set();
@@ -227,18 +230,16 @@ export function eventsCommand() {
             }
           }
 
-          // Referral-flow hint: if any required journey is a friend-side journey AND person isn't in it,
-          // explain the share→click prerequisite.
+          // Friend-side journey hint: if any required journey is friend-side AND person isn't in it,
+          // note the typical enrollment path without claiming it's the only one.
           const friendRequired = [...requiredJourneys].filter(j => FRIEND_JOURNEY_PATTERN.test(j));
           const personInFriendJourney = [...personJourneyNames].some(j => FRIEND_JOURNEY_PATTERN.test(j));
           if (friendRequired.length > 0 && !personInFriendJourney) {
             console.log('');
-            console.log(`  → referral flow detected: subscribers require friend-side journey {${friendRequired.join(', ')}}.`);
-            console.log(`     friend-side events only fire for people who arrived via a share link. To exercise this end-to-end:`);
-            console.log(`       1. advocate shares a link  (extole share-links --email <advocate>)`);
-            console.log(`       2. friend visits the link  (creates the friend-journey membership tied to the advocate)`);
-            console.log(`       3. friend fires this event  (now with referral context)`);
-            console.log(`     Firing "${eventName}" for an unrelated person won't qualify because no advocate→friend relationship exists.`);
+            console.log(`  → friend-side journey required: ${friendRequired.join(', ')}. Person must be enrolled in one of these for the event to qualify them.`);
+            console.log(`     typical enrollment path: advocate share → friend visits link → friend journey created.`);
+            console.log(`     other paths exist (direct API enrollment, custom journey assignment, integration-driven membership).`);
+            console.log(`     to test: simulate the share→click flow, or fire as an email already enrolled in one of these journeys.`);
           }
 
           return foundJourneyBlocker ? 'journey' : null;
@@ -364,7 +365,30 @@ export function eventsCommand() {
           }
         };
 
-        if (allSteps.length === 0) {
+        if (!match) {
+          console.log(`\n[Subscriber wiring check — person diagnostics skipped due to lookup miss]`);
+          const subscribers = await findSubscribers();
+          if (subscribers === null) {
+            console.log(`  → could not load campaigns/built; can't check subscribers either.`);
+          } else if (subscribers.length === 0) {
+            reportSubscribers(subscribers);
+          } else {
+            const live = subscribers.filter(s => s.state === 'LIVE');
+            const others = subscribers.filter(s => s.state !== 'LIVE');
+            console.log(`  → ${subscribers.length} campaign(s) subscribe to "${eventName}":`);
+            if (live.length) {
+              console.log(`  → LIVE subscribers (${live.length}):`);
+              for (const s of live.slice(0, 8)) console.log(formatSubscriberLine(s));
+            }
+            if (others.length) {
+              console.log(`  → Non-LIVE subscribers (${others.length}):`);
+              for (const s of others.slice(0, 4)) console.log(`${formatSubscriberLine(s)}  [${s.state}]`);
+            }
+            console.log('');
+            console.log(`  → wiring is in place; person-level qualification can't be checked from here.`);
+            console.log(`  → re-run --route once the person record is queryable (a few seconds after the fire) for full diagnostics.`);
+          }
+        } else if (allSteps.length === 0) {
           console.log(`\nNo steps caused by event ${firedEventId} after ${routeTimeout}s.`);
           const subscribers = await findSubscribers();
           if (subscribers !== null && subscribers.length === 0) {
