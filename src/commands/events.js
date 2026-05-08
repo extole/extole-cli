@@ -25,6 +25,7 @@ export function eventsCommand() {
     .option('--route', 'After firing, trace which campaigns the event reached. Requires --email.')
     .option('--route-timeout <seconds>', 'Seconds to wait for steps to appear when using --route', '8')
     .option('--route-webhook <id>', 'With --route, also check this webhook for dispatches caused by the event')
+    .option('--summary', 'With --route, emit a 3-5 line summary instead of the full diagnostic. Designed for chained scripting and agent pipelines.')
     .action(async (eventName, opts) => {
       if (opts.live && opts.sandbox) {
         console.error('Error: --live and --sandbox are mutually exclusive.');
@@ -94,6 +95,25 @@ export function eventsCommand() {
         if (isNaN(routeTimeout) || routeTimeout <= 0) {
           console.error('--route-timeout must be a positive integer');
           process.exit(2);
+        }
+
+        // Summary mode: suppress verbose diagnostic output, collect a structured
+        // summary as the diagnostic runs, emit it at the end. Console suppression
+        // is restored before the summary print so summary lines are visible.
+        const summary = {
+          path: null,                  // 'no_person' | 'no_steps' | 'no_match' | 'matched'
+          subscribers: null,
+          findings: [],
+          requiredJourneys: null,
+          personJourneys: null,
+          byCampaign: null,
+          webhookProbes: [],           // [{webhook_id, name, dispatched, status, total}]
+        };
+        const _origLog = console.log;
+        const _origErr = console.error;
+        if (opts.summary) {
+          console.log = () => {};
+          console.error = () => {};
         }
 
         const match = await findPerson(opts.email, token, opts.verbose);
@@ -207,6 +227,9 @@ export function eventsCommand() {
             return null;
           }
 
+          summary.personJourneys = personJourneys;
+          summary.requiredJourneys = [...requiredJourneys];
+
           const personJourneyNames = new Set(personJourneys.map(j => j.name));
           const overlap = [...requiredJourneys].filter(j => personJourneyNames.has(j));
 
@@ -310,6 +333,24 @@ export function eventsCommand() {
         const renderWebhookResult = async (webhook, result, indent = '    ') => {
           const name = await getWebhookName(webhook.webhook_id);
           const label = name ? `${webhook.webhook_id}  ${name}` : webhook.webhook_id;
+
+          // Stash summary state regardless of render mode
+          if (result.error) {
+            summary.webhookProbes.push({ webhook_id: webhook.webhook_id, name, error: result.error });
+          } else if (result.matching.length === 0) {
+            summary.webhookProbes.push({ webhook_id: webhook.webhook_id, name, dispatched: false, total: result.total });
+          } else {
+            for (const d of result.matching) {
+              summary.webhookProbes.push({
+                webhook_id: webhook.webhook_id,
+                name,
+                dispatched: true,
+                status: d.response_status_code,
+                attempts: d.attempt_count,
+              });
+            }
+          }
+
           if (result.error) {
             console.log(`${indent}${label}  → could not fetch dispatches (${result.error})`);
             return;
@@ -390,8 +431,10 @@ export function eventsCommand() {
         };
 
         if (!match) {
+          summary.path = 'no_person';
           console.log(`\n[Subscriber wiring check — person diagnostics skipped due to lookup miss]`);
           const subscribers = await findSubscribers();
+          summary.subscribers = subscribers;
           if (subscribers === null) {
             console.log(`  → could not load campaigns/built; can't check which campaigns use this event either.`);
           } else if (subscribers.length === 0) {
@@ -413,8 +456,10 @@ export function eventsCommand() {
             console.log(`  → re-run --route once the person record is queryable (a few seconds after the fire) for full diagnostics.`);
           }
         } else if (allSteps.length === 0) {
+          summary.path = 'no_steps';
           console.log(`\nNo steps caused by event ${firedEventId} after ${routeTimeout}s.`);
           const subscribers = await findSubscribers();
+          summary.subscribers = subscribers;
           if (subscribers !== null && subscribers.length === 0) {
             reportSubscribers(subscribers);
           } else {
@@ -425,15 +470,18 @@ export function eventsCommand() {
             }
           }
         } else if (campaignSteps.length === 0) {
+          summary.path = 'no_match';
           console.log(`\nNo campaigns matched.`);
           console.log(`  → event was accepted (${orphanSteps.length} processing step(s) recorded), but no campaign was triggered.`);
           const subscribers = await findSubscribers();
+          summary.subscribers = subscribers;
           reportSubscribers(subscribers);
           const findings = [];
           const programFinding = compareEventVsSubscribers(orphanSteps[0], subscribers);
           if (programFinding) findings.push(programFinding);
           const journeyFinding = await reportJourneyMismatch(subscribers);
           if (journeyFinding) findings.push(journeyFinding);
+          summary.findings = findings;
           if (findings.length >= 2) {
             console.log('');
             console.log(`  → multiple constraints unmet — ${findings.join(' AND ')} would each block independently.`);
@@ -467,11 +515,13 @@ export function eventsCommand() {
             }
           }
         } else {
+          summary.path = 'matched';
           const byCampaign = new Map();
           for (const s of campaignSteps) {
             if (!byCampaign.has(s.campaign_id)) byCampaign.set(s.campaign_id, []);
             byCampaign.get(s.campaign_id).push(s);
           }
+          summary.byCampaign = byCampaign;
 
           console.log(`\nReached ${byCampaign.size} campaign(s):\n`);
           for (const [campaignId, steps] of byCampaign) {
@@ -530,6 +580,73 @@ export function eventsCommand() {
               console.log(`  ✓ status=${status}${attempts}${url}`);
             }
           }
+        }
+
+        // Restore console and emit summary if --summary
+        if (opts.summary) {
+          console.log = _origLog;
+          console.error = _origErr;
+
+          const lines = [];
+          const fmtSet = (xs) => `{${[...new Set(xs)].join(', ')}}`;
+
+          if (summary.path === 'no_person') {
+            lines.push(`outcome: fire ok; person lookup pending for ${opts.email}`);
+            const subs = summary.subscribers;
+            if (subs && subs.length > 0) {
+              const live = subs.filter(s => s.state === 'LIVE').length;
+              const other = subs.length - live;
+              lines.push(`campaigns using "${eventName}": ${subs.length} (${live} LIVE${other ? `, ${other} other` : ''})`);
+            } else if (subs && subs.length === 0) {
+              lines.push(`campaigns using "${eventName}": 0`);
+            } else {
+              lines.push(`campaigns using "${eventName}": could not check`);
+            }
+            lines.push(`next: re-run --route in a few seconds for full person-level diagnostics`);
+          } else if (summary.path === 'no_steps') {
+            const subs = summary.subscribers;
+            if (subs && subs.length === 0) {
+              lines.push(`outcome: event "${eventName}" not wired to any campaign`);
+              lines.push(`next: attach a webhook with --event ${eventName}`);
+            } else {
+              lines.push(`outcome: no steps after ${routeTimeout}s — event may have been rejected or processing incomplete`);
+              lines.push(`next: try --route-timeout 30, or fire with --verbose`);
+            }
+          } else if (summary.path === 'no_match') {
+            lines.push(`outcome: no campaign matched for ${opts.email}`);
+            const subs = summary.subscribers || [];
+            const live = subs.filter(s => s.state === 'LIVE');
+            const liveLabels = fmtSet(live.map(s => s.program_label).filter(Boolean));
+            const liveJourneys = summary.requiredJourneys ? fmtSet(summary.requiredJourneys) : null;
+            if (summary.findings && summary.findings.length > 0) {
+              lines.push(`causes: ${summary.findings.join(' AND ')}${summary.findings.length >= 2 ? ' would each block independently' : ''}`);
+            }
+            if (summary.findings.includes('program') && liveLabels !== '{}') {
+              lines.push(`program: event unattributed; LIVE campaigns using this event require ${liveLabels}`);
+            }
+            if (summary.findings.includes('journey')) {
+              const personDesc = summary.personJourneys && summary.personJourneys.length > 0
+                ? fmtSet(summary.personJourneys.map(j => `${j.name}${j.program ? '@' + j.program : ''}`))
+                : '{} (none)';
+              lines.push(`journey: person in ${personDesc}; LIVE campaigns using this event require ${liveJourneys || '{?}'}`);
+            }
+          } else if (summary.path === 'matched') {
+            const campaignNames = [...summary.byCampaign.values()].map(steps => steps[0].program || steps[0].campaign_id);
+            lines.push(`outcome: reached ${summary.byCampaign.size} campaign(s): ${[...new Set(campaignNames)].join(', ')}`);
+            if (summary.webhookProbes.length > 0) {
+              const dispatched = summary.webhookProbes.filter(p => p.dispatched);
+              if (dispatched.length > 0) {
+                const detail = dispatched.map(p => `${p.name || p.webhook_id} ${p.status || '?'}`).join(', ');
+                lines.push(`webhooks: ${detail}`);
+              } else {
+                lines.push(`webhooks: ${summary.webhookProbes.length} probed, 0 dispatched for this event`);
+              }
+            }
+          } else {
+            lines.push(`outcome: route diagnostic completed but no path matched`);
+          }
+
+          for (const line of lines) console.log(line);
         }
 
         return;
