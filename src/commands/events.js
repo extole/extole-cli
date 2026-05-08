@@ -274,7 +274,7 @@ export function eventsCommand() {
           if (_webhookNameCache === undefined) {
             try {
               const data = await apiJson(
-                '/v6/webhooks?limit=200&include_archived=false',
+                '/v6/webhooks/built?limit=200',
                 token,
                 { verbose: opts.verbose, baseUrl: API_BASE }
               );
@@ -330,15 +330,25 @@ export function eventsCommand() {
           }
         };
 
-        const renderWebhookResult = async (webhook, result, indent = '    ') => {
+        const renderWebhookResult = async (webhook, result, indent = '    ', { inMatchedCampaign = false } = {}) => {
           const name = await getWebhookName(webhook.webhook_id);
+          const triggerMatches = (webhook.event_names || []).includes(eventName);
+          const triggerMarker = !triggerMatches && webhook.event_names && webhook.event_names.length > 0
+            ? `  (trigger: ${webhook.event_names.join(', ')} — does not match ${eventName})`
+            : '';
           const label = name ? `${webhook.webhook_id}  ${name}` : webhook.webhook_id;
 
           // Stash summary state regardless of render mode
           if (result.error) {
             summary.webhookProbes.push({ webhook_id: webhook.webhook_id, name, error: result.error });
           } else if (result.matching.length === 0) {
-            summary.webhookProbes.push({ webhook_id: webhook.webhook_id, name, dispatched: false, total: result.total });
+            summary.webhookProbes.push({
+              webhook_id: webhook.webhook_id,
+              name,
+              dispatched: false,
+              total: result.total,
+              triggerMatches,
+            });
           } else {
             for (const d of result.matching) {
               summary.webhookProbes.push({
@@ -352,18 +362,23 @@ export function eventsCommand() {
           }
 
           if (result.error) {
-            console.log(`${indent}${label}  → could not fetch dispatches (${result.error})`);
+            console.log(`${indent}${label}${triggerMarker}  → could not fetch dispatches (${result.error})`);
             return;
           }
           if (result.matching.length === 0) {
-            console.log(`${indent}${label}  → 0 dispatches caused by this event  (${result.total} recent dispatch${result.total === 1 ? '' : 'es'} on this webhook)`);
+            console.log(`${indent}${label}${triggerMarker}  → 0 dispatches caused by this event  (${result.total} recent dispatch${result.total === 1 ? '' : 'es'} on this webhook)`);
+            // If the trigger DID match and we're in a matched campaign, the controller fired but
+            // the webhook didn't dispatch — most likely cause is the request script returning null.
+            if (triggerMatches && inMatchedCampaign) {
+              console.log(`${indent}  → controller fired but no dispatch recorded — request script may have returned null to filter; check script behavior for this event.`);
+            }
             return;
           }
           for (const d of result.matching) {
             const status = d.response_status_code || 'no-response';
             const attempts = d.attempt_count != null ? `  attempts=${d.attempt_count}` : '';
             const url = d.url ? `  ${d.url}` : '';
-            console.log(`${indent}${label}  ✓ status=${status}${attempts}${url}`);
+            console.log(`${indent}${label}${triggerMarker}  ✓ status=${status}${attempts}${url}`);
           }
         };
 
@@ -543,7 +558,7 @@ export function eventsCommand() {
                 console.log(`    Webhooks (${webhooks.length}):`);
                 for (const wh of webhooks) {
                   const result = await checkWebhookForEvent(wh.webhook_id);
-                  await renderWebhookResult(wh, result, '      ');
+                  await renderWebhookResult(wh, result, '      ', { inMatchedCampaign: true });
                 }
               }
             }

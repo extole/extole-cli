@@ -523,6 +523,80 @@ export function componentsCommand() {
 
   components.addCommand(deployCmd);
 
+  // ── set ────────────────────────────────────────────────────────────────────
+
+  const setCmd = new Command('set')
+    .description('Patch one or more settings on an existing component without redeploying the bundle. Useful for testing/iteration where you want to tweak a setting and re-fire events.')
+    .argument('<component-id>', 'Component ID to update')
+    .option('--setting <kv>', 'Setting in key=value form (repeatable)', (v, prev) => prev.concat([v]), [])
+    .option('--dry-run', 'Print the payload that would be sent without making the API call')
+    .action(async (componentId, opts) => {
+      if (!opts.setting || opts.setting.length === 0) {
+        console.error('Error: at least one --setting key=value is required.');
+        process.exit(2);
+      }
+
+      const settings = {};
+      for (const kv of opts.setting) {
+        const idx = kv.indexOf('=');
+        if (idx < 0) {
+          console.error(`Error: invalid --setting (expected key=value): ${kv}`);
+          process.exit(2);
+        }
+        const key = kv.slice(0, idx).trim();
+        const rawValue = kv.slice(idx + 1);
+        if (!key) {
+          console.error(`Error: --setting key cannot be empty: ${kv}`);
+          process.exit(2);
+        }
+        // Settings carry a `values` map; for non-translatable settings the key is `default`.
+        // Type-aware coercion (INTEGER, BOOLEAN) is a follow-up — for now the API rejects type
+        // mismatches with a clear error.
+        settings[key] = { values: { default: rawValue } };
+      }
+
+      const payload = { settings };
+
+      if (opts.dryRun) {
+        console.log(`PUT /v1/components/${componentId}/settings`);
+        console.log(JSON.stringify(payload, null, 2));
+        return;
+      }
+
+      const token = resolveToken(opts);
+      const res = await apiFetch(`/v1/components/${componentId}/settings`, token, {
+        method: 'PUT',
+        body: JSON.stringify(payload),
+        verbose: opts.verbose,
+        baseUrl: API_BASE,
+      });
+      const text = await res.text();
+      if (!res.ok) {
+        console.error(`Error ${res.status}: ${text.slice(0, 500)}`);
+        process.exit(1);
+      }
+
+      if (opts.json) {
+        console.log(text);
+        return;
+      }
+
+      const updated = Object.keys(settings);
+      console.log(`OK  updated ${updated.length} setting(s) on component ${componentId}: ${updated.join(', ')}`);
+      console.log(`Note: if this component is on a LIVE campaign, run \`extole components deploy --publish\` (or republish via my.extole) for the change to take effect in production.`);
+    });
+
+  addGlobalOptions(setCmd, {
+    output: true,
+    examples: [
+      'extole components set <component-id> --setting apiKey=test_key_123',
+      'extole components set <component-id> --setting apiKey=k1 --setting endpoint=https://example.com',
+      'extole components set <component-id> --setting apiKey=k1 --dry-run',
+    ],
+  });
+
+  components.addCommand(setCmd);
+
   return components;
 }
 

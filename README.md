@@ -489,6 +489,20 @@ Running `deploy` without `--component` always creates a new campaign. Pass `--co
 
 Settings values can reference external files using `%{/path/to/file.js}%` — the CLI inlines the file content before uploading. Webhook `request` and `response_handler` scripts must start with `javascript@runtime:`; build-time-only values use `javascript@buildtime:`.
 
+### Patching component settings
+
+Update one or more settings on an already-deployed component without redeploying the bundle:
+
+```
+extole components set <component-id> --setting apiKey=test_key_123
+extole components set <component-id> --setting apiKey=k1 --setting endpoint=https://example.com
+extole components set <component-id> --setting apiKey=k1 --dry-run    # show payload only
+```
+
+Useful for iteration loops and CI: tweak a setting, fire an event, observe the result without round-tripping through the bundle. Values are sent as strings; the platform validates against the setting's declared type and rejects mismatches with a clear error.
+
+If the component is on a LIVE campaign, the change is staged but not active in production until you republish the campaign (via `components deploy --publish` or my.extole).
+
 ### Deleting components
 
 ```
