@@ -641,11 +641,77 @@ export function webhooksCommand() {
     ],
   });
 
+  // ── watch ─────────────────────────────────────────────────────────────────
+  // Follow-tail of dispatch results (HTTP responses) for one webhook. Replaces
+  // the manual repeat of `dispatch-results` while debugging integrations.
+  const watchCmd = new Command('watch')
+    .description('Tail dispatch results for a webhook in real time. Polls every 3s and prints new attempts with their HTTP response code and body. Ctrl-C to stop.')
+    .argument('<webhook-id>', 'Webhook ID')
+    .option('--interval <seconds>', 'Poll interval in seconds (default 3)', '3')
+    .option('--show-body', 'Print full response body on its own line under each row (default truncates to 80 chars inline)')
+    .action(async (webhookId, _o, command) => {
+      const opts = command.optsWithGlobals();
+      const token = resolveToken(opts);
+      const intervalMs = Math.max(1, Number(opts.interval) || 3) * 1000;
+
+      console.log(`Watching webhook ${webhookId} for dispatch results... (Ctrl-C to stop)\n`);
+
+      const seen = new Set();
+      let firstPoll = true;
+
+      const poll = async () => {
+        try {
+          const data = await fetchDispatchResults(webhookId, token, { limit: '20' }, false);
+          const list = Array.isArray(data) ? data : (data.results || []);
+          // Mark everything seen on the first poll without printing — we want
+          // to follow-tail, not dump history.
+          if (firstPoll) {
+            for (const r of list) {
+              const id = r.event_id || r.webhook_event_id || r.id;
+              if (id) seen.add(id);
+            }
+            firstPoll = false;
+            return;
+          }
+          // Print oldest-first so the timeline reads top-to-bottom.
+          for (const r of list.reverse()) {
+            const id = r.event_id || r.webhook_event_id || r.id || '';
+            if (!id || seen.has(id)) continue;
+            seen.add(id);
+            const ts = (r.event_time || r.dispatched_at || '').toString().slice(0, 19).replace('T', ' ');
+            const code = String(r.response_status_code ?? r.response_code ?? r.http_status ?? '???').padEnd(4);
+            const body = (r.response_body || '').toString();
+            const inline = opts.showBody ? '' : body.slice(0, 80);
+            console.log(`${ts.padEnd(19)}  ${code}  ${id.padEnd(20)}  ${inline}`);
+            if (opts.showBody && body) {
+              console.log(`  ${body}`);
+            }
+          }
+        } catch (_) { /* ignore transient poll errors */ }
+      };
+
+      // Run immediately to seed seen-set, then on the interval.
+      await poll();
+      const handle = setInterval(poll, intervalMs);
+      const cleanup = () => { clearInterval(handle); process.exit(0); };
+      process.on('SIGINT', cleanup);
+      process.on('SIGTERM', cleanup);
+    });
+
+  addGlobalOptions(watchCmd, {
+    examples: [
+      'extole webhooks watch <webhook-id>',
+      'extole webhooks watch <webhook-id> --interval 5',
+      'extole webhooks watch <webhook-id> --show-body',
+    ],
+  });
+
   webhooks.addCommand(getCmd);
   webhooks.addCommand(createCmd);
   webhooks.addCommand(deleteCmd);
   webhooks.addCommand(dispatchesCmd);
   webhooks.addCommand(dispatchResultsCmd);
+  webhooks.addCommand(watchCmd);
 
   return webhooks;
 }
