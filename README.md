@@ -284,7 +284,6 @@ extole events fire <event_name> --live --watch --watch-timeout 30
 extole events fire <event_name> --email <e> --live --route                         # trace which campaigns the event reached
 extole events fire <event_name> --email <e> --live --route --route-webhook <id>    # also check that webhook for dispatches caused by this event
 extole events fire <event_name> --email <e> --live --route --route-timeout 15      # wait longer for slower processing
-extole events fire <event_name> --email <e> --live --route --summary                # 3-5 line summary instead of full diagnostic (good for chained scripts / agents)
 ```
 
 Either `--live` or `--sandbox` is required to send an event. Use `--dry-run` to preview the payload safely.
@@ -337,17 +336,6 @@ No campaigns matched.
 This distinction is the difference between "your wiring is wrong" and "your wiring is right but a filter excluded the test person" — two very different fixes.
 
 `--route` automatically discovers webhooks attached to campaigns using this event and probes each for dispatches caused by the fired event. Use `--route-webhook <id>` to override and check a specific webhook directly.
-
-For chained scripts and agent pipelines, pair with `--summary` to get a compact form (no decoration, key=value-ish where natural):
-
-```
-outcome: no campaign matched for cduskin@extole.com
-causes: program AND journey would each block independently
-program: event unattributed; LIVE campaigns using this event require {loans, refer-a-member-flow, in-person-event}
-journey: person in {ADVOCATE@credit-cards}; LIVE campaigns using this event require {FRIEND, participant}
-```
-
-Same data as the full diagnostic, ~5 lines instead of ~30. Grep-friendly: `outcome:`, `causes:`, `next:`, `program:`, `journey:`, `webhooks:` are stable line prefixes.
 
 ## Person
 
