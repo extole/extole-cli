@@ -2,7 +2,7 @@ import { readFileSync } from 'fs';
 import { Command } from 'commander';
 import { createInterface } from 'readline';
 import { resolveToken, API_BASE } from '../config.js';
-import { apiJson, apiFetch } from '../api.js';
+import { apiJson, apiFetch, formatApiErrorBody } from '../api.js';
 import { printJson } from '../output.js';
 import { addGlobalOptions } from '../utils.js';
 
@@ -277,15 +277,18 @@ export function webhooksCommand() {
       });
       if (!res.ok) {
         const text = await res.text();
-        let detail = text.slice(0, 300);
+        let detail = formatApiErrorBody(text);
         try {
           const err = JSON.parse(text);
-          const actions = err.webhook_controller_actions;
+          // The bind list lives under parameters.webhook_controller_actions in
+          // the structured error envelope. Surface it as a friendly hint
+          // alongside the formatted error.
+          const actions = err.parameters?.webhook_controller_actions || err.webhook_controller_actions;
           if (actions?.length) {
-            const campaignIds = [...new Set(actions.map(a => a.campaign_id).filter(Boolean))];
-            detail = `webhook is still wired to campaign(s): ${campaignIds.join(', ')}. Delete the controller actions first.`;
+            const lines = actions.map(a => `  - controller ${a.controller_id || '?'} on campaign ${a.campaign_id || '?'} (${a.controller_name || 'unnamed'})`);
+            detail = `${detail}\n\nWebhook is still wired to ${actions.length} controller action(s). Detach them first:\n${lines.join('\n')}`;
           }
-        } catch (_) { /* use raw text */ }
+        } catch (_) { /* use formatted body */ }
         console.error(`Error ${res.status}: ${detail}`);
         process.exit(1);
       }
@@ -551,12 +554,11 @@ export function webhooksCommand() {
           const data = await fetchDispatches(webhookId, token, { limit: '20' }, false);
           const list = Array.isArray(data) ? data : (data.dispatches || data.results || []);
           for (const d of list.reverse()) {
-            const id = d.dispatch_id || d.id || '';
+            const id = d.event_id || d.dispatch_id || d.id || '';
             if (!id || seen.has(id)) continue;
             seen.add(id);
-            const ts = (d.dispatched_at || d.created_date || '').slice(0, 19).replace('T', ' ');
-            const status = (d.status || d.result || '').padEnd(12);
-            console.log(`${ts}  ${status}  ${id}`);
+            const ts = (d.event_time || d.dispatched_at || d.created_date || '').toString().slice(0, 19).replace('T', ' ');
+            console.log(`${ts.padEnd(19)}  ${id}`);
           }
         } catch (_) { /* ignore transient poll errors */ }
       }, 3000);
@@ -579,7 +581,8 @@ export function webhooksCommand() {
     .argument('<webhook-id>', 'Webhook ID')
     .option('--limit <n>', 'Max results', '20')
     .option('--offset <n>', 'Offset', '0')
-    .action(async (webhookId, opts) => {
+    .action(async (webhookId, _o, command) => {
+      const opts = command.optsWithGlobals();
       const token = resolveToken(opts);
       const data = await fetchDispatches(webhookId, token, { limit: opts.limit, offset: opts.offset }, opts.verbose);
       const list = Array.isArray(data) ? data : (data.dispatches || data.results || []);
@@ -588,10 +591,10 @@ export function webhooksCommand() {
       if (list.length === 0) { console.log('No dispatches found.'); return; }
 
       for (const d of list) {
-        const ts = d.dispatched_at || d.created_date || '';
-        const status = d.status || d.result || '';
-        const id = d.dispatch_id || d.id || '';
-        console.log(`${ts}  ${status.padEnd(12)}  ${id}`);
+        const ts = (d.event_time || d.dispatched_at || d.created_date || '').toString().slice(0, 19).replace('T', ' ');
+        const eventId = d.event_id || d.dispatch_id || d.id || '';
+        const causeId = d.cause_event_id || (d.event && d.event.cause_event_id) || '';
+        console.log(`${ts.padEnd(19)}  ${eventId.padEnd(20)}  cause=${causeId}`);
       }
     });
 
@@ -611,7 +614,8 @@ export function webhooksCommand() {
     .argument('<webhook-id>', 'Webhook ID')
     .option('--limit <n>', 'Max results', '20')
     .option('--offset <n>', 'Offset', '0')
-    .action(async (webhookId, opts) => {
+    .action(async (webhookId, _o, command) => {
+      const opts = command.optsWithGlobals();
       const token = resolveToken(opts);
       const data = await fetchDispatchResults(webhookId, token, { limit: opts.limit, offset: opts.offset }, opts.verbose);
       const list = Array.isArray(data) ? data : (data.results || []);
@@ -620,10 +624,11 @@ export function webhooksCommand() {
       if (list.length === 0) { console.log('No dispatch results found.'); return; }
 
       for (const d of list) {
-        const ts = d.dispatched_at || d.created_date || '';
-        const status = String(d.http_status || d.status || '').padEnd(6);
-        const id = d.dispatch_id || d.id || '';
-        console.log(`${ts}  ${status}  ${id}`);
+        const ts = (d.event_time || d.dispatched_at || d.created_date || '').toString().slice(0, 19).replace('T', ' ');
+        const code = String(d.response_status_code ?? d.response_code ?? d.http_status ?? d.status ?? '').padEnd(4);
+        const eventId = d.event_id || d.dispatch_id || d.id || '';
+        const msg = (d.response_body || d.response_message || '').toString().slice(0, 80);
+        console.log(`${ts.padEnd(19)}  ${code}  ${eventId.padEnd(20)}  ${msg}`);
       }
     });
 

@@ -6,7 +6,7 @@ import { execSync } from 'child_process';
 import { createInterface } from 'readline';
 import { Command } from 'commander';
 import { resolveToken, API_BASE } from '../config.js';
-import { apiJson, apiFetch } from '../api.js';
+import { apiJson, apiFetch, formatApiErrorBody } from '../api.js';
 import { printJson } from '../output.js';
 import { addGlobalOptions } from '../utils.js';
 
@@ -366,6 +366,10 @@ export function componentsCommand() {
       }
 
       if (!opts.confirm) {
+        if (!process.stdin.isTTY) {
+          console.error('\nAborted: --confirm required in non-interactive contexts (no TTY for prompt).');
+          process.exit(1);
+        }
         const answer = await new Promise(res => {
           const rl = createInterface({ input: process.stdin, output: process.stdout });
           rl.question('\nDelete this component? [y/N] ', ans => { rl.close(); res(ans.trim().toLowerCase()); });
@@ -383,7 +387,7 @@ export function componentsCommand() {
       });
       if (!res.ok) {
         const text = await res.text();
-        console.error(`Error ${res.status}: ${text.slice(0, 300)}`);
+        console.error(`Error ${res.status}: ${formatApiErrorBody(text)}`);
         process.exit(1);
       }
       if (opts.json) { printJson({ deleted: componentId }, opts); return; }
