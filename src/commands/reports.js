@@ -76,12 +76,31 @@ export function reportsCommand() {
   const typesCmd = new Command('types')
     .description('List available report types')
     .allowExcessArguments(false)
+    .option('--filter <substr>', 'Case-insensitive substring match against name, display_name, description, and categories')
     .action(async (opts) => {
       const token = resolveToken(opts);
       const data = await apiJson('/v6/report-types', token, { verbose: opts.verbose });
-      const types = Array.isArray(data) ? data : (data.report_types || []);
+      let types = Array.isArray(data) ? data : (data.report_types || []);
+
+      if (opts.filter) {
+        const needle = opts.filter.toLowerCase();
+        types = types.filter(t => {
+          const haystack = [
+            t.report_type, t.name, t.display_name, t.description,
+            ...(t.categories || []),
+          ].filter(Boolean).join(' ').toLowerCase();
+          return haystack.includes(needle);
+        });
+      }
+
       if (opts.json) {
         printJson(types, opts);
+        return;
+      }
+      if (types.length === 0) {
+        console.log(opts.filter
+          ? `No report types match "${opts.filter}".`
+          : 'No report types found.');
         return;
       }
       const col1 = Math.max(20, ...types.map(t => (t.report_type || t.name || '').length)) + 2;
@@ -99,7 +118,69 @@ export function reportsCommand() {
     output: true,
     examples: [
       'extole reports types',
+      'extole reports types --filter engagement',
+      'extole reports types --filter "customer activity"',
       'extole reports types --json | jq \'.[].report_type\'',
+    ],
+  });
+
+  // ── recommended ───────────────────────────────────────────────────────────
+
+  const recommendedCmd = new Command('recommended')
+    .description('Show curated report-type recommendations for this account')
+    .allowExcessArguments(false)
+    .option('--limit <n>', 'Max number of recommendations (default 5)')
+    .action(async (opts) => {
+      const token = resolveToken(opts);
+      const qs = opts.limit ? `?limit=${encodeURIComponent(opts.limit)}` : '';
+      const data = await apiJson(`/v6/report-types/recommendations${qs}`, token, { verbose: opts.verbose });
+      const recs = Array.isArray(data) ? data : (data.report_types || []);
+
+      if (opts.json) {
+        printJson(recs, opts);
+        return;
+      }
+      if (recs.length === 0) {
+        console.log('No recommendations available.');
+        return;
+      }
+
+      console.log(`Recommended report types (${recs.length}):\n`);
+      const stripHtml = (s) => (s || '').replace(/<[^>]+>/g, '').replace(/\s+/g, ' ').trim();
+      const wrap = (text, width, indent) => {
+        const words = text.split(' ');
+        const lines = [];
+        let line = '';
+        for (const w of words) {
+          if ((line + ' ' + w).trim().length > width) {
+            if (line) lines.push(line);
+            line = w;
+          } else {
+            line = line ? `${line} ${w}` : w;
+          }
+        }
+        if (line) lines.push(line);
+        return lines.map(l => `${indent}${l}`).join('\n');
+      };
+
+      for (const r of recs) {
+        const id = r.report_type || r.name || '';
+        const display = r.display_name || '';
+        const cats = (r.categories && r.categories.length) ? `  [${r.categories.join(', ')}]` : '';
+        console.log(`  ${id}    ${display}${cats}`);
+        const desc = stripHtml(r.description);
+        if (desc) console.log(wrap(desc, 76, '    '));
+        console.log('');
+      }
+      console.log('Run `extole reports describe --type <name>` to see parameters; `extole reports run --type <name> ...` to execute.');
+    });
+
+  addGlobalOptions(recommendedCmd, {
+    output: true,
+    examples: [
+      'extole reports recommended',
+      'extole reports recommended --limit 10',
+      'extole reports recommended --json',
     ],
   });
 
@@ -301,6 +382,7 @@ export function reportsCommand() {
   });
 
   reports.addCommand(typesCmd);
+  reports.addCommand(recommendedCmd);
   reports.addCommand(describeCmd);
   reports.addCommand(runCmd);
   reports.addCommand(statusCmd);

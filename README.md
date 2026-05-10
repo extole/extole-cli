@@ -95,6 +95,7 @@ Read-only domain and email deliverability checks. Validates email domains (SPF, 
 extole health                          # check all email domains + program domains
 extole health --domain example.com    # filter to a specific email domain
 extole health --json                  # raw validation results
+extole health dkim example.com        # generate/return DKIM CNAME records for an email domain
 ```
 
 Output uses colored dots — green for PASS, red for FAIL — with the reason inline:
@@ -352,6 +353,9 @@ extole person steps --email jane@example.com --watch --json
 ```
 extole reports                                   # list saved report runners
 extole reports types                             # list all available report types
+extole reports types --filter engagement         # filter types by name/description/categories
+extole reports recommended                       # show curated recommendations for this account
+extole reports recommended --limit 10            # ...up to N recommendations (default 5)
 extole reports describe --type summary           # show parameters for a report type
 
 extole reports run --type REPORT_TYPE [options]  # create report, returns ID immediately

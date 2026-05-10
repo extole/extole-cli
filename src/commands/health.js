@@ -60,6 +60,14 @@ async function fetchEmailDomainValidation(id, token, verbose) {
   return apiJson(`/v4/email-domains/${id}/validate`, token, { verbose, baseUrl: API_BASE });
 }
 
+async function generateDkimRecords(id, token, verbose) {
+  return apiJson(`/v4/email-domains/${id}/generate-dkim-records`, token, {
+    method: 'POST',
+    verbose,
+    baseUrl: API_BASE,
+  });
+}
+
 async function fetchPrograms(token, verbose) {
   return apiJson('/v2/programs', token, { verbose, baseUrl: API_BASE });
 }
@@ -167,6 +175,71 @@ export function healthCommand() {
       'extole health --json',
     ],
   });
+
+  // ── health dkim ──────────────────────────────────────────────────────────
+  // Generates the DKIM CNAME records for an email domain (via SendGrid). Safe
+  // to call repeatedly: backend uses get-or-create semantics, so for domains
+  // that already have DKIM set up this returns the existing records without
+  // changing anything.
+
+  const dkimCmd = new Command('dkim')
+    .description('Get the DKIM CNAME records for an email domain. Safe to re-run; backend get-or-creates the records.')
+    .argument('<domain>', 'Email domain (substring match) or email-domain ID')
+    .action(async (domainArg, opts) => {
+      const token = resolveToken(opts);
+
+      // Resolve the argument to an email domain ID
+      const domainList = await fetchEmailDomains(token, opts.verbose);
+      const all = Array.isArray(domainList) ? domainList : (domainList.email_domains || []);
+      let target = all.find(d => d.id === domainArg);
+      if (!target) {
+        const matches = all.filter(d => (d.domain || '').toLowerCase().includes(domainArg.toLowerCase()));
+        if (matches.length === 0) {
+          console.error(`No email domain matched "${domainArg}".`);
+          process.exit(1);
+        }
+        if (matches.length > 1) {
+          console.error(`Multiple email domains match "${domainArg}":`);
+          for (const m of matches) console.error(`  ${m.id}  ${m.domain}`);
+          console.error('Use a more specific substring or pass the email-domain ID.');
+          process.exit(2);
+        }
+        target = matches[0];
+      }
+
+      const result = await generateDkimRecords(target.id, token, opts.verbose);
+      const records = (result && result.records) || [];
+
+      if (opts.json) {
+        printJson({ email_domain_id: target.id, domain: target.domain, records }, opts);
+        return;
+      }
+
+      if (records.length === 0) {
+        console.log(`No DKIM records returned for ${target.domain} (${target.id}).`);
+        return;
+      }
+
+      console.log(`DKIM CNAME records for ${target.domain} (${target.id}):\n`);
+      const aliasW = Math.max(20, ...records.map(r => (r.alias || '').length));
+      console.log(`${'name (alias)'.padEnd(aliasW)}  value (canonical_name)`);
+      console.log(`${'─'.repeat(aliasW)}  ${'─'.repeat(50)}`);
+      for (const r of records) {
+        console.log(`${(r.alias || '').padEnd(aliasW)}  ${r.canonical_name || ''}`);
+      }
+      console.log(`\nAdd these as CNAME records in your DNS provider, then re-run \`extole health --domain ${target.domain}\` to verify.`);
+    });
+
+  addGlobalOptions(dkimCmd, {
+    output: true,
+    examples: [
+      'extole health dkim example.com',
+      'extole health dkim 7637000000000000001',
+      'extole health dkim example.com --json',
+    ],
+  });
+
+  healthCmd.addCommand(dkimCmd);
 
   return healthCmd;
 }
