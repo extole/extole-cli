@@ -176,15 +176,17 @@ export function healthCommand() {
     ],
   });
 
-  // ── health dkim ──────────────────────────────────────────────────────────
-  // Generates the DKIM CNAME records for an email domain (via SendGrid). Safe
-  // to call repeatedly: backend uses get-or-create semantics, so for domains
-  // that already have DKIM set up this returns the existing records without
-  // changing anything.
+  // ── health dkim-records ──────────────────────────────────────────────────
+  // Returns the DKIM CNAME records for an email domain. Backend uses
+  // get-or-create semantics via SendGrid, so the FIRST call on a domain
+  // that's never been provisioned will mint new keys. Subsequent calls are
+  // no-ops that return the existing keys. Default behavior is a dry-run
+  // that requires --live to actually call the API.
 
-  const dkimCmd = new Command('dkim')
-    .description('Get the DKIM CNAME records for an email domain. Safe to re-run; backend get-or-creates the records.')
+  const dkimCmd = new Command('dkim-records')
+    .description('Show the DKIM CNAME records for an email domain. The backend get-or-creates via SendGrid — the first call on a never-provisioned domain mints new keys; subsequent calls return existing ones. --live is required to make the call.')
     .argument('<domain>', 'Email domain (substring match) or email-domain ID')
+    .option('--live', 'Actually call the API. Without this flag, prints what would happen but makes no API call.')
     .action(async (domainArg, opts) => {
       const token = resolveToken(opts);
 
@@ -205,6 +207,15 @@ export function healthCommand() {
           process.exit(2);
         }
         target = matches[0];
+      }
+
+      if (!opts.live) {
+        console.log(`Would call POST /v4/email-domains/${target.id}/generate-dkim-records  (domain: ${target.domain})`);
+        console.log(`This endpoint uses get-or-create semantics via SendGrid:`);
+        console.log(`  - if DKIM is already provisioned → returns existing records (no-op)`);
+        console.log(`  - if not yet provisioned → mints new DKIM keys via SendGrid (one-time write)`);
+        console.log(`\nRe-run with --live to make the call.`);
+        return;
       }
 
       const result = await generateDkimRecords(target.id, token, opts.verbose);
@@ -233,9 +244,9 @@ export function healthCommand() {
   addGlobalOptions(dkimCmd, {
     output: true,
     examples: [
-      'extole health dkim example.com',
-      'extole health dkim 7637000000000000001',
-      'extole health dkim example.com --json',
+      'extole health dkim-records example.com           # dry-run; explains what would happen',
+      'extole health dkim-records example.com --live    # actually call the API',
+      'extole health dkim-records example.com --live --json',
     ],
   });
 

@@ -95,7 +95,8 @@ Read-only domain and email deliverability checks. Validates email domains (SPF, 
 extole health                          # check all email domains + program domains
 extole health --domain example.com    # filter to a specific email domain
 extole health --json                  # raw validation results
-extole health dkim example.com        # generate/return DKIM CNAME records for an email domain
+extole health dkim-records example.com         # dry-run; explain what the live call would do
+extole health dkim-records example.com --live  # call the API; first run mints SendGrid DKIM keys, subsequent runs return existing
 ```
 
 Output uses colored dots — green for PASS, red for FAIL — with the reason inline:
