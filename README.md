@@ -89,15 +89,19 @@ extole programs --json
 
 ## Health
 
-Read-only domain and email deliverability checks. Validates email domains (SPF, DMARC, DKIM, MX, A records) and program domains (CNAME/A resolution) against Extole's validation API. Nothing is created or modified.
+Domain and email deliverability checks. The base command is read-only — validates email domains (SPF, DMARC, DKIM, MX, A records) and program domains (CNAME/A resolution) against Extole's validation API. Nothing is created or modified by `extole health` itself; the `provision-dkim` subcommand is the only write operation, and it requires explicit confirmation.
 
 ```
 extole health                          # check all email domains + program domains
 extole health --domain example.com    # filter to a specific email domain
 extole health --json                  # raw validation results
-extole health provision-dkim example.com           # provision DKIM via SendGrid (interactive prompt)
-extole health provision-dkim example.com --confirm # skip prompt for scripts
+
+# DKIM provisioning (write operation — interactive prompt by default)
+extole health provision-dkim example.com           # prompts before calling
+extole health provision-dkim example.com --confirm # non-interactive (for scripts/CI)
 ```
+
+`provision-dkim` calls SendGrid via the platform's get-or-create endpoint: the first call on a never-provisioned domain mints new DKIM keys; subsequent calls return existing records (no-op). Output is the CNAME records to add to your DNS provider. Re-run `extole health --domain <domain>` after adding the records to verify they resolve.
 
 Output uses colored dots — green for PASS, red for FAIL — with the reason inline:
 
@@ -351,13 +355,18 @@ extole person steps --email jane@example.com --watch --json
 
 ## Reports
 
+Discovery → describe → run is the full flow:
+
 ```
+extole reports recommended                       # curated starting picks for this account (default 5)
+extole reports types --filter <term>             # discovery: substring match across name/description/categories
+extole reports describe --type <name>            # what parameters does it take?
+extole reports run --type <name> ...             # execute it
+
 extole reports                                   # list saved report runners
-extole reports types                             # list all available report types
-extole reports types --filter engagement         # filter types by name/description/categories
-extole reports recommended                       # show curated recommendations for this account
-extole reports recommended --limit 10            # ...up to N recommendations (default 5)
-extole reports describe --type summary           # show parameters for a report type
+extole reports types                             # list ALL available report types (no filter)
+extole reports recommended --limit 10            # more than 5 recommendations
+extole reports recommended --json                # raw response for scripting
 
 extole reports run --type REPORT_TYPE [options]  # create report, returns ID immediately
   --days <n>           set time_range to last N days (mutually exclusive with -p time_range)
