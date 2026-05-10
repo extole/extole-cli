@@ -355,16 +355,20 @@ extole person steps --email jane@example.com --watch --json
 
 ## Reports
 
-Discovery → describe → run is the full flow:
+**Discovery → describe → run** is the full flow, and each step's output gives you exactly what you need to take the next step. No out-of-band knowledge, no docs to consult — the chain is self-documenting:
 
 ```
 extole reports recommended                       # curated starting picks for this account (default 5)
-extole reports types --filter <term>             # discovery: substring match across name/description/categories
-extole reports describe --type <name>            # what parameters does it take?
-extole reports run --type <name> ...             # execute it
+extole reports types --filter <term>             # find reports by name/description/categories
+extole reports describe --type <name>            # required vs optional params, types, defaults, allowed values
+extole reports run --type <name> -p key=value    # execute
+```
 
+`describe` is the contract for `run`. It surfaces every parameter the report accepts — required vs optional, type (`TIME_RANGE`, `STRING`, `ENUM`, `BOOLEAN`, `STRING_LIST`, etc.), defaults, and allowed values for enums. An agent can read it programmatically and build a valid `run` invocation; a human can read it and remember.
+
+```
 extole reports                                   # list saved report runners
-extole reports types                             # list ALL available report types (no filter)
+extole reports types                             # list ALL report types (no filter)
 extole reports recommended --limit 10            # more than 5 recommendations
 extole reports recommended --json                # raw response for scripting
 
@@ -378,6 +382,8 @@ extole reports status REPORT_ID                  # check if a report is done
 extole reports download REPORT_ID                # download a completed report
 extole reports download REPORT_ID --wait         # wait for completion then download
 ```
+
+The CLI does not validate parameters client-side — it packs `-p` values into the request body and lets the platform reject invalid ones. This keeps the CLI's view from drifting away from the platform's; the source of truth is always `describe`.
 
 Examples:
 
