@@ -1,4 +1,5 @@
 import { Command } from 'commander';
+import { createInterface } from 'readline';
 import { resolveToken, API_BASE } from '../config.js';
 import { apiJson } from '../api.js';
 import { printJson } from '../output.js';
@@ -176,17 +177,16 @@ export function healthCommand() {
     ],
   });
 
-  // ── health dkim-records ──────────────────────────────────────────────────
-  // Returns the DKIM CNAME records for an email domain. Backend uses
-  // get-or-create semantics via SendGrid, so the FIRST call on a domain
-  // that's never been provisioned will mint new keys. Subsequent calls are
-  // no-ops that return the existing keys. Default behavior is a dry-run
-  // that requires --live to actually call the API.
+  // ── health provision-dkim ────────────────────────────────────────────────
+  // Provisions DKIM for an email domain via SendGrid. Backend uses get-or-
+  // create semantics: the FIRST call on a never-provisioned domain mints
+  // new DKIM keys; subsequent calls return existing ones. Existing DKIM
+  // status is visible via `extole health` — this command is the writer.
 
-  const dkimCmd = new Command('dkim-records')
-    .description('Show the DKIM CNAME records for an email domain. The backend get-or-creates via SendGrid — the first call on a never-provisioned domain mints new keys; subsequent calls return existing ones. --live is required to make the call.')
+  const dkimCmd = new Command('provision-dkim')
+    .description('Provision (mint via SendGrid) or fetch DKIM CNAME records for an email domain. First call on a fresh domain mints new keys; subsequent calls return existing. Use `extole health` to see current DKIM status without writing.')
     .argument('<domain>', 'Email domain (substring match) or email-domain ID')
-    .option('--live', 'Actually call the API. Without this flag, prints what would happen but makes no API call.')
+    .option('--confirm', 'Skip the interactive confirmation prompt (required in non-interactive contexts)')
     .action(async (domainArg, opts) => {
       const token = resolveToken(opts);
 
@@ -209,13 +209,22 @@ export function healthCommand() {
         target = matches[0];
       }
 
-      if (!opts.live) {
-        console.log(`Would call POST /v4/email-domains/${target.id}/generate-dkim-records  (domain: ${target.domain})`);
-        console.log(`This endpoint uses get-or-create semantics via SendGrid:`);
-        console.log(`  - if DKIM is already provisioned → returns existing records (no-op)`);
+      if (!opts.confirm) {
+        if (!process.stdin.isTTY) {
+          console.error('Aborted: --confirm required in non-interactive contexts (no TTY for prompt).');
+          process.exit(1);
+        }
+        console.log(`About to provision DKIM for ${target.domain} (${target.id}).`);
+        console.log(`  - if DKIM is already provisioned → returns existing records (no-op on SendGrid)`);
         console.log(`  - if not yet provisioned → mints new DKIM keys via SendGrid (one-time write)`);
-        console.log(`\nRe-run with --live to make the call.`);
-        return;
+        const answer = await new Promise(res => {
+          const rl = createInterface({ input: process.stdin, output: process.stdout });
+          rl.question('\nProceed? [y/N] ', ans => { rl.close(); res(ans.trim().toLowerCase()); });
+        });
+        if (answer !== 'y' && answer !== 'yes') {
+          console.log('Cancelled.');
+          return;
+        }
       }
 
       const result = await generateDkimRecords(target.id, token, opts.verbose);
@@ -244,9 +253,9 @@ export function healthCommand() {
   addGlobalOptions(dkimCmd, {
     output: true,
     examples: [
-      'extole health dkim-records example.com           # dry-run; explains what would happen',
-      'extole health dkim-records example.com --live    # actually call the API',
-      'extole health dkim-records example.com --live --json',
+      'extole health provision-dkim example.com             # interactive; prompts before calling',
+      'extole health provision-dkim example.com --confirm   # non-interactive; calls without prompting',
+      'extole health provision-dkim example.com --confirm --json',
     ],
   });
 
