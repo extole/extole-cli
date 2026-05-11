@@ -599,9 +599,7 @@ extole describe campaign <campaign-id>     # marketer-readable program descripti
 
 The campaign command reads the live V10 component tree, walks rewards / journeys / quality rules, and emits a clean prose-plus-bullets summary aimed at a marketer or PM. If the campaign is V8 or earlier, the skill halts with an explanation. When specific values can't be confirmed from readable settings, the output flags them as `[... — could not be confirmed; please verify]` rather than guessing.
 
-**Caveats:**
-- Multi-step skill workflows can hit the agent server's gateway timeout (~30–60s) on complex campaigns. Simpler V10 campaigns fit; very rule-heavy programs may 504.
-- Output is markdown, not machine-parseable JSON. For structured downstream consumption, the procedural commands (`extole campaigns quality-rules`, `extole audiences get`, etc.) are the right tools.
+Output is markdown, not machine-parseable JSON. For structured downstream consumption, the procedural commands (`extole campaigns quality-rules`, `extole audiences get`, etc.) are the right tools.
 
 ## AI (extole mcp)
 
