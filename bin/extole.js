@@ -20,6 +20,7 @@ import { whoamiCommand } from '../src/commands/whoami.js';
 import { feedbackCommand } from '../src/commands/feedback.js';
 import { zonesCommand } from '../src/commands/zones.js';
 import { shareLinksCommand } from '../src/commands/share-links.js';
+import { campaignsCommand } from '../src/commands/campaigns.js';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const { version } = JSON.parse(readFileSync(join(__dirname, '../package.json'), 'utf8'));
@@ -46,6 +47,7 @@ program.addCommand(eventsCommand());
 program.addCommand(personCommand());
 program.addCommand(rewardsCommand());
 program.addCommand(programsCommand());
+program.addCommand(campaignsCommand());
 program.addCommand(componentsCommand());
 program.addCommand(webhooksCommand());
 program.addCommand(healthCommand());

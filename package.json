@@ -1,6 +1,6 @@
 {
   "name": "extole-cli",
-  "version": "0.3.2",
+  "version": "0.4.0",
   "description": "Extole developer CLI",
   "bin": {
     "extole": "./bin/extole.js"

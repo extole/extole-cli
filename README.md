@@ -87,6 +87,28 @@ extole programs --all     # include PAUSED, STOPPED, NOT_LAUNCHED
 extole programs --json
 ```
 
+## Campaigns
+
+Inspect per-campaign configuration: which quality rules are turned on, and what the MaxMind fraud-scoring controller-trigger settings are.
+
+```
+extole campaigns quality-rules <campaign-id>                       # enabled quality rules only
+extole campaigns quality-rules <campaign-id> --include-disabled    # also show disabled rules
+extole campaigns quality-rules <campaign-id> --json                # raw QualityRuleResponse[]
+
+extole campaigns maxmind <campaign-id>                             # enabled MaxMind triggers only
+extole campaigns maxmind <campaign-id> --include-disabled          # also show disabled triggers
+extole campaigns maxmind <campaign-id> --json                      # raw trigger array
+```
+
+### Quality rules
+
+`quality-rules` calls `GET /v2/campaigns/{id}/incentive/quality-rules` and renders the configured legacy quality rules (`REFERRAL_CAP`, `SELF_REFERRAL`, `BAD_COUNTRY`, `VALID_EMAIL`, `BOT_FILTER`, `BLACKLIST_DOMAIN`, `EVENT_SPEED`, `BLOCKED`, `RECENT_CUSTOMER`, `SHARE_COUNT_LIMIT`, `IP_FILTER`, `FRIENDS_OF_ADVOCATE_*_LIMIT`, etc.). Each row shows the rule type, whether it is enabled, which action types it applies to (`ANY_CLICK`, `ANY_SHARE`, `ANY_REGISTER`, `ANY_PURCHASE`, `ANY_PROMOTION`), and any rule-specific properties (e.g. `cap_number=10, lookback_interval=7` on `REFERRAL_CAP`).
+
+### MaxMind
+
+`maxmind` walks the built campaign (`GET /v2/campaigns/{id}/built`) and surfaces every `trigger_type: MAXMIND` controller-trigger, with its step, phase, `risk_threshold`, `ip_threshold`, `allow_high_risk_email`, and `default_quality_score`. When a trigger has thresholds different from the agreed value of `20` (the legacy default was `5`), an advisory is printed to stderr pointing at the cross-client audit work in [extole/ai-tools#178](https://github.com/extole/ai-tools/pull/178) / [SUP-65537](https://extole.atlassian.net/browse/SUP-65537). The advisory does not appear in `--json` output.
+
 ## Health
 
 Domain and email deliverability checks. The base command is read-only — validates email domains (SPF, DMARC, DKIM, MX, A records) and program domains (CNAME/A resolution) against Extole's validation API. Nothing is created or modified by `extole health` itself; the `provision-dkim` subcommand is the only write operation, and it requires explicit confirmation.
