@@ -589,6 +589,20 @@ extole feedback auth login flow was confusing at first, needed to read the READM
 
 Sends a message directly to the Extole CLI team's Slack channel. Includes your account name and CLI version automatically — no sign-up or setup required.
 
+## Describe (skill-driven synthesis)
+
+`extole describe <thing>` is a small family of agent-driven commands that produce marketer- or CSM-readable summaries by combining MCP data fetches with a bundled "skill" (a workflow + output-format spec). Unlike the procedural commands, these route through the Extole AI agent under the hood, so they require `extole auth mcp-login` and your MCP user's data access determines what the agent can see (`--account` is **not** honored — the agent has its own auth context).
+
+```
+extole describe campaign <campaign-id>     # marketer-readable program description: rewards, eligibility, share limits, fraud/quality rules
+```
+
+The campaign command reads the live V10 component tree, walks rewards / journeys / quality rules, and emits a clean prose-plus-bullets summary aimed at a marketer or PM. If the campaign is V8 or earlier, the skill halts with an explanation. When specific values can't be confirmed from readable settings, the output flags them as `[... — could not be confirmed; please verify]` rather than guessing.
+
+**Caveats:**
+- Multi-step skill workflows can hit the agent server's gateway timeout (~30–60s) on complex campaigns. Simpler V10 campaigns fit; very rule-heavy programs may 504.
+- Output is markdown, not machine-parseable JSON. For structured downstream consumption, the procedural commands (`extole campaigns quality-rules`, `extole audiences get`, etc.) are the right tools.
+
 ## AI (extole mcp)
 
 `extole mcp` gives you access to an Extole AI agent with deep knowledge of Extole's API surface, program configuration model, event semantics, component type system, and reward flows. Use it **before** exploring the API blindly — it can tell you which endpoint to use, what parameters it accepts, what the response shape is, and how concepts relate to each other.

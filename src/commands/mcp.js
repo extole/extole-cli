@@ -6,7 +6,7 @@ const AGENT_URL = 'https://agent.extole.com';
 const IDP_TOKEN_URL = 'https://idp.extole.com/oauth2/token';
 const MCP_CLIENT_ID = 'extole-cli';
 
-async function resolveMcpToken() {
+export async function resolveMcpToken() {
   const config = loadConfig();
   const mcp = config._mcp;
 
@@ -54,39 +54,45 @@ async function resolveMcpToken() {
   return config._mcp.token;
 }
 
+// Send a prompt to the Extole AI agent. Returns the assistant's reply text.
+// Throws on unavailable/error so callers can decide how to handle.
+export async function sendToAgent(prompt) {
+  const token = await resolveMcpToken();
+  let res;
+  try {
+    res = await fetchWithTimeout(`${AGENT_URL}/conversation:send`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${token}`,
+      },
+      body: JSON.stringify({ userPrompt: prompt }),
+    }, 120_000);
+  } catch {
+    throw new Error('Extole AI agent server is unavailable');
+  }
+  if (!res.ok) {
+    const text = await res.text();
+    throw new Error(`Agent error ${res.status}: ${text}`);
+  }
+  const data = await res.json();
+  const assistantMsg = [...(data.messages ?? [])].reverse().find(m => m.type === 'assistant');
+  return assistantMsg?.text ?? data.response ?? JSON.stringify(data);
+}
+
 export function mcpCommand() {
   const cmd = new Command('mcp')
     .description('Ask a question or run a task using Extole AI')
     .argument('<prompt...>', 'What you want to do or know')
     .action(async (promptParts) => {
       const prompt = promptParts.join(' ');
-      const token = await resolveMcpToken();
-
-      let res;
       try {
-        res = await fetchWithTimeout(`${AGENT_URL}/conversation:send`, {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            'Authorization': `Bearer ${token}`,
-          },
-          body: JSON.stringify({ userPrompt: prompt }),
-        }, 120_000);
-      } catch {
-        console.error('Error: Extole AI agent server is unavailable');
+        const reply = await sendToAgent(prompt);
+        console.log(reply);
+      } catch (e) {
+        console.error(`Error: ${e.message}`);
         process.exit(1);
       }
-
-      if (!res.ok) {
-        const text = await res.text();
-        console.error(`Error ${res.status}: ${text}`);
-        process.exit(1);
-      }
-
-      const data = await res.json();
-      const assistantMsg = [...(data.messages ?? [])].reverse().find(m => m.type === 'assistant');
-      const reply = assistantMsg?.text ?? data.response ?? JSON.stringify(data);
-      console.log(reply);
     });
 
   addGlobalOptions(cmd, {
