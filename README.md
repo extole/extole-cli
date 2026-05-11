@@ -129,6 +129,21 @@ extole campaigns maxmind <campaign-id> --json                      # raw trigger
 
 `maxmind` walks the built campaign (`GET /v2/campaigns/{id}/built`) and surfaces every `trigger_type: MAXMIND` controller-trigger, with its step, phase, `risk_threshold`, `ip_threshold`, `allow_high_risk_email`, and `default_quality_score`. When a trigger has thresholds different from the recommended value of `20` (the legacy default was `5`), an advisory is printed to stderr. The advisory does not appear in `--json` output.
 
+## Notifications
+
+Show recent platform notifications for this account — webhook failures, integration errors, and other actionable system alerts. Same data as `my.extole.com/notifications`. Useful when debugging "the integration looks wired up but nothing's happening" — the notifications often name the exact campaign and event the platform couldn't process.
+
+```
+extole notifications                          # last 20 most-recent-first
+extole notifications --limit 50               # paginate (default 20)
+extole notifications --level ERROR            # ERROR / WARN / INFO filter
+extole notifications --tag technical          # tag filter (server-side; repeat for multiple)
+extole notifications --watch                  # tail new ones as they arrive (default 10s poll)
+extole notifications --json                   # raw response, suitable for scripting
+```
+
+Each notification shows time, level, name (e.g. `webhook_action_no_webhook`), the human message, and the key data fields (campaign_id, controller_id, person_id, cause_event_id) — most of which feed straight into other CLI commands (`extole events fire ... --route` with the cause_event_id, etc.).
+
 ## Health
 
 Domain and email deliverability checks. The base command is read-only — validates email domains (SPF, DMARC, DKIM, MX, A records) and program domains (CNAME/A resolution) against Extole's validation API. Nothing is created or modified by `extole health` itself; the `provision-dkim` subcommand is the only write operation, and it requires explicit confirmation.

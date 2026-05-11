@@ -22,6 +22,7 @@ import { zonesCommand } from '../src/commands/zones.js';
 import { shareLinksCommand } from '../src/commands/share-links.js';
 import { campaignsCommand } from '../src/commands/campaigns.js';
 import { audiencesCommand } from '../src/commands/audiences.js';
+import { notificationsCommand } from '../src/commands/notifications.js';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const { version } = JSON.parse(readFileSync(join(__dirname, '../package.json'), 'utf8'));
@@ -50,6 +51,7 @@ program.addCommand(rewardsCommand());
 program.addCommand(programsCommand());
 program.addCommand(campaignsCommand());
 program.addCommand(audiencesCommand());
+program.addCommand(notificationsCommand());
 program.addCommand(componentsCommand());
 program.addCommand(webhooksCommand());
 program.addCommand(healthCommand());
