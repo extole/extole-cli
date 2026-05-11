@@ -594,10 +594,15 @@ Sends a message directly to the Extole CLI team's Slack channel. Includes your a
 `extole describe <thing>` is a small family of agent-driven commands that produce marketer- or CSM-readable summaries by combining MCP data fetches with a bundled "skill" (a workflow + output-format spec). Unlike the procedural commands, these route through the Extole AI agent under the hood, so they require `extole auth mcp-login` and your MCP user's data access determines what the agent can see (`--account` is **not** honored — the agent has its own auth context).
 
 ```
-extole describe campaign <campaign-id>     # marketer-readable program description: rewards, eligibility, share limits, fraud/quality rules
+extole describe campaign <campaign-id>                   # marketer-readable program description: rewards, eligibility, share limits, fraud/quality rules
+extole describe integration                              # CSM-readable integration manifest for the current client
+extole describe integration <client>                     # ...or for a named client (requires cross-client MCP access)
+extole describe integration <client> --program <id>      # scope inbound-event analysis to one program
 ```
 
-The campaign command reads the live V10 component tree, walks rewards / journeys / quality rules, and emits a clean prose-plus-bullets summary aimed at a marketer or PM. If the campaign is V8 or earlier, the skill halts with an explanation. When specific values can't be confirmed from readable settings, the output flags them as `[... — could not be confirmed; please verify]` rather than guessing.
+**`describe campaign`** reads the live V10 component tree, walks rewards / journeys / quality rules, and emits a clean prose-plus-bullets summary aimed at a marketer or PM. If the campaign is V8 or earlier, the skill halts with an explanation. When specific values can't be confirmed from readable settings, the output flags them as `[... — could not be confirmed; please verify]` rather than guessing.
+
+**`describe integration`** produces a CSM-readable integration manifest: configured client domains (Extole-managed and branded), business events with their inbound triggers (event name OR zone, per source channel), content zones (pages, sub-zones, email surfaces), and outbound webhook delivery health. Use it for "is the integration set up right?" questions and onboarding handoffs.
 
 Output is markdown, not machine-parseable JSON. For structured downstream consumption, the procedural commands (`extole campaigns quality-rules`, `extole audiences get`, etc.) are the right tools.
 

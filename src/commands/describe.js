@@ -63,6 +63,51 @@ export function describeCommand() {
     ],
   });
 
+  // ── describe integration ───────────────────────────────────────────────
+
+  const integrationCmd = new Command('integration')
+    .description('Produce a CSM-readable integration report for a client — configured domains, business events and their inbound triggers, content zones, and outbound webhook health. Optionally scope to a single program. This command uses your MCP identity for data access; if you have cross-client access you can pass a client; if you have single-client access the agent uses your default context.')
+    .allowExcessArguments(false)
+    .argument('[client]', 'Client short_name or client_id to inspect (optional; defaults to your MCP user\'s current client)')
+    .option('--program <id>', 'Scope the inbound-event analysis to a specific program/campaign')
+    .action(async function (client) {
+      const opts = this.optsWithGlobals();
+      let skill;
+      try {
+        skill = loadSkill('extole-integration');
+      } catch (e) {
+        console.error(`Error loading skill: ${e.message}`);
+        process.exit(1);
+      }
+
+      const parts = [];
+      parts.push('Produce the integration report described by the skill below.');
+      if (client) parts.push(`Client: ${client}.`);
+      if (opts.program) parts.push(`Scope to program/campaign: ${opts.program}.`);
+      parts.push('Read live data via the Extole MCP tools and emit the report in the exact format the skill specifies.');
+      const task = parts.join(' ');
+      const prompt = buildPrompt(skill, task);
+
+      process.stderr.write('Asking the Extole AI agent... (this may take a minute for multi-step skill workflows)\n\n');
+
+      try {
+        const reply = await sendToAgent(prompt);
+        console.log(reply);
+      } catch (e) {
+        console.error(`Error: ${e.message}`);
+        process.exit(1);
+      }
+    });
+
+  addGlobalOptions(integrationCmd, {
+    examples: [
+      'extole describe integration',
+      'extole describe integration demo-data-finserv',
+      'extole describe integration <client> --program <campaign-id>',
+    ],
+  });
+
   describe.addCommand(campaignCmd);
+  describe.addCommand(integrationCmd);
   return describe;
 }
