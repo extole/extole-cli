@@ -92,7 +92,9 @@ extole programs --json
 Inspect audiences, their size, members, and recent push/sync history. Useful when verifying that an async audience operation (SFDC sync, file import, replace, etc.) completed without round-tripping through the my.extole UI.
 
 ```
-extole audiences list                                       # all audiences on the account
+extole audiences list                                       # audiences on the account (default --limit 100)
+extole audiences list --filter sfdc                         # match name substring
+extole audiences list --limit 500                           # raise cap on big accounts
 extole audiences get <name|id>                              # name, size, recent history summary
 extole audiences members <name|id>                          # person_id + email rows
 extole audiences members <name|id> --email-only             # emails only, one per line

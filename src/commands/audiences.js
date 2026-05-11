@@ -77,15 +77,32 @@ export function audiencesCommand() {
   const listCmd = new Command('list')
     .description('List audiences configured on the account')
     .allowExcessArguments(false)
+    .option('--filter <substr>', 'Case-insensitive substring match on audience name')
+    .option('--limit <n>', 'Cap the number of audiences displayed (default 100)', '100')
     .action(async (opts) => {
       const token = resolveToken(opts);
       const data = await fetchAudiences(token, opts.verbose);
-      const list = Array.isArray(data) ? data : [];
+      let list = Array.isArray(data) ? data : [];
+      const total = list.length;
 
-      if (opts.json) { printJson(list, opts); return; }
-      if (list.length === 0) { console.log('No audiences configured.'); return; }
+      if (opts.filter) {
+        const needle = opts.filter.toLowerCase();
+        list = list.filter(a => (nameOf(a) || '').toLowerCase().includes(needle));
+      }
 
-      const rows = list.map(a => ({
+      const limit = Math.max(1, parseInt(opts.limit, 10) || 100);
+      const limited = list.slice(0, limit);
+      const truncated = list.length > limit;
+
+      if (opts.json) { printJson(limited, opts); return; }
+      if (limited.length === 0) {
+        console.log(opts.filter
+          ? `No audiences match "${opts.filter}".`
+          : 'No audiences configured.');
+        return;
+      }
+
+      const rows = limited.map(a => ({
         id: a.id || '',
         name: nameOf(a) || '(unnamed)',
         enabled: enabledOf(a) === false ? 'off' : 'on',
@@ -101,12 +118,21 @@ export function audiencesCommand() {
       for (const r of rows) {
         console.log(`${r.id.padEnd(idW)}  ${r.name.padEnd(nameW)}  ${r.enabled.padEnd(enabledW)}  ${r.tags}`);
       }
+
+      if (truncated) {
+        const matched = opts.filter ? ` matching "${opts.filter}"` : '';
+        console.log(`\n${limited.length} of ${list.length}${matched} shown (--limit ${limit}). Pass --limit ${list.length} to see all, or refine with --filter.`);
+      } else if (opts.filter && list.length < total) {
+        console.log(`\n${list.length} of ${total} total audiences matched "${opts.filter}".`);
+      }
     });
 
   addGlobalOptions(listCmd, {
     output: true,
     examples: [
       'extole audiences list',
+      'extole audiences list --filter sfdc',
+      'extole audiences list --limit 500',
       'extole audiences list --json',
     ],
   });
