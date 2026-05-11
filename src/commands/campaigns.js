@@ -196,8 +196,7 @@ function maxmindCommand() {
         process.stderr.write(
           `\nAdvisory: ${stale.length} enabled trigger${stale.length === 1 ? ' has' : 's have'} ` +
           `risk_threshold or ip_threshold != ${EXPECTED_MAXMIND_THRESHOLD}. ` +
-          `The Quality team's recommended value is ${EXPECTED_MAXMIND_THRESHOLD}; the legacy default was 5. ` +
-          `See extole/ai-tools PR #178 and SUP-65537.\n`,
+          `The recommended value is ${EXPECTED_MAXMIND_THRESHOLD}; the legacy default was 5.\n`,
         );
       }
     });

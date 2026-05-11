@@ -107,7 +107,7 @@ extole campaigns maxmind <campaign-id> --json                      # raw trigger
 
 ### MaxMind
 
-`maxmind` walks the built campaign (`GET /v2/campaigns/{id}/built`) and surfaces every `trigger_type: MAXMIND` controller-trigger, with its step, phase, `risk_threshold`, `ip_threshold`, `allow_high_risk_email`, and `default_quality_score`. When a trigger has thresholds different from the agreed value of `20` (the legacy default was `5`), an advisory is printed to stderr pointing at the cross-client audit work in [extole/ai-tools#178](https://github.com/extole/ai-tools/pull/178) / [SUP-65537](https://extole.atlassian.net/browse/SUP-65537). The advisory does not appear in `--json` output.
+`maxmind` walks the built campaign (`GET /v2/campaigns/{id}/built`) and surfaces every `trigger_type: MAXMIND` controller-trigger, with its step, phase, `risk_threshold`, `ip_threshold`, `allow_high_risk_email`, and `default_quality_score`. When a trigger has thresholds different from the recommended value of `20` (the legacy default was `5`), an advisory is printed to stderr. The advisory does not appear in `--json` output.
 
 ## Health
 
