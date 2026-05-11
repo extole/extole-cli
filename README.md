@@ -87,6 +87,24 @@ extole programs --all     # include PAUSED, STOPPED, NOT_LAUNCHED
 extole programs --json
 ```
 
+## Audiences
+
+Inspect audiences, their size, members, and recent push/sync history. Useful when verifying that an async audience operation (SFDC sync, file import, replace, etc.) completed without round-tripping through the my.extole UI.
+
+```
+extole audiences list                                       # all audiences on the account
+extole audiences get <name|id>                              # name, size, recent history summary
+extole audiences members <name|id>                          # person_id + email rows
+extole audiences members <name|id> --email-only             # emails only, one per line
+extole audiences members <name|id> --limit 500 --offset 0   # paginate
+
+extole audiences history <name|id>                          # recent ADD / REMOVE / REPLACE / ACTION runs
+extole audiences history <name|id> --watch                  # tail new runs as they arrive (Ctrl-C to stop)
+extole audiences history <name|id> --watch --interval 3     # custom poll interval (default 5s)
+```
+
+The `<audience>` argument resolves in this order: exact ID, exact name, then case-insensitive substring of name. If multiple audiences match the substring, the CLI lists them and asks for a more specific input.
+
 ## Campaigns
 
 Inspect per-campaign configuration: which quality rules are turned on, and what the MaxMind fraud-scoring controller-trigger settings are.
