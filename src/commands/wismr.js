@@ -67,21 +67,33 @@ function pickMatchingRule(rules, reward) {
 function diagnose(reward, history) {
   // Return a short diagnostic string about this reward's likely status.
   const state = (reward.state || '').toUpperCase();
-  const failed = (history || []).find(h => h.success === false);
-  if (failed) {
-    return `FAILED transition: ${failed.state_type}${failed.message ? ` — ${failed.message}` : ''}`;
+  const hist = Array.isArray(history) ? history : [];
+
+  // Only call out failure if we did NOT eventually succeed in reaching the
+  // current state. A reward that failed FULFILLED three times before
+  // succeeding (e.g., low reward balance, then resolved) is currently fine.
+  const succeededToCurrent = hist.some(h => h.success && (h.state_type || '').toUpperCase() === state);
+  const lastFailed = hist.slice().reverse().find(h => h.success === false);
+  if (lastFailed && !succeededToCurrent) {
+    return `FAILED transition: ${lastFailed.state_type}${lastFailed.message ? ` — ${lastFailed.message}` : ''}`;
   }
+
+  // Note prior failures that were eventually resolved — operator context.
+  const retryNote = lastFailed && succeededToCurrent
+    ? ` (note: ${hist.filter(h => h.success === false).length} earlier failed attempt${hist.filter(h => h.success === false).length === 1 ? '' : 's'} — eventually resolved)`
+    : '';
+
   if (state === 'EARNED') {
-    return 'Earned but never fulfilled — supplier may have failed to mint, or fulfillment is queued. Check supplier inventory / partner API.';
+    return 'Earned but never fulfilled — supplier may have failed to mint, or fulfillment is queued. Check supplier inventory / partner API.' + retryNote;
   }
   if (state === 'FULFILLED') {
-    return 'Fulfilled (supplier minted the value) but not yet SENT — customer may not have received the email/notification yet.';
+    return 'Fulfilled (supplier minted the value) but not yet SENT — customer may not have received the email/notification yet.' + retryNote;
   }
   if (state === 'SENT') {
-    return 'Sent to the customer. If they say they did not receive it, check delivery (spam, wrong email, email-domain DKIM).';
+    return 'Sent to the customer. If they say they did not receive it, check delivery (spam, wrong email, email-domain DKIM).' + retryNote;
   }
   if (state === 'REDEEMED') {
-    return 'Redeemed — customer used the reward. Working as intended.';
+    return 'Redeemed — customer used the reward. Working as intended.' + retryNote;
   }
   if (state === 'CANCELED') {
     return 'Canceled (manually or by rule). Operator cancellation appears in history with operator_user_id.';
