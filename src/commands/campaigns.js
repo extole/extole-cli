@@ -211,12 +211,88 @@ function maxmindCommand() {
   });
 }
 
+async function fetchRewardRules(campaignId, token, verbose) {
+  return apiJson(
+    `/v2/campaigns/${campaignId}/incentive/reward-rules`,
+    token,
+    { verbose, baseUrl: API_BASE },
+  );
+}
+
+function rewardRulesCommand() {
+  const cmd = new Command('reward-rules')
+    .description('Show reward rules configured for a campaign — per role, with limits, supplier reference, and trigger action type')
+    .allowExcessArguments(false)
+    .argument('<campaign-id>', 'Campaign ID')
+    .action(async function (campaignId) {
+      const opts = this.optsWithGlobals();
+      const token = resolveToken(opts);
+      const data = await fetchRewardRules(campaignId, token, opts.verbose);
+      const rules = Array.isArray(data) ? data : [];
+
+      if (opts.json) {
+        printJson(rules, opts);
+        return;
+      }
+      if (rules.length === 0) {
+        console.log('No reward rules configured.');
+        return;
+      }
+
+      const rows = rules.map(r => {
+        const constraints = [];
+        if (r.reward_count_limit) constraints.push(`limit=${r.reward_count_limit}`);
+        if (r.reward_count_since_days) constraints.push(`per_${r.reward_count_since_days}d`);
+        if (r.reward_count_since_month) constraints.push(`per_${r.reward_count_since_month}mo`);
+        if (r.reward_value_limit) constraints.push(`value_cap=${r.reward_value_limit}`);
+        if (r.min_cart_value) constraints.push(`min_cart=${r.min_cart_value}`);
+        if (r.referrals_per_reward && r.referrals_per_reward !== 1) constraints.push(`per_${r.referrals_per_reward}_refs`);
+        if (r.is_unique_friend_required) constraints.push('unique_friend');
+        if (r.is_email_required) constraints.push('email_required');
+        if (!r.is_referral_loop_allowed) constraints.push('no_referral_loop');
+        return {
+          id: r.id || '',
+          rewardee: r.rewardee || '',
+          trigger: r.trigger_action_type || '',
+          supplier: r.reward_supplier_id || '',
+          constraints: constraints.join(', ') || '-',
+        };
+      });
+
+      const idW = Math.max('id'.length, ...rows.map(r => r.id.length));
+      const rewardeeW = Math.max('rewardee'.length, ...rows.map(r => r.rewardee.length));
+      const triggerW = Math.max('trigger'.length, ...rows.map(r => r.trigger.length));
+      const supplierW = Math.max('supplier'.length, ...rows.map(r => r.supplier.length));
+
+      console.log(`campaign ${campaignId}`);
+      console.log();
+      console.log(`${'id'.padEnd(idW)}  ${'rewardee'.padEnd(rewardeeW)}  ${'trigger'.padEnd(triggerW)}  ${'supplier'.padEnd(supplierW)}  constraints`);
+      console.log(`${'─'.repeat(idW)}  ${'─'.repeat(rewardeeW)}  ${'─'.repeat(triggerW)}  ${'─'.repeat(supplierW)}  ${'─'.repeat(20)}`);
+      for (const r of rows) {
+        console.log(`${r.id.padEnd(idW)}  ${r.rewardee.padEnd(rewardeeW)}  ${r.trigger.padEnd(triggerW)}  ${r.supplier.padEnd(supplierW)}  ${r.constraints}`);
+      }
+
+      console.log();
+      console.log(`${rules.length} reward rule${rules.length === 1 ? '' : 's'}.`);
+      console.log('Look up suppliers by id with `extole reward-suppliers get <id>`.');
+    });
+
+  return addGlobalOptions(cmd, {
+    output: true,
+    examples: [
+      'extole campaigns reward-rules 6763700938982248986',
+      'extole campaigns reward-rules <campaign-id> --json',
+    ],
+  });
+}
+
 export function campaignsCommand() {
   const cmd = new Command('campaigns')
-    .description('Inspect per-campaign configuration (quality rules, MaxMind settings)');
+    .description('Inspect per-campaign configuration (quality rules, MaxMind settings, reward rules)');
 
   cmd.addCommand(qualityRulesCommand());
   cmd.addCommand(maxmindCommand());
+  cmd.addCommand(rewardRulesCommand());
 
   return cmd;
 }

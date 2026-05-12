@@ -23,6 +23,7 @@ import { shareLinksCommand } from '../src/commands/share-links.js';
 import { campaignsCommand } from '../src/commands/campaigns.js';
 import { audiencesCommand } from '../src/commands/audiences.js';
 import { notificationsCommand } from '../src/commands/notifications.js';
+import { rewardSuppliersCommand } from '../src/commands/reward-suppliers.js';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const { version } = JSON.parse(readFileSync(join(__dirname, '../package.json'), 'utf8'));
@@ -48,6 +49,7 @@ program.addCommand(streamCommand());
 program.addCommand(eventsCommand());
 program.addCommand(personCommand());
 program.addCommand(rewardsCommand());
+program.addCommand(rewardSuppliersCommand());
 program.addCommand(programsCommand());
 program.addCommand(campaignsCommand());
 program.addCommand(audiencesCommand());

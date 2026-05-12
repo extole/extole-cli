@@ -71,6 +71,9 @@ extole rewards --email jane@example.com --limit 50
 extole rewards get <reward_id>              # full detail including coupon code
 extole rewards get <reward_id> --steps      # also show recipient step history
 extole rewards get <reward_id> --json
+
+extole rewards history <reward_id>          # state-transition timeline (EARNED → SENT → FULFILLED → ...)
+extole rewards state-summary                # account-wide reward counts by state, bucketed over time
 ```
 
 Reward states: `EARNED`, `FULFILLED`, `SENT`, `REDEEMED`, `CANCELED`, `FAILED`, `EXPIRED`
@@ -78,6 +81,24 @@ Reward states: `EARNED`, `FULFILLED`, `SENT`, `REDEEMED`, `CANCELED`, `FAILED`, 
 Error messages are unambiguous about whether the person exists:
 - `No person found for jane@example.com` — email not in Extole
 - `No rewards found for jane@example.com (person ID: abc123)` — person exists, genuinely zero rewards
+
+`rewards history` is the go-to for "why is this reward stuck?" — each row shows the state change, when it happened, and whether the transition succeeded. `rewards state-summary` is the ops-level view: aggregate counts plus a per-week breakdown across all reward states.
+
+## Reward Suppliers
+
+Inspect configured reward suppliers — manual-coupon batches, Tango, PayPal payouts, BHN cards, custom suppliers. Used by reward rules in campaigns to mint the actual reward value.
+
+```
+extole reward-suppliers                              # all configured suppliers with face values
+extole reward-suppliers --filter manual              # name/type substring match
+extole reward-suppliers get <supplier-id>            # full detail: face_value, limits, expiry, tags
+extole reward-suppliers coupons <supplier-id>        # for MANUAL_COUPON: count + sample preview
+extole reward-suppliers coupons <supplier-id> --list # dump all codes (paged with --limit)
+```
+
+The list uses the `/built` endpoint so component-bundle suppliers (where the name and face value come from buildtime expressions) display their resolved values. The `coupons` command refuses non-MANUAL_COUPON suppliers with a clear message — other supplier types mint codes on demand or use external partner APIs, so an inventory check doesn't apply.
+
+When `coupons` finds the supplier at or below its `coupon_count_warn_limit`, it flags it with `⚠  at or below warn limit` in the output. Useful for capacity planning before a marketing push and for confirming depletion from CLI when a platform alert has already fired.
 
 ## Programs
 
@@ -119,6 +140,9 @@ extole campaigns quality-rules <campaign-id> --json                # raw Quality
 extole campaigns maxmind <campaign-id>                             # enabled MaxMind triggers only
 extole campaigns maxmind <campaign-id> --include-disabled          # also show disabled triggers
 extole campaigns maxmind <campaign-id> --json                      # raw trigger array
+
+extole campaigns reward-rules <campaign-id>                        # per-role reward rules: rewardee, trigger, supplier, constraints
+extole campaigns reward-rules <campaign-id> --json                 # raw RewardRuleResponse[]
 ```
 
 ### Quality rules
