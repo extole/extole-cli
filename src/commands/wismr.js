@@ -17,7 +17,7 @@ import { resolveToken, API_BASE } from '../config.js';
 import { apiJson } from '../api.js';
 import { printJson } from '../output.js';
 import { addGlobalOptions, isValidEmail, formatEventDate } from '../utils.js';
-import { findPerson } from '../person-api.js';
+import { findPerson, getPersonSteps } from '../person-api.js';
 
 async function fetchPersonRewards(personId, token, verbose, limit = 25) {
   const qs = new URLSearchParams({ limit: String(limit) });
@@ -34,6 +34,35 @@ async function fetchRewardRules(campaignId, token, verbose) {
 
 async function fetchSupplier(supplierId, token, verbose) {
   return apiJson(`/v6/reward-suppliers/${supplierId}/built`, token, { verbose, baseUrl: API_BASE });
+}
+
+// Scan a person's recent steps for reward-rule-evaluation failures. When a
+// person has zero rewards but qualifying events fired, the reason is usually
+// visible as `*_reward_rule_evaluated` steps with quality=LOW and a final
+// `reward_evaluated` with state=declined. Return one row per failed rule
+// (grouped by campaign + the rule's triggering evaluation timestamp).
+function scanRuleFailures(steps) {
+  if (!Array.isArray(steps)) return [];
+  const failures = [];
+  for (const s of steps) {
+    const name = s.name || '';
+    if (s.quality !== 'LOW') continue;
+    if (!name.endsWith('_reward_rule_evaluated') && name !== 'reward_evaluated') continue;
+    const data = s.data || {};
+    const dataValue = (k) => {
+      const v = data[k];
+      return v && typeof v === 'object' ? v.value : v;
+    };
+    failures.push({
+      name,
+      description: dataValue('description') || null,
+      state: dataValue('state') || null,
+      campaign_id: s.campaign_id || null,
+      journey_name: s.journey_name || null,
+      event_date: s.event_date || s.created_date || null,
+    });
+  }
+  return failures;
 }
 
 function formatFaceValue(s) {
@@ -135,8 +164,20 @@ export function wismrCommand() {
       const rewards = await fetchPersonRewards(match.id, token, opts.verbose, limit);
       const list = Array.isArray(rewards) ? rewards : [];
 
+      // When there are zero rewards, see if any reward-rule-evaluation
+      // failures are visible in recent steps — that's the most common
+      // "rewards is empty but should not be" cause (e.g., risk eval declined).
+      let ruleFailures = [];
+      if (list.length === 0) {
+        const steps = await getPersonSteps(match.id, token, 50, opts.verbose).catch(() => []);
+        ruleFailures = scanRuleFailures(steps);
+      }
+
       if (opts.json) {
-        // For JSON consumers, return the structured data we walked
+        if (list.length === 0) {
+          printJson({ person_id: match.id, email: opts.email, rewards: [], rule_failures: ruleFailures }, opts);
+          return;
+        }
         const enriched = await Promise.all(list.map(async r => {
           const [history, rules] = await Promise.all([
             fetchRewardHistory(r.id || r.reward_id, token, opts.verbose).catch(() => []),
@@ -159,6 +200,28 @@ export function wismrCommand() {
       if (list.length === 0) {
         console.log('No rewards exist for this person.');
         console.log('');
+
+        if (ruleFailures.length > 0) {
+          console.log(`Found ${ruleFailures.length} failed reward-rule evaluation${ruleFailures.length === 1 ? '' : 's'} in recent steps — the reward was evaluated but declined:\n`);
+          for (const f of ruleFailures) {
+            const when = f.event_date ? formatEventDate(f.event_date) : '';
+            const ruleLabel = f.name === 'reward_evaluated'
+              ? (f.state ? `reward_evaluated  state=${f.state}` : 'reward_evaluated')
+              : f.name.replace(/_reward_rule_evaluated$/, '');
+            console.log(`  ✗  ${ruleLabel}`);
+            if (f.description) console.log(`        why:       ${f.description}`);
+            if (f.journey_name) console.log(`        journey:   ${f.journey_name}`);
+            if (f.campaign_id) console.log(`        campaign:  ${f.campaign_id}`);
+            if (when) console.log(`        when:      ${when}`);
+            console.log('');
+          }
+          console.log('Next steps:');
+          console.log(`  extole person steps --email ${opts.email}            # full step history with rule data`);
+          console.log('  If the customer is legitimate, an operator can issue the reward manually.');
+          console.log('  If false positives are common on this campaign, review the failing rule\'s threshold.');
+          return;
+        }
+
         console.log('Possible reasons:');
         console.log('  → the qualifying event was never fired or never received by Extole');
         console.log('  → the event fired but no campaign matched (targeting, journey, program scope)');

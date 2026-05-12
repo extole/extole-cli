@@ -97,7 +97,7 @@ extole wismr --email jane@example.com --json
 
 The canonical reward-issuance diagnostic. A composite of person lookup, `rewards`, `rewards history`, `campaigns reward-rules`, and `reward-suppliers get`: for each of the person's recent rewards it prints the state, history timeline, the rule that fired, the supplier that minted it, and a state-aware diagnosis with the most likely next step (where to look, what to check).
 
-If the person has zero rewards, it pivots to upstream debugging — telling you to check `person steps` (did the qualifying event land?) and `events fire --route` (did any campaign match?).
+If the person has zero rewards, `wismr` scans their recent step history for `*_reward_rule_evaluated` entries with `LOW` quality — the most common "rewards is empty but should not be" cause. When found (e.g., risk-evaluation declined, reward-limit hit, has-email-address failed), it surfaces the failing rule, its description, the campaign + journey, and a remediation hint (manual issuance, threshold review). When no rule-eval failures are visible, it falls back to suggesting `person steps` and `events fire --route` for upstream debugging.
 
 ## Reward Suppliers
 
