@@ -36,6 +36,29 @@ async function fetchSupplier(supplierId, token, verbose) {
   return apiJson(`/v6/reward-suppliers/${supplierId}/built`, token, { verbose, baseUrl: API_BASE });
 }
 
+// Pull cross-person references off each reward. Each Extole reward carries
+// data.other_person_id when it was minted as part of a related-party journey
+// (advocate ↔ friend, employee ↔ referred customer). Combined with the
+// rewardee_role, this lets us reconstruct who-referred-whom when multiple
+// related emails are passed to wismr in one call.
+function extractReferences(rewardList) {
+  if (!Array.isArray(rewardList)) return [];
+  const refs = [];
+  for (const r of rewardList) {
+    const data = r.data || {};
+    const unwrap = (v) => (v && typeof v === 'object' && 'value' in v) ? v.value : v;
+    const other = unwrap(data.other_person_id);
+    if (!other) continue;
+    refs.push({
+      rewardee_role: unwrap(data.rewardee_role) || null,
+      other_person_id: String(other),
+      journey_name: r.journey_name || null,
+      campaign_id: r.campaign_id || null,
+    });
+  }
+  return refs;
+}
+
 // Scan a person's recent steps for reward-rule-evaluation failures. When a
 // person has zero rewards but qualifying events fired, the reason is usually
 // visible as `*_reward_rule_evaluated` steps with quality=LOW and a final
@@ -140,20 +163,24 @@ function diagnose(reward, history) {
   return `State: ${state || 'unknown'}`;
 }
 
-// Walk one person's reward chain. For JSON consumers, returns the structured
-// per-person result. For human output, prints directly and returns null.
+// Walk one person's reward chain. Always returns a summary
+// { email, person_id, references } so the caller can detect cross-person
+// relationships across multi-email queries. In JSON mode the summary also
+// carries the full enriched per-reward data. In human mode side effects are
+// printed inline.
 async function investigatePerson(email, opts, token, limit) {
   const match = await findPerson(email, token, opts.verbose);
   if (!match) {
-    if (opts.json) return { email, person_id: null, error: 'person_not_found' };
+    if (opts.json) return { email, person_id: null, error: 'person_not_found', references: [] };
     console.log(`Person: ${email}  — not found in this account.`);
     console.log('  → email may not be in this account, or may not match an identity key on a person record.');
     console.log('  → if you expect the customer to exist here, verify the email and the --account context.');
-    return null;
+    return { email, person_id: null, references: [] };
   }
 
   const rewards = await fetchPersonRewards(match.id, token, opts.verbose, limit);
   const list = Array.isArray(rewards) ? rewards : [];
+  const references = extractReferences(list);
 
   // When there are zero rewards, scan recent steps for rule-evaluation
   // failures (e.g., risk eval declined) — most common "rewards is empty
@@ -166,7 +193,7 @@ async function investigatePerson(email, opts, token, limit) {
 
   if (opts.json) {
     if (list.length === 0) {
-      return { email, person_id: match.id, rewards: [], rule_failures: ruleFailures };
+      return { email, person_id: match.id, rewards: [], rule_failures: ruleFailures, references };
     }
     const enriched = await Promise.all(list.map(async r => {
       const [history, rules] = await Promise.all([
@@ -179,7 +206,7 @@ async function investigatePerson(email, opts, token, limit) {
         : null;
       return { reward: r, history, rule, supplier, diagnosis: diagnose(r, history) };
     }));
-    return { email, person_id: match.id, rewards: enriched };
+    return { email, person_id: match.id, rewards: enriched, references };
   }
 
   // ── Human output ─────────────────────────────────────────────────────────
@@ -208,7 +235,7 @@ async function investigatePerson(email, opts, token, limit) {
       console.log(`  extole person steps --email ${email}            # full step history with rule data`);
       console.log('  If the customer is legitimate, an operator can issue the reward manually.');
       console.log('  If false positives are common on this campaign, review the failing rule\'s threshold.');
-      return null;
+      return { email, person_id: match.id, references };
     }
 
     console.log('Possible reasons:');
@@ -219,7 +246,7 @@ async function investigatePerson(email, opts, token, limit) {
     console.log('Next steps to diagnose:');
     console.log(`  extole person steps --email ${email}            # see what events landed for this person`);
     console.log(`  extole events fire <event> --email ${email} --sandbox --route   # check campaign routing for a representative event`);
-    return null;
+    return { email, person_id: match.id, references };
   }
 
   console.log(`${list.length} reward${list.length === 1 ? '' : 's'} (most recent first):\n`);
@@ -276,7 +303,65 @@ async function investigatePerson(email, opts, token, limit) {
     console.log(`      diagnosis:    ${diagnose(r, history)}`);
     console.log('');
   }
-  return null;
+  return { email, person_id: match.id, references };
+}
+
+// Given the per-person summaries collected from a multi-email wismr run,
+// detect confirmed cross-person relationships and merge bidirectional edges
+// into a single pair entry. An edge from A→B exists when A's reward
+// references B via data.other_person_id AND B was also in the query (so we
+// know who B is by email).
+const ADVOCATE_SIDE_ROLES = new Set(['advocate', 'employee', 'referrer', 'sender', 'tech', 'technician']);
+
+function detectRelationships(summaries) {
+  const byId = new Map();
+  for (const s of summaries) {
+    if (s && s.person_id) byId.set(String(s.person_id), s);
+  }
+  const edges = [];
+  for (const s of summaries) {
+    if (!s || !s.references) continue;
+    for (const ref of s.references) {
+      const other = byId.get(String(ref.other_person_id));
+      if (!other) continue;
+      edges.push({
+        from_email: s.email,
+        from_role: ref.rewardee_role,
+        to_email: other.email,
+        journey_name: ref.journey_name,
+        campaign_id: ref.campaign_id,
+      });
+    }
+  }
+
+  // Merge bidirectional edges. When A→B and B→A both exist, the pair is a
+  // confirmed two-sided relationship — present it once with both roles
+  // ordered advocate-side first.
+  const merged = [];
+  const seen = new Set();
+  for (const e of edges) {
+    const key = [e.from_email, e.to_email].sort().join('|');
+    if (seen.has(key)) continue;
+    const reverse = edges.find(o => o !== e && o.from_email === e.to_email && o.to_email === e.from_email);
+    const isAdvocateSide = (role) => ADVOCATE_SIDE_ROLES.has(String(role || '').toLowerCase());
+    let left = e, right = reverse;
+    if (reverse && !isAdvocateSide(e.from_role) && isAdvocateSide(reverse.from_role)) {
+      left = reverse;
+      right = e;
+    }
+    merged.push({
+      person_a: left.from_email,
+      role_a: left.from_role,
+      journey_a: left.journey_name,
+      person_b: right ? right.from_email : left.to_email,
+      role_b: right ? right.from_role : null,
+      journey_b: right ? right.journey_name : null,
+      campaign_id: left.campaign_id || (right && right.campaign_id) || null,
+      bidirectional: !!reverse,
+    });
+    seen.add(key);
+  }
+  return merged;
 }
 
 export function wismrCommand() {
@@ -301,12 +386,13 @@ export function wismrCommand() {
       const token = resolveToken(opts);
       const limit = Math.max(1, parseInt(opts.limit, 10) || 5);
 
+      const summaries = [];
       if (opts.json) {
-        const results = [];
         for (const email of emails) {
-          results.push(await investigatePerson(email, opts, token, limit));
+          summaries.push(await investigatePerson(email, opts, token, limit));
         }
-        printJson(results, opts);
+        const relationships = emails.length > 1 ? detectRelationships(summaries) : [];
+        printJson(emails.length > 1 ? { results: summaries, relationships } : summaries, opts);
         return;
       }
 
@@ -315,7 +401,26 @@ export function wismrCommand() {
           console.log('═'.repeat(72));
           console.log('');
         }
-        await investigatePerson(emails[i], opts, token, limit);
+        summaries.push(await investigatePerson(emails[i], opts, token, limit));
+      }
+
+      // Detected relationships footer (multi-email only)
+      if (emails.length > 1) {
+        const pairs = detectRelationships(summaries);
+        if (pairs.length > 0) {
+          console.log('═'.repeat(72));
+          console.log('');
+          console.log(`Detected relationships (${pairs.length}):\n`);
+          for (const p of pairs) {
+            const aRole = p.role_a ? ` (${p.role_a})` : '';
+            const bRole = p.role_b ? ` (${p.role_b})` : '';
+            const arrow = p.bidirectional ? '↔' : '→';
+            console.log(`  ${p.person_a}${aRole}  ${arrow}  ${p.person_b}${bRole}`);
+            if (p.campaign_id) console.log(`      campaign:  ${p.campaign_id}`);
+            if (p.journey_a) console.log(`      journey:   ${p.journey_a}${p.journey_b && p.journey_b !== p.journey_a ? `  /  ${p.journey_b}` : ''}`);
+          }
+          console.log('');
+        }
       }
     });
 
