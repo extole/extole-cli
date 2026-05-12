@@ -269,5 +269,73 @@ export function rewardsCommand() {
 
   cmd.addCommand(stateSummaryCmd);
 
+  // ── find-coupon ────────────────────────────────────────────────────────
+  // Reverse lookup: given a coupon code (partner_reward_id), find the reward
+  // it was minted for. Answers "was this code used?" without needing the
+  // recipient's email first.
+
+  const findCouponCmd = new Command('find-coupon')
+    .argument('<code>', 'Coupon code (partner_reward_id) — exact match')
+    .description('Look up a reward by its coupon code (partner_reward_id). Answers "who got this code, and was it used?" — REDEEMED means Extole received a redemption signal; SENT means it was issued but not (yet) redeemed.')
+    .allowExcessArguments(false)
+    .action(async function (code) {
+      const opts = this.optsWithGlobals();
+      const token = resolveToken(opts);
+
+      const params = new URLSearchParams({ partner_reward_id: code });
+      const rewards = await apiJson(`/v2/rewards?${params}`, token, { verbose: opts.verbose, baseUrl: API_BASE });
+      const list = Array.isArray(rewards) ? rewards : [];
+
+      if (opts.json) {
+        printJson(list, opts);
+        return;
+      }
+
+      if (list.length === 0) {
+        console.error(`No reward found with coupon code "${code}" in this account.`);
+        process.exit(1);
+      }
+
+      const stateNote = (s) => {
+        if (s === 'REDEEMED') return 'Coupon was redeemed (Extole received a redemption signal).';
+        if (s === 'SENT') return 'Coupon issued but Extole has not received a redemption signal.';
+        if (s === 'FULFILLED') return 'Coupon minted but not yet sent to the customer.';
+        if (s === 'EARNED') return 'Earned but not yet fulfilled — supplier may not have minted the code yet.';
+        if (s === 'CANCELED') return 'Reward was canceled.';
+        if (s === 'EXPIRED') return 'Reward expired without redemption.';
+        if (s === 'REVOKED') return 'Reward was revoked after fulfillment.';
+        if (s === 'FAILED') return 'Reward failed during state transition.';
+        return `State: ${s || 'unknown'}`;
+      };
+
+      console.log(`Coupon ${code}  (${list.length} match${list.length === 1 ? '' : 'es'}):\n`);
+      for (const r of list) {
+        const value = r.face_value != null ? `${r.face_value} ${r.face_value_type || ''}`.trim() : '';
+        const created = r.created_date || r.created_at;
+        console.log(`  state         ${r.state || ''}`);
+        if (value) console.log(`  face_value    ${value}`);
+        if (r.email) console.log(`  email         ${r.email}`);
+        if (r.journey_name) console.log(`  journey       ${r.journey_name}`);
+        if (r.campaign_id) console.log(`  campaign      ${r.campaign_id}`);
+        if (r.reward_id || r.id) console.log(`  reward_id     ${r.reward_id || r.id}`);
+        if (created) console.log(`  created_at    ${formatEventDate(created)}`);
+        console.log();
+        console.log(`  ${stateNote((r.state || '').toUpperCase())}`);
+        const rid = r.reward_id || r.id;
+        if (rid) console.log(`  For the full timeline: extole rewards history ${rid}`);
+        if (list.length > 1) console.log();
+      }
+    });
+
+  addGlobalOptions(findCouponCmd, {
+    output: true,
+    examples: [
+      'extole rewards find-coupon 2BJMSZ57T1DG',
+      'extole rewards find-coupon 2BJMSZ57T1DG --json',
+    ],
+  });
+
+  cmd.addCommand(findCouponCmd);
+
   return cmd;
 }

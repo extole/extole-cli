@@ -74,6 +74,7 @@ extole rewards get <reward_id> --json
 
 extole rewards history <reward_id>          # state-transition timeline (EARNED → SENT → FULFILLED → ...)
 extole rewards state-summary                # account-wide reward counts by state, bucketed over time
+extole rewards find-coupon <code>           # reverse lookup: who got this coupon and was it used?
 ```
 
 Reward states: `EARNED`, `FULFILLED`, `SENT`, `REDEEMED`, `CANCELED`, `FAILED`, `EXPIRED`
@@ -82,7 +83,9 @@ Error messages are unambiguous about whether the person exists:
 - `No person found for jane@example.com` — email not in Extole
 - `No rewards found for jane@example.com (person ID: abc123)` — person exists, genuinely zero rewards
 
-`rewards history` is the go-to for "why is this reward stuck?" — each row shows the state change, when it happened, and whether the transition succeeded. `rewards state-summary` is the ops-level view: aggregate counts plus a per-week breakdown across all reward states.
+`rewards history` is the go-to for "why is this reward stuck?" — each row shows the state change, when it happened, and whether the transition succeeded. `rewards state-summary` is the ops-level view: aggregate counts plus a per-week breakdown across all reward states. `rewards find-coupon` is the inverse of "find by email" — given just a coupon code, it tells you who got it, what state it's in, and whether Extole has been told it was redeemed.
+
+> A note on "REDEEMED": Extole transitions a reward to `REDEEMED` when it receives a redemption signal from the merchant's commerce backend (a redemption event or webhook). If that integration isn't wired up, a coupon can be used at checkout and the reward stays in `SENT` forever. So `REDEEMED` means "someone told Extole it was used," not "definitely used at point of sale."
 
 ### wismr — "Where Is My Reward"
 
