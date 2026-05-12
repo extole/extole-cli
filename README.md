@@ -90,10 +90,13 @@ Error messages are unambiguous about whether the person exists:
 ### wismr — "Where Is My Reward"
 
 ```
-extole wismr --email jane@example.com           # walk her most recent 5 rewards
+extole wismr --email jane@example.com                              # walk her most recent 5 rewards
 extole wismr --email jane@example.com --limit 3
 extole wismr --email jane@example.com --json
+extole wismr --email advocate@example.com,friend@example.com       # walk a related pair
 ```
+
+Comma-separated emails investigate multiple people in one call — useful when the people share a stated relationship (advocate + friend, two members of the same network, multiple support tickets that look related). Output is separated by a divider so per-person sections stay clearly distinct; in JSON mode the result is an array with one entry per email. Patterns across people (same campaign, same supplier failing, same timing) become visible in one view.
 
 The canonical reward-issuance diagnostic. A composite of person lookup, `rewards`, `rewards history`, `campaigns reward-rules`, and `reward-suppliers get`: for each of the person's recent rewards it prints the state, history timeline, the rule that fired, the supplier that minted it, and a state-aware diagnosis with the most likely next step (where to look, what to check).
 

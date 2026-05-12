@@ -93,205 +93,229 @@ function pickMatchingRule(rules, reward) {
   return rules[0];
 }
 
+const stateGuidance = {
+  EARNED: 'Earned but never fulfilled — supplier may have failed to mint, or fulfillment is queued. Check supplier inventory / partner API.',
+  FULFILLED: 'Fulfilled (supplier minted the value) but not yet SENT — customer may not have received the email/notification yet.',
+  SENT: 'Sent to the customer. If they say they did not receive it, check delivery (spam, wrong email, email-domain DKIM).',
+  REDEEMED: 'Redeemed — customer used the reward. Working as intended.',
+  CANCELED: 'Canceled (manually or by rule). Operator cancellation appears in history with operator_user_id.',
+  REVOKED: 'Revoked after fulfillment (typically fraud / abuse).',
+  EXPIRED: 'Expired without redemption (past default_coupon_expiry_date or supplier minimum_coupon_lifetime).',
+};
+
 function diagnose(reward, history) {
   // Return a short diagnostic string about this reward's likely status.
   const state = (reward.state || '').toUpperCase();
   const hist = Array.isArray(history) ? history : [];
 
-  // Only call out failure if we did NOT eventually succeed in reaching the
-  // current state. A reward that failed FULFILLED three times before
-  // succeeding (e.g., low reward balance, then resolved) is currently fine.
-  const succeededToCurrent = hist.some(h => h.success && (h.state_type || '').toUpperCase() === state);
-  const lastFailed = hist.slice().reverse().find(h => h.success === false);
-  if (lastFailed && !succeededToCurrent) {
-    return `FAILED transition: ${lastFailed.state_type}${lastFailed.message ? ` — ${lastFailed.message}` : ''}`;
+  // A failure is "still failing" if the transition it attempted (the
+  // state_type it tried to reach) was never subsequently reached
+  // successfully. Example: ✗ FULFILLED with no later ✓ FULFILLED means the
+  // reward is still stuck. ✗ FULFILLED followed by ✓ FULFILLED + ✓ SENT
+  // is a resolved retry.
+  const failures = hist.filter(h => h.success === false);
+  const lastFailure = failures[failures.length - 1];
+  const unresolvedFailure = (() => {
+    if (!lastFailure) return null;
+    const failedStateType = (lastFailure.state_type || '').toUpperCase();
+    const resolvedLater = hist.some(h => h.success && (h.state_type || '').toUpperCase() === failedStateType);
+    return resolvedLater ? null : lastFailure;
+  })();
+
+  if (unresolvedFailure) {
+    const msgPart = unresolvedFailure.message ? ` — ${unresolvedFailure.message}` : '';
+    // Append the state-specific guidance so the operator gets an action hint
+    // (e.g., "check supplier inventory / partner API") rather than just the
+    // bare failure name.
+    const guidance = stateGuidance[state] ? ` ${stateGuidance[state]}` : '';
+    return `FAILED transition: ${unresolvedFailure.state_type}${msgPart}.${guidance}`;
   }
 
-  // Note prior failures that were eventually resolved — operator context.
-  const retryNote = lastFailed && succeededToCurrent
-    ? ` (note: ${hist.filter(h => h.success === false).length} earlier failed attempt${hist.filter(h => h.success === false).length === 1 ? '' : 's'} — eventually resolved)`
+  // All prior failures eventually resolved — note them for context.
+  const retryNote = failures.length > 0
+    ? ` (note: ${failures.length} earlier failed attempt${failures.length === 1 ? '' : 's'} — eventually resolved)`
     : '';
 
-  if (state === 'EARNED') {
-    return 'Earned but never fulfilled — supplier may have failed to mint, or fulfillment is queued. Check supplier inventory / partner API.' + retryNote;
-  }
-  if (state === 'FULFILLED') {
-    return 'Fulfilled (supplier minted the value) but not yet SENT — customer may not have received the email/notification yet.' + retryNote;
-  }
-  if (state === 'SENT') {
-    return 'Sent to the customer. If they say they did not receive it, check delivery (spam, wrong email, email-domain DKIM).' + retryNote;
-  }
-  if (state === 'REDEEMED') {
-    return 'Redeemed — customer used the reward. Working as intended.' + retryNote;
-  }
-  if (state === 'CANCELED') {
-    return 'Canceled (manually or by rule). Operator cancellation appears in history with operator_user_id.';
-  }
-  if (state === 'REVOKED') {
-    return 'Revoked after fulfillment (typically fraud / abuse).';
-  }
-  if (state === 'EXPIRED') {
-    return 'Expired without redemption (past default_coupon_expiry_date or supplier minimum_coupon_lifetime).';
-  }
+  if (stateGuidance[state]) return stateGuidance[state] + retryNote;
   return `State: ${state || 'unknown'}`;
+}
+
+// Walk one person's reward chain. For JSON consumers, returns the structured
+// per-person result. For human output, prints directly and returns null.
+async function investigatePerson(email, opts, token, limit) {
+  const match = await findPerson(email, token, opts.verbose);
+  if (!match) {
+    if (opts.json) return { email, person_id: null, error: 'person_not_found' };
+    console.log(`Person: ${email}  — not found in this account.`);
+    console.log('  → email may not be in this account, or may not match an identity key on a person record.');
+    console.log('  → if you expect the customer to exist here, verify the email and the --account context.');
+    return null;
+  }
+
+  const rewards = await fetchPersonRewards(match.id, token, opts.verbose, limit);
+  const list = Array.isArray(rewards) ? rewards : [];
+
+  // When there are zero rewards, scan recent steps for rule-evaluation
+  // failures (e.g., risk eval declined) — most common "rewards is empty
+  // but should not be" cause.
+  let ruleFailures = [];
+  if (list.length === 0) {
+    const steps = await getPersonSteps(match.id, token, 50, opts.verbose).catch(() => []);
+    ruleFailures = scanRuleFailures(steps);
+  }
+
+  if (opts.json) {
+    if (list.length === 0) {
+      return { email, person_id: match.id, rewards: [], rule_failures: ruleFailures };
+    }
+    const enriched = await Promise.all(list.map(async r => {
+      const [history, rules] = await Promise.all([
+        fetchRewardHistory(r.id || r.reward_id, token, opts.verbose).catch(() => []),
+        r.campaign_id ? fetchRewardRules(r.campaign_id, token, opts.verbose).catch(() => []) : Promise.resolve([]),
+      ]);
+      const rule = pickMatchingRule(rules, r);
+      const supplier = (rule?.reward_supplier_id || r.reward_supplier_id)
+        ? await fetchSupplier(rule?.reward_supplier_id || r.reward_supplier_id, token, opts.verbose).catch(() => null)
+        : null;
+      return { reward: r, history, rule, supplier, diagnosis: diagnose(r, history) };
+    }));
+    return { email, person_id: match.id, rewards: enriched };
+  }
+
+  // ── Human output ─────────────────────────────────────────────────────────
+  console.log(`Person: ${email}  (id: ${match.id})`);
+  console.log('');
+
+  if (list.length === 0) {
+    console.log('No rewards exist for this person.');
+    console.log('');
+
+    if (ruleFailures.length > 0) {
+      console.log(`Found ${ruleFailures.length} failed reward-rule evaluation${ruleFailures.length === 1 ? '' : 's'} in recent steps — the reward was evaluated but declined:\n`);
+      for (const f of ruleFailures) {
+        const when = f.event_date ? formatEventDate(f.event_date) : '';
+        const ruleLabel = f.name === 'reward_evaluated'
+          ? (f.state ? `reward_evaluated  state=${f.state}` : 'reward_evaluated')
+          : f.name.replace(/_reward_rule_evaluated$/, '');
+        console.log(`  ✗  ${ruleLabel}`);
+        if (f.description) console.log(`        why:       ${f.description}`);
+        if (f.journey_name) console.log(`        journey:   ${f.journey_name}`);
+        if (f.campaign_id) console.log(`        campaign:  ${f.campaign_id}`);
+        if (when) console.log(`        when:      ${when}`);
+        console.log('');
+      }
+      console.log('Next steps:');
+      console.log(`  extole person steps --email ${email}            # full step history with rule data`);
+      console.log('  If the customer is legitimate, an operator can issue the reward manually.');
+      console.log('  If false positives are common on this campaign, review the failing rule\'s threshold.');
+      return null;
+    }
+
+    console.log('Possible reasons:');
+    console.log('  → the qualifying event was never fired or never received by Extole');
+    console.log('  → the event fired but no campaign matched (targeting, journey, program scope)');
+    console.log('  → the campaign matched but the reward rule\'s eligibility was not met');
+    console.log('');
+    console.log('Next steps to diagnose:');
+    console.log(`  extole person steps --email ${email}            # see what events landed for this person`);
+    console.log(`  extole events fire <event> --email ${email} --sandbox --route   # check campaign routing for a representative event`);
+    return null;
+  }
+
+  console.log(`${list.length} reward${list.length === 1 ? '' : 's'} (most recent first):\n`);
+
+  for (let i = 0; i < list.length; i++) {
+    const r = list[i];
+    const rewardId = r.id || r.reward_id;
+
+    const [history, rules] = await Promise.all([
+      fetchRewardHistory(rewardId, token, opts.verbose).catch(() => []),
+      r.campaign_id ? fetchRewardRules(r.campaign_id, token, opts.verbose).catch(() => []) : Promise.resolve([]),
+    ]);
+    const rule = pickMatchingRule(rules, r);
+    const supplierId = rule?.reward_supplier_id || r.reward_supplier_id;
+    const supplier = supplierId
+      ? await fetchSupplier(supplierId, token, opts.verbose).catch(() => null)
+      : null;
+
+    const stateUpper = (r.state || '').toUpperCase();
+    const stateLabel = stateUpper.padEnd(10);
+    const face = r.face_value != null
+      ? `${r.face_value} ${r.face_value_type || ''}`.trim()
+      : (supplier ? formatFaceValue(supplier) : '');
+    const createdDate = r.created_date || r.created_at;
+    console.log(`  [${i + 1}] ${stateLabel}  ${face.padEnd(14)}  ${r.journey_name || ''}  ${createdDate ? formatEventDate(createdDate) : ''}`);
+    console.log(`      reward_id:    ${rewardId}`);
+    if (r.partner_reward_id) console.log(`      coupon:       ${r.partner_reward_id}`);
+    if (r.campaign_id) console.log(`      campaign:     ${r.campaign_id}`);
+
+    if (Array.isArray(history) && history.length) {
+      console.log('      history:');
+      const sorted = history.slice().sort((a, b) => new Date(a.created_at) - new Date(b.created_at));
+      for (const h of sorted) {
+        const ok = h.success ? '✓' : '✗';
+        const when = formatEventDate(h.created_at);
+        const msg = h.message ? `  — ${h.message}` : '';
+        const op = h.operator_user_id ? `  by user ${h.operator_user_id}` : '';
+        console.log(`        ${ok}  ${(h.state_type || '').padEnd(10)}  ${when}${op}${msg}`);
+      }
+    }
+
+    if (rule) {
+      const constraints = [];
+      if (rule.reward_count_limit) constraints.push(`limit=${rule.reward_count_limit}`);
+      if (rule.is_unique_friend_required) constraints.push('unique_friend');
+      if (rule.is_email_required) constraints.push('email_required');
+      console.log(`      rule:         ${rule.rewardee || '?'} on ${rule.trigger_action_type || '?'}${constraints.length ? `  [${constraints.join(', ')}]` : ''}`);
+    }
+
+    if (supplier) {
+      console.log(`      supplier:     ${supplier.name || supplier.id}  (${supplier.display_type || '?'}${supplier.face_value != null ? `, ${formatFaceValue(supplier)}` : ''})`);
+    }
+
+    console.log(`      diagnosis:    ${diagnose(r, history)}`);
+    console.log('');
+  }
+  return null;
 }
 
 export function wismrCommand() {
   const cmd = new Command('wismr')
-    .description('"Where Is My Reward" — the canonical reward-issuance diagnostic. Walks a person\'s reward chain (person → rewards → state history → campaign rule → supplier) and surfaces the likely cause + next step.')
+    .description('"Where Is My Reward" — the canonical reward-issuance diagnostic. Walks a person\'s reward chain (person → rewards → state history → campaign rule → supplier) and surfaces the likely cause + next step. Accepts one email or a comma-separated list (e.g., to investigate an advocate + friend pair).')
     .allowExcessArguments(false)
-    .requiredOption('--email <email>', 'Customer email address')
-    .option('--limit <n>', 'Number of recent rewards to walk (default 5)', '5')
+    .requiredOption('--email <email>', 'Customer email address (or comma-separated list)')
+    .option('--limit <n>', 'Number of recent rewards to walk per person (default 5)', '5')
     .action(async function () {
       const opts = this.optsWithGlobals();
-      if (!isValidEmail(opts.email)) {
-        console.error('Error: --email must be a valid email address.');
+      const emails = String(opts.email).split(',').map(e => e.trim()).filter(Boolean);
+      if (emails.length === 0) {
+        console.error('Error: --email must contain at least one email address.');
         process.exit(2);
       }
+      const invalid = emails.filter(e => !isValidEmail(e));
+      if (invalid.length > 0) {
+        console.error(`Error: invalid email${invalid.length === 1 ? '' : 's'}: ${invalid.join(', ')}`);
+        process.exit(2);
+      }
+
       const token = resolveToken(opts);
-
-      // ── 1. Find the person ───────────────────────────────────────────────
-      const match = await findPerson(opts.email, token, opts.verbose);
-      if (!match) {
-        console.error(`No person found for ${opts.email}.`);
-        console.error('  → email may not be in this account, or may not match an identity key on a person record.');
-        console.error('  → if you expect the customer to exist here, verify the email and the --account context.');
-        process.exit(1);
-      }
-
-      // ── 2. Fetch rewards ─────────────────────────────────────────────────
       const limit = Math.max(1, parseInt(opts.limit, 10) || 5);
-      const rewards = await fetchPersonRewards(match.id, token, opts.verbose, limit);
-      const list = Array.isArray(rewards) ? rewards : [];
-
-      // When there are zero rewards, see if any reward-rule-evaluation
-      // failures are visible in recent steps — that's the most common
-      // "rewards is empty but should not be" cause (e.g., risk eval declined).
-      let ruleFailures = [];
-      if (list.length === 0) {
-        const steps = await getPersonSteps(match.id, token, 50, opts.verbose).catch(() => []);
-        ruleFailures = scanRuleFailures(steps);
-      }
 
       if (opts.json) {
-        if (list.length === 0) {
-          printJson({ person_id: match.id, email: opts.email, rewards: [], rule_failures: ruleFailures }, opts);
-          return;
+        const results = [];
+        for (const email of emails) {
+          results.push(await investigatePerson(email, opts, token, limit));
         }
-        const enriched = await Promise.all(list.map(async r => {
-          const [history, rules] = await Promise.all([
-            fetchRewardHistory(r.id || r.reward_id, token, opts.verbose).catch(() => []),
-            r.campaign_id ? fetchRewardRules(r.campaign_id, token, opts.verbose).catch(() => []) : Promise.resolve([]),
-          ]);
-          const rule = pickMatchingRule(rules, r);
-          const supplier = (rule?.reward_supplier_id || r.reward_supplier_id)
-            ? await fetchSupplier(rule?.reward_supplier_id || r.reward_supplier_id, token, opts.verbose).catch(() => null)
-            : null;
-          return { reward: r, history, rule, supplier, diagnosis: diagnose(r, history) };
-        }));
-        printJson({ person_id: match.id, email: opts.email, rewards: enriched }, opts);
+        printJson(results, opts);
         return;
       }
 
-      // ── Human output ────────────────────────────────────────────────────
-      console.log(`Person: ${opts.email}  (id: ${match.id})`);
-      console.log('');
-
-      if (list.length === 0) {
-        console.log('No rewards exist for this person.');
-        console.log('');
-
-        if (ruleFailures.length > 0) {
-          console.log(`Found ${ruleFailures.length} failed reward-rule evaluation${ruleFailures.length === 1 ? '' : 's'} in recent steps — the reward was evaluated but declined:\n`);
-          for (const f of ruleFailures) {
-            const when = f.event_date ? formatEventDate(f.event_date) : '';
-            const ruleLabel = f.name === 'reward_evaluated'
-              ? (f.state ? `reward_evaluated  state=${f.state}` : 'reward_evaluated')
-              : f.name.replace(/_reward_rule_evaluated$/, '');
-            console.log(`  ✗  ${ruleLabel}`);
-            if (f.description) console.log(`        why:       ${f.description}`);
-            if (f.journey_name) console.log(`        journey:   ${f.journey_name}`);
-            if (f.campaign_id) console.log(`        campaign:  ${f.campaign_id}`);
-            if (when) console.log(`        when:      ${when}`);
-            console.log('');
-          }
-          console.log('Next steps:');
-          console.log(`  extole person steps --email ${opts.email}            # full step history with rule data`);
-          console.log('  If the customer is legitimate, an operator can issue the reward manually.');
-          console.log('  If false positives are common on this campaign, review the failing rule\'s threshold.');
-          return;
+      for (let i = 0; i < emails.length; i++) {
+        if (i > 0) {
+          console.log('═'.repeat(72));
+          console.log('');
         }
-
-        console.log('Possible reasons:');
-        console.log('  → the qualifying event was never fired or never received by Extole');
-        console.log('  → the event fired but no campaign matched (targeting, journey, program scope)');
-        console.log('  → the campaign matched but the reward rule\'s eligibility was not met');
-        console.log('');
-        console.log('Next steps to diagnose:');
-        console.log(`  extole person steps --email ${opts.email}            # see what events landed for this person`);
-        console.log(`  extole events fire <event> --email ${opts.email} --sandbox --route   # check campaign routing for a representative event`);
-        return;
-      }
-
-      console.log(`${list.length} reward${list.length === 1 ? '' : 's'} (most recent first):\n`);
-
-      for (let i = 0; i < list.length; i++) {
-        const r = list[i];
-        const rewardId = r.id || r.reward_id;
-
-        // Fetch chain data in parallel for this reward
-        const [history, rules] = await Promise.all([
-          fetchRewardHistory(rewardId, token, opts.verbose).catch(() => []),
-          r.campaign_id ? fetchRewardRules(r.campaign_id, token, opts.verbose).catch(() => []) : Promise.resolve([]),
-        ]);
-        const rule = pickMatchingRule(rules, r);
-        const supplierId = rule?.reward_supplier_id || r.reward_supplier_id;
-        const supplier = supplierId
-          ? await fetchSupplier(supplierId, token, opts.verbose).catch(() => null)
-          : null;
-
-        // Header
-        const stateUpper = (r.state || '').toUpperCase();
-        const stateLabel = stateUpper.padEnd(10);
-        const face = r.face_value != null
-          ? `${r.face_value} ${r.face_value_type || ''}`.trim()
-          : (supplier ? formatFaceValue(supplier) : '');
-        const createdDate = r.created_date || r.created_at;
-        console.log(`  [${i + 1}] ${stateLabel}  ${face.padEnd(14)}  ${r.journey_name || ''}  ${createdDate ? formatEventDate(createdDate) : ''}`);
-        console.log(`      reward_id:    ${rewardId}`);
-        if (r.partner_reward_id) console.log(`      coupon:       ${r.partner_reward_id}`);
-        if (r.campaign_id) console.log(`      campaign:     ${r.campaign_id}`);
-
-        // State history timeline
-        if (Array.isArray(history) && history.length) {
-          console.log('      history:');
-          const sorted = history.slice().sort((a, b) => new Date(a.created_at) - new Date(b.created_at));
-          for (const h of sorted) {
-            const ok = h.success ? '✓' : '✗';
-            const when = formatEventDate(h.created_at);
-            const msg = h.message ? `  — ${h.message}` : '';
-            const op = h.operator_user_id ? `  by user ${h.operator_user_id}` : '';
-            console.log(`        ${ok}  ${(h.state_type || '').padEnd(10)}  ${when}${op}${msg}`);
-          }
-        }
-
-        // Rule context
-        if (rule) {
-          const constraints = [];
-          if (rule.reward_count_limit) constraints.push(`limit=${rule.reward_count_limit}`);
-          if (rule.is_unique_friend_required) constraints.push('unique_friend');
-          if (rule.is_email_required) constraints.push('email_required');
-          console.log(`      rule:         ${rule.rewardee || '?'} on ${rule.trigger_action_type || '?'}${constraints.length ? `  [${constraints.join(', ')}]` : ''}`);
-        }
-
-        // Supplier context
-        if (supplier) {
-          console.log(`      supplier:     ${supplier.name || supplier.id}  (${supplier.display_type || '?'}${supplier.face_value != null ? `, ${formatFaceValue(supplier)}` : ''})`);
-        }
-
-        // Diagnosis
-        console.log(`      diagnosis:    ${diagnose(r, history)}`);
-        console.log('');
+        await investigatePerson(emails[i], opts, token, limit);
       }
     });
 
@@ -301,6 +325,7 @@ export function wismrCommand() {
       'extole wismr --email jane@example.com',
       'extole wismr --email jane@example.com --limit 3',
       'extole wismr --email jane@example.com --json',
+      'extole wismr --email advocate@example.com,friend@example.com   # walk a related pair',
     ],
   });
 }
