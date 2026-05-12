@@ -84,6 +84,18 @@ Error messages are unambiguous about whether the person exists:
 
 `rewards history` is the go-to for "why is this reward stuck?" — each row shows the state change, when it happened, and whether the transition succeeded. `rewards state-summary` is the ops-level view: aggregate counts plus a per-week breakdown across all reward states.
 
+### wismr — "Where Is My Reward"
+
+```
+extole wismr --email jane@example.com           # walk her most recent 5 rewards
+extole wismr --email jane@example.com --limit 3
+extole wismr --email jane@example.com --json
+```
+
+The canonical reward-issuance diagnostic. A composite of person lookup, `rewards`, `rewards history`, `campaigns reward-rules`, and `reward-suppliers get`: for each of the person's recent rewards it prints the state, history timeline, the rule that fired, the supplier that minted it, and a state-aware diagnosis with the most likely next step (where to look, what to check).
+
+If the person has zero rewards, it pivots to upstream debugging — telling you to check `person steps` (did the qualifying event land?) and `events fire --route` (did any campaign match?).
+
 ## Reward Suppliers
 
 Inspect configured reward suppliers — manual-coupon batches, Tango, PayPal payouts, BHN cards, custom suppliers. Used by reward rules in campaigns to mint the actual reward value.
