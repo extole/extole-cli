@@ -101,7 +101,8 @@ export function componentsCommand() {
     .argument('<component-id>', 'Component ID')
     .option('--tree', 'Show downstream subtree')
     .option('--sockets', 'Show socket references to other components')
-    .action(async (componentId, opts) => {
+    .action(async function (componentId) {
+      const opts = this.optsWithGlobals();
       const token = resolveToken(opts);
 
       if (opts.tree) {
@@ -168,7 +169,8 @@ export function componentsCommand() {
     .description('List component type families')
     .option('--parent <type>', 'Show subtypes of a specific parent type')
     .option('--tree', 'Render type hierarchy visually (most useful with --parent)')
-    .action(async (opts) => {
+    .action(async function () {
+      const opts = this.optsWithGlobals();
       const token = resolveToken(opts);
       const list = await fetchAllComponents(token, {}, opts.verbose);
 
@@ -262,7 +264,8 @@ export function componentsCommand() {
     .option('--tag <tag>',                  'Tag on the component (repeatable)', (v, acc) => [...acc, v], [])
     .option('--webhook-tag <tag>',          'Add a build-time variable that discovers a webhook by tag (repeatable). Format: tag (auto-names the variable) or varName:tag (explicit name)', (v, acc) => [...acc, v], [])
     .option('--dry-run',                    'Print the request payload and exit without creating anything')
-    .action(async (opts) => {
+    .action(async function () {
+      const opts = this.optsWithGlobals();
       const token = resolveToken(opts);
 
       const settings = [];
@@ -345,7 +348,8 @@ export function componentsCommand() {
     .argument('<component-id>', 'Component ID to delete')
     .option('--confirm', 'Skip the interactive confirmation prompt')
     .option('--dry-run', 'Show what would be deleted without deleting')
-    .action(async (componentId, opts) => {
+    .action(async function (componentId) {
+      const opts = this.optsWithGlobals();
       const token = resolveToken(opts);
 
       const c = await fetchComponent(componentId, token, opts.verbose);
@@ -413,7 +417,8 @@ export function componentsCommand() {
     .option('--component <id>', 'Existing component ID to update (omit to create new)')
     .option('--publish', 'Publish the campaign after uploading')
     .option('--dry-run', 'Show resolved bundle file tree without uploading')
-    .action(async (opts) => {
+    .action(async function () {
+      const opts = this.optsWithGlobals();
       const sourceDir = resolve(opts.source);
       if (!existsSync(sourceDir)) {
         console.error(`Error: source directory not found: ${sourceDir}`);
@@ -534,7 +539,8 @@ export function componentsCommand() {
     .argument('<component-id>', 'Component ID to update')
     .option('--setting <kv>', 'Setting in key=value form (repeatable)', (v, prev) => prev.concat([v]), [])
     .option('--dry-run', 'Print the payload that would be sent without making the API call')
-    .action(async (componentId, opts) => {
+    .action(async function (componentId) {
+      const opts = this.optsWithGlobals();
       if (!opts.setting || opts.setting.length === 0) {
         console.error('Error: at least one --setting key=value is required.');
         process.exit(2);
