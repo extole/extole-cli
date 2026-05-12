@@ -187,7 +187,8 @@ export function healthCommand() {
     .description('Provision (mint via SendGrid) or fetch DKIM CNAME records for an email domain. First call on a fresh domain mints new keys; subsequent calls return existing. Use `extole health` to see current DKIM status without writing.')
     .argument('<domain>', 'Email domain (substring match) or email-domain ID')
     .option('--confirm', 'Skip the interactive confirmation prompt (required in non-interactive contexts)')
-    .action(async (domainArg, opts) => {
+    .action(async function (domainArg) {
+      const opts = this.optsWithGlobals();
       const token = resolveToken(opts);
 
       // Resolve the argument to an email domain ID

@@ -12,7 +12,8 @@ export function personCommand() {
     .description('Look up a person by email')
     .allowExcessArguments(false)
     .requiredOption('--email <email>', 'Email address to look up')
-    .action(async (opts) => {
+    .action(async function () {
+      const opts = this.optsWithGlobals();
       if (!isValidEmail(opts.email)) {
         console.error('Error: --email must be a valid email address.');
         process.exit(2);
@@ -49,7 +50,8 @@ export function personCommand() {
     .option('--limit <n>', 'Number of steps to return (one-shot)', '25')
     .option('--event <event_id>', 'Filter to steps caused by this event ID')
     .option('--watch', 'Poll for new steps until Ctrl+C')
-    .action(async (opts) => {
+    .action(async function () {
+      const opts = this.optsWithGlobals();
       if (!isValidEmail(opts.email)) {
         console.error('Error: --email must be a valid email address.');
         process.exit(2);

@@ -77,7 +77,8 @@ export function reportsCommand() {
     .description('List available report types')
     .allowExcessArguments(false)
     .option('--filter <substr>', 'Case-insensitive substring match against name, display_name, description, and categories')
-    .action(async (opts) => {
+    .action(async function () {
+      const opts = this.optsWithGlobals();
       const token = resolveToken(opts);
       const data = await apiJson('/v6/report-types', token, { verbose: opts.verbose });
       let types = Array.isArray(data) ? data : (data.report_types || []);
@@ -130,7 +131,8 @@ export function reportsCommand() {
     .description('Show curated report-type recommendations for this account')
     .allowExcessArguments(false)
     .option('--limit <n>', 'Max number of recommendations (default 5)')
-    .action(async (opts) => {
+    .action(async function () {
+      const opts = this.optsWithGlobals();
       const token = resolveToken(opts);
       const qs = opts.limit ? `?limit=${encodeURIComponent(opts.limit)}` : '';
       const data = await apiJson(`/v6/report-types/recommendations${qs}`, token, { verbose: opts.verbose });
@@ -192,7 +194,8 @@ export function reportsCommand() {
     .option('--days <n>', 'Shortcut: set time_range to last N days')
     .option('--wait', 'Poll until report is complete')
     .option('--download', 'Download and print result (implies --wait)')
-    .action(async (opts) => {
+    .action(async function () {
+      const opts = this.optsWithGlobals();
       if (!opts.type) {
         console.error('Error: --type REPORT_TYPE is required. Run `extole reports types` to see available types.');
         process.exit(2);
@@ -270,7 +273,8 @@ export function reportsCommand() {
     .description('Show parameters for a report type')
     .allowExcessArguments(false)
     .option('--type <type>', 'Report type to describe')
-    .action(async (opts) => {
+    .action(async function () {
+      const opts = this.optsWithGlobals();
       if (!opts.type) {
         console.error('Error: --type REPORT_TYPE is required. Run `extole reports types` to see available types.');
         process.exit(2);

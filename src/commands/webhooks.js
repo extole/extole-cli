@@ -91,7 +91,8 @@ export function webhooksCommand() {
     .description('Show full configuration for a webhook, including URL, method, tags, and retry intervals.')
     .argument('<webhook-id>', 'Webhook ID')
     .option('--built', 'Show resolved representation with inherited defaults applied')
-    .action(async (webhookId, opts) => {
+    .action(async function (webhookId) {
+      const opts = this.optsWithGlobals();
       const token = resolveToken(opts);
       const w = await fetchWebhook(webhookId, token, opts.built, opts.verbose);
       // For REWARD webhooks, fetch state filters
@@ -165,7 +166,8 @@ export function webhooksCommand() {
     .option('--request-file <path>', 'Path to a file containing the request script')
     .option('--built', 'Show resolved (built) representation of the webhook after creation')
     .option('--dry-run', 'Print the request payload and exit without creating anything')
-    .action(async (opts) => {
+    .action(async function () {
+      const opts = this.optsWithGlobals();
       if (!opts.name) { console.error('error: --name is required'); process.exit(2); }
       if (!opts.url)  { console.error('error: --url is required');  process.exit(2); }
       if (opts.request && opts.requestFile) {
@@ -268,7 +270,8 @@ export function webhooksCommand() {
   const deleteCmd = new Command('delete')
     .description('Archive a webhook. Fails if the webhook is still wired to campaign controller actions — detach it first.')
     .argument('<webhook-id>', 'Webhook ID')
-    .action(async (webhookId, opts) => {
+    .action(async function (webhookId) {
+      const opts = this.optsWithGlobals();
       const token = resolveToken(opts);
       const res = await apiFetch(`/v6/webhooks/${webhookId}`, token, {
         method: 'DELETE',
@@ -314,7 +317,8 @@ export function webhooksCommand() {
     .option('--controller <id>', 'Use an existing controller ID instead of creating a new one')
     .option('--quality <q>', 'Dispatch priority: HIGH (normal), LOW (best-effort), ALWAYS (bypasses targeting rules). Default: HIGH', 'HIGH')
     .option('--skip-publish', 'Skip publishing the campaign after wiring. Use when attaching multiple events — pass --skip-publish on all but the last call to publish once at the end.')
-    .action(async (opts) => {
+    .action(async function () {
+      const opts = this.optsWithGlobals();
       const token = resolveToken(opts);
 
       let controllerId = opts.controller;
@@ -430,7 +434,8 @@ export function webhooksCommand() {
     .option('--event-type <type>', 'Trigger discriminator. Common values: INPUT, STEP, SHAREABLE, SHARE, REWARD. Must match the event_type the campaign expects. Default: INPUT', 'INPUT')
     .option('--quality <q>', 'Dispatch priority: HIGH (normal), LOW (best-effort), ALWAYS (bypasses targeting rules). Default: HIGH', 'HIGH')
     .option('-y, --yes', 'Skip confirmation prompt')
-    .action(async (opts) => {
+    .action(async function () {
+      const opts = this.optsWithGlobals();
       const token = resolveToken(opts);
 
       if (!opts.yes) {

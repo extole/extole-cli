@@ -79,7 +79,8 @@ export function audiencesCommand() {
     .allowExcessArguments(false)
     .option('--filter <substr>', 'Case-insensitive substring match on audience name')
     .option('--limit <n>', 'Cap the number of audiences displayed (default 100)', '100')
-    .action(async (opts) => {
+    .action(async function () {
+      const opts = this.optsWithGlobals();
       const token = resolveToken(opts);
       const data = await fetchAudiences(token, opts.verbose);
       let list = Array.isArray(data) ? data : [];

@@ -25,7 +25,8 @@ export function eventsCommand() {
     .option('--route', 'After firing, trace which campaigns the event reached. Requires --email.')
     .option('--route-timeout <seconds>', 'Seconds to wait for steps to appear when using --route', '8')
     .option('--route-webhook <id>', 'With --route, also check this webhook for dispatches caused by the event')
-    .action(async (eventName, opts) => {
+    .action(async function (eventName) {
+      const opts = this.optsWithGlobals();
       if (opts.live && opts.sandbox) {
         console.error('Error: --live and --sandbox are mutually exclusive.');
         process.exit(2);
