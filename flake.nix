@@ -16,11 +16,16 @@
         devShells.default = pkgs.mkShell {
           buildInputs = [ nodejs pkgs.git ];
           shellHook = ''
-            export PATH="$PWD/node_modules/.bin:$PWD/bin:$PATH"
+            export PATH="$PWD/node_modules/.bin:$PATH"
             if [ ! -d node_modules ]; then
               echo "Installing npm dependencies..."
               npm install --no-fund --no-audit 2>/dev/null
             fi
+            # npm's "bin" mapping is only materialized for dependencies, not
+            # for the current package — symlink it ourselves so `extole`
+            # resolves on PATH (and not just `extole.js`).
+            mkdir -p node_modules/.bin
+            ln -sf ../../bin/extole.js node_modules/.bin/extole
           '';
         };
       }
