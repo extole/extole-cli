@@ -46,12 +46,13 @@ export async function apiFetch(path, token, options = {}, fetchFn = fetch) {
   const timer = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS);
   try {
     const isFormData = typeof FormData !== 'undefined' && options.body instanceof FormData;
+    const hasBody = options.body != null;
     const res = await fetchFn(url, {
       ...options,
       signal: controller.signal,
       headers: {
         'Authorization': `Bearer ${token}`,
-        ...(isFormData ? {} : { 'Content-Type': 'application/json' }),
+        ...(hasBody && !isFormData ? { 'Content-Type': 'application/json' } : {}),
         'Accept': 'application/json',
         'x-extole-app-type': APP_TYPE,
         ...(options.headers || {}),

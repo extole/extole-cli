@@ -1,7 +1,8 @@
 import { Command } from 'commander';
+import { pipeline } from 'node:stream/promises';
 import { resolveToken } from '../config.js';
 import { apiJson, apiFetch } from '../api.js';
-import { printJson, printJsonText } from '../output.js';
+import { printJson } from '../output.js';
 import { collect, sleep, addGlobalOptions, formatEventDate } from '../utils.js';
 
 const REPORT_POLL_MAX_ATTEMPTS = 240; // 240 attempts × 1.5s = 6 minutes
@@ -192,6 +193,7 @@ export function reportsCommand() {
     .option('--type <type>', 'Report type (e.g. summary, summary_per_program)')
     .option('-p, --param <kv>', 'key=value parameter (repeatable)', collect, [])
     .option('--days <n>', 'Shortcut: set time_range to last N days')
+    .option('--format <fmt>', 'Output format: JSON, JSONL, CSV (see `reports describe --type <t>`)')
     .option('--wait', 'Poll until report is complete')
     .option('--download', 'Download and print result (implies --wait)')
     .action(async function () {
@@ -223,6 +225,7 @@ export function reportsCommand() {
       }
 
       const body = { report_type: opts.type, parameters };
+      if (opts.format) body.formats = [opts.format.toUpperCase()];
       const createRes = await apiFetch('/v4/reports', token, {
         method: 'POST',
         body: JSON.stringify(body),
@@ -253,19 +256,19 @@ export function reportsCommand() {
 
       if (!opts.download) return;
 
-      const dl = await apiFetch(`/v4/reports/${reportId}/download`, token, { verbose: opts.verbose });
+      const dl = await apiFetch(`/v4/reports/${reportId}/download`, token, { verbose: opts.verbose, headers: { Accept: '*/*' } });
       if (!dl.ok) {
         console.error(`Download failed ${dl.status}`);
         process.exit(1);
       }
-      const text = await dl.text();
-      printJsonText(text, opts);
+      await pipeline(dl.body, process.stdout);
     });
 
   addGlobalOptions(runCmd, {
     examples: [
       'extole reports run --type summary --days 30 --download',
       'extole reports run --type summary_per_program --days 7 --wait',
+      'extole reports run --type summary --days 7 --format jsonl --download | jq -c .',
     ],
   });
 
@@ -368,13 +371,12 @@ export function reportsCommand() {
         }
       }
 
-      const dl = await apiFetch(`/v4/reports/${reportId}/download`, token, { verbose: opts.verbose });
+      const dl = await apiFetch(`/v4/reports/${reportId}/download`, token, { verbose: opts.verbose, headers: { Accept: '*/*' } });
       if (!dl.ok) {
         console.error(`Download failed ${dl.status}`);
         process.exit(1);
       }
-      const text = await dl.text();
-      printJsonText(text, opts);
+      await pipeline(dl.body, process.stdout);
     });
 
   addGlobalOptions(downloadCmd, {

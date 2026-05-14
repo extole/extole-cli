@@ -484,6 +484,7 @@ extole reports recommended --json                # raw response for scripting
 extole reports run --type REPORT_TYPE [options]  # create report, returns ID immediately
   --days <n>           set time_range to last N days (mutually exclusive with -p time_range)
   -p key=value         report parameter (repeatable)
+  --format <fmt>       output format: JSON (default), JSONL, CSV — see `reports describe`
   --wait               poll until complete
   --download           download and print result (implies --wait)
 
@@ -493,6 +494,8 @@ extole reports download REPORT_ID --wait         # wait for completion then down
 ```
 
 The CLI does not validate parameters client-side — it packs `-p` values into the request body and lets the platform reject invalid ones. This keeps the CLI's view from drifting away from the platform's; the source of truth is always `describe`.
+
+`--download` streams the response body straight to stdout — memory stays flat regardless of report size. Pipe through `jq .` if you want it pretty-printed, or `jq -c <filter>` to filter line-by-line on `--format jsonl`.
 
 Examples:
 
@@ -510,6 +513,11 @@ extole reports run --type summary --days 365 \
 extole reports run --type summary_per_program --days 365 \
   -p period=MONTH -p dimensions=PROGRAM --download \
   | jq '[.[].program] | unique'
+
+# Stream large summaries as JSONL — one record per line, jq-c friendly
+extole reports run --type summary --days 30 \
+  -p period=DAY -p dimensions=PROGRAM --format jsonl --download \
+  | jq -c 'select(.program == "referrals")'
 ```
 
 ## Components
