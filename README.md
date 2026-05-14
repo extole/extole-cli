@@ -677,13 +677,21 @@ Opens a browser for login. Token is saved automatically and refreshed as needed.
 
 ## Share Links
 
+Two directions:
+
 ```
-extole share-links --email jane@example.com
-extole share-links --email jane@example.com --label credit-cards
-extole share-links --email jane@example.com --json
+extole share-links list --email jane@example.com              # all share links for a person
+extole share-links list --email jane@example.com --label credit-cards
+extole share-links list --email jane@example.com --json
+
+extole share-links lookup chrisbackfillcw214                  # reverse: code → owner
+extole share-links lookup https://demo-data-finserv.extole.io/chrisbackfillcw214
+extole share-links lookup chrisbackfillcw214 --json
 ```
 
-Returns the share links for a person — label, code, and full URL. Use `--label` to filter when a person has links across multiple programs (e.g. verifying a backfill wrote the correct label).
+`list` returns the share links for a person — label, code, and full URL. Use `--label` to filter when a person has links across multiple programs (e.g. verifying a backfill wrote the correct label).
+
+`lookup` is the reverse: given a share code or full share URL (from analytics, a webhook payload, a customer report, a screenshot), return the owning person and program. URL parsing is automatic — pass the whole URL or just the code.
 
 Error messages distinguish person-not-found from person-has-no-links:
 - `No person found for jane@example.com` — email not in Extole
