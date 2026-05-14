@@ -36,6 +36,23 @@ async function fetchSupplier(supplierId, token, verbose) {
   return apiJson(`/v6/reward-suppliers/${supplierId}/built`, token, { verbose, baseUrl: API_BASE });
 }
 
+async function resolveCampaignNames(campaignIds, token, verbose) {
+  const unique = [...new Set(campaignIds.filter(Boolean))];
+  const entries = await Promise.all(unique.map(async (id) => {
+    try {
+      const c = await apiJson(`/v2/campaigns/${id}/built`, token, { verbose, baseUrl: API_BASE });
+      return [id, c?.name || null];
+    } catch { return [id, null]; }
+  }));
+  return new Map(entries);
+}
+
+function fmtCampaign(id, names) {
+  if (!id) return '';
+  const n = names?.get(id);
+  return n ? `${id}  (${n})` : id;
+}
+
 // Pull cross-person references off each reward. Each Extole reward carries
 // data.other_person_id when it was minted as part of a related-party journey
 // (advocate ↔ friend, employee ↔ referred customer). Combined with the
@@ -86,6 +103,54 @@ function scanRuleFailures(steps) {
     });
   }
   return failures;
+}
+
+// Scan for non-rule-eval LOW-quality steps. Rule-eval failures are handled
+// by scanRuleFailures; this catches the case where the qualifying event itself
+// was marked LOW (quality rule, dedupe, bot detection) and therefore never
+// reached reward-rule evaluation. The operator reads the step names and
+// recognizes which are their account's qualifying events.
+function scanLowQualitySteps(steps) {
+  if (!Array.isArray(steps)) return [];
+  const rows = [];
+  for (const s of steps) {
+    const name = s.name || '';
+    if (s.quality !== 'LOW') continue;
+    if (name.endsWith('_reward_rule_evaluated') || name === 'reward_evaluated') continue;
+    const data = s.data || {};
+    const unwrap = (v) => (v && typeof v === 'object' && 'value' in v) ? v.value : v;
+    rows.push({
+      name,
+      campaign_id: s.campaign_id || null,
+      journey_name: s.journey_name || null,
+      event_date: s.event_date || s.created_date || null,
+      action_id: unwrap(data.legacy_action_id) || null,
+    });
+  }
+  return rows;
+}
+
+// Fetch the per-rule quality decisions for an action. Returns an array of
+// { rule_name, message } for any rule that scored LOW. The /v0/actions/detail
+// endpoint is the legacy surface that Event History UI also reads — it carries
+// the actual per-rule quality_score and the rule's explanation message.
+async function fetchActionDeclineReasons(actionId, token, verbose) {
+  try {
+    const d = await apiJson(`/v0/actions/detail/${actionId}.json`, token, { verbose, baseUrl: API_BASE });
+    const item = (d?.data && d.data[0]) || d;
+    if (!item) return [];
+    const lows = [];
+    for (const u of (item.review_updates || [])) {
+      for (const t of (u.trigger_results || [])) {
+        if (String(t.quality_score || '').toUpperCase() !== 'LOW') continue;
+        lows.push({
+          rule_name: t.name || t.rule_name || null,
+          message: t.message || null,
+        });
+      }
+    }
+    return lows;
+  } catch { return []; }
 }
 
 function formatFaceValue(s) {
@@ -182,18 +247,53 @@ async function investigatePerson(email, opts, token, limit) {
   const list = Array.isArray(rewards) ? rewards : [];
   const references = extractReferences(list);
 
-  // When there are zero rewards, scan recent steps for rule-evaluation
-  // failures (e.g., risk eval declined) — most common "rewards is empty
-  // but should not be" cause.
-  let ruleFailures = [];
-  if (list.length === 0) {
-    const steps = await getPersonSteps(match.id, token, 50, opts.verbose).catch(() => []);
-    ruleFailures = scanRuleFailures(steps);
+  // Always scan recent steps for rule-evaluation declines. With zero rewards,
+  // surface all of them (the most common "rewards is empty but should not be"
+  // cause). With rewards present, surface only declines newer than the most
+  // recent reward — those are customer-impacting events not yet reflected in
+  // any reward record (older declines that eventually issued are noise).
+  const steps = await getPersonSteps(match.id, token, 50, opts.verbose).catch(() => []);
+  const allFailures = scanRuleFailures(steps);
+  const mostRecentRewardMs = list.reduce((max, r) => {
+    const t = Date.parse(r.created_date || r.created_at || '');
+    return Number.isFinite(t) && t > max ? t : max;
+  }, 0);
+  const ruleFailures = list.length === 0
+    ? allFailures
+    : allFailures.filter(f => {
+        const t = Date.parse(f.event_date || '');
+        return Number.isFinite(t) && t > mostRecentRewardMs;
+      });
+  // Only surface raw LOW-quality steps as a fallback when nothing else
+  // explains the missing reward (zero rewards AND zero rule-eval failures).
+  const lowQualitySteps = (list.length === 0 && ruleFailures.length === 0)
+    ? scanLowQualitySteps(steps)
+    : [];
+
+  // For LOW-quality steps, fetch per-rule decisions in parallel (dedup'd by
+  // action_id) so we can show *which* quality rule rejected each event.
+  if (lowQualitySteps.length > 0) {
+    const uniqueActionIds = [...new Set(lowQualitySteps.map(s => s.action_id).filter(Boolean))];
+    const reasonsByAction = new Map();
+    await Promise.all(uniqueActionIds.map(async (aid) => {
+      reasonsByAction.set(aid, await fetchActionDeclineReasons(aid, token, opts.verbose));
+    }));
+    for (const s of lowQualitySteps) {
+      s.decline_reasons = s.action_id ? (reasonsByAction.get(s.action_id) || []) : [];
+    }
   }
+
+  // Resolve campaign IDs → display names once, share across all render paths.
+  const campaignIds = [
+    ...list.map(r => r.campaign_id),
+    ...ruleFailures.map(f => f.campaign_id),
+    ...lowQualitySteps.map(s => s.campaign_id),
+  ];
+  const campaignNames = await resolveCampaignNames(campaignIds, token, opts.verbose);
 
   if (opts.json) {
     if (list.length === 0) {
-      return { email, person_id: match.id, rewards: [], rule_failures: ruleFailures, references };
+      return { email, person_id: match.id, rewards: [], rule_failures: ruleFailures, low_quality_steps: lowQualitySteps, references };
     }
     const enriched = await Promise.all(list.map(async r => {
       const [history, rules] = await Promise.all([
@@ -206,7 +306,7 @@ async function investigatePerson(email, opts, token, limit) {
         : null;
       return { reward: r, history, rule, supplier, diagnosis: diagnose(r, history) };
     }));
-    return { email, person_id: match.id, rewards: enriched, references };
+    return { email, person_id: match.id, rewards: enriched, rule_failures: ruleFailures, references };
   }
 
   // ── Human output ─────────────────────────────────────────────────────────
@@ -227,7 +327,7 @@ async function investigatePerson(email, opts, token, limit) {
         console.log(`  ✗  ${ruleLabel}`);
         if (f.description) console.log(`        why:       ${f.description}`);
         if (f.journey_name) console.log(`        journey:   ${f.journey_name}`);
-        if (f.campaign_id) console.log(`        campaign:  ${f.campaign_id}`);
+        if (f.campaign_id) console.log(`        campaign:  ${fmtCampaign(f.campaign_id, campaignNames)}`);
         if (when) console.log(`        when:      ${when}`);
         console.log('');
       }
@@ -235,6 +335,27 @@ async function investigatePerson(email, opts, token, limit) {
       console.log(`  extole person steps --email ${email}            # full step history with rule data`);
       console.log('  If the customer is legitimate, an operator can issue the reward manually.');
       console.log('  If false positives are common on this campaign, review the failing rule\'s threshold.');
+      return { email, person_id: match.id, references };
+    }
+
+    if (lowQualitySteps.length > 0) {
+      console.log(`Recent LOW-quality event${lowQualitySteps.length === 1 ? '' : 's'} (${lowQualitySteps.length}):\n`);
+      for (const s of lowQualitySteps) {
+        const when = s.event_date ? formatEventDate(s.event_date) : '';
+        console.log(`  ⚠  ${s.name}`);
+        if (Array.isArray(s.decline_reasons) && s.decline_reasons.length > 0) {
+          for (const d of s.decline_reasons) {
+            const ruleLine = d.message ? `${d.rule_name} — ${d.message}` : d.rule_name;
+            console.log(`        rule:      ✗ ${ruleLine}`);
+          }
+        }
+        if (s.journey_name) console.log(`        journey:   ${s.journey_name}`);
+        if (s.campaign_id) console.log(`        campaign:  ${fmtCampaign(s.campaign_id, campaignNames)}`);
+        if (when) console.log(`        when:      ${when}`);
+        console.log('');
+      }
+      console.log('Next steps:');
+      console.log(`  extole person steps --email ${email}            # full step history`);
       return { email, person_id: match.id, references };
     }
 
@@ -274,7 +395,7 @@ async function investigatePerson(email, opts, token, limit) {
     console.log(`  [${i + 1}] ${stateLabel}  ${face.padEnd(14)}  ${r.journey_name || ''}  ${createdDate ? formatEventDate(createdDate) : ''}`);
     console.log(`      reward_id:    ${rewardId}`);
     if (r.partner_reward_id) console.log(`      coupon:       ${r.partner_reward_id}`);
-    if (r.campaign_id) console.log(`      campaign:     ${r.campaign_id}`);
+    if (r.campaign_id) console.log(`      campaign:     ${fmtCampaign(r.campaign_id, campaignNames)}`);
 
     if (Array.isArray(history) && history.length) {
       console.log('      history:');
@@ -303,6 +424,27 @@ async function investigatePerson(email, opts, token, limit) {
     console.log(`      diagnosis:    ${diagnose(r, history)}`);
     console.log('');
   }
+
+  if (ruleFailures.length > 0) {
+    console.log(`Recent reward-rule decline${ruleFailures.length === 1 ? '' : 's'} (${ruleFailures.length}):\n`);
+    for (const f of ruleFailures) {
+      const when = f.event_date ? formatEventDate(f.event_date) : '';
+      const ruleLabel = f.name === 'reward_evaluated'
+        ? (f.state ? `reward_evaluated  state=${f.state}` : 'reward_evaluated')
+        : f.name.replace(/_reward_rule_evaluated$/, '');
+      console.log(`  ✗  ${ruleLabel}`);
+      if (f.description) console.log(`        why:       ${f.description}`);
+      if (f.journey_name) console.log(`        journey:   ${f.journey_name}`);
+      if (f.campaign_id) console.log(`        campaign:  ${f.campaign_id}`);
+      if (when) console.log(`        when:      ${when}`);
+      console.log('');
+    }
+    console.log('Next steps:');
+    console.log(`  extole person steps --email ${email}            # full step history with rule data`);
+    console.log('  If the customer is legitimate, an operator can issue the reward manually.');
+    console.log('');
+  }
+
   return { email, person_id: match.id, references };
 }
 
