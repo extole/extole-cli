@@ -467,6 +467,146 @@ export function rewardsCommand() {
 
   cmd.addCommand(fulfillmentsCmd);
 
+  // ── sends ──────────────────────────────────────────────────────────────
+
+  const sendsCmd = new Command('sends')
+    .argument('<reward_id>', 'Reward ID')
+    .description('Show send attempts for a reward — includes the email address it was sent to, partner send ID, and whether the send succeeded. Use this to debug "was the code actually delivered to the right address?"')
+    .allowExcessArguments(false)
+    .action(async function (rewardId) {
+      const opts = this.optsWithGlobals();
+      const token = resolveToken(opts);
+
+      const sends = await apiJson(`/v2/rewards/${rewardId}/sends`, token, { verbose: opts.verbose, baseUrl: API_BASE });
+      const list = Array.isArray(sends) ? sends : [];
+
+      if (opts.json) {
+        printJson(list, opts);
+        return;
+      }
+
+      if (list.length === 0) {
+        console.log(`No send attempts found for reward ${rewardId}.`);
+        return;
+      }
+
+      const ordered = list.slice().sort((a, b) => new Date(a.created_at) - new Date(b.created_at));
+
+      console.log(`Reward ${rewardId}  sends (${ordered.length}):`);
+      console.log();
+      for (const s of ordered) {
+        const ok = s.success ? '✓' : '✗';
+        console.log(`  ${ok}  ${formatEventDate(s.created_at)}`);
+        if (s.email)                  console.log(`     email              ${s.email}`);
+        if (s.partner_reward_sent_id) console.log(`     partner_send_id    ${s.partner_reward_sent_id}`);
+        if (s.message)                console.log(`     message            ${s.message}`);
+        console.log();
+      }
+    });
+
+  addGlobalOptions(sendsCmd, {
+    output: true,
+    examples: [
+      'extole rewards sends efda6f32db286845ac9f6272',
+      'extole rewards sends efda6f32db286845ac9f6272 --json',
+    ],
+  });
+
+  cmd.addCommand(sendsCmd);
+
+  // ── redeems ────────────────────────────────────────────────────────────
+
+  const redeemsCmd = new Command('redeems')
+    .argument('<reward_id>', 'Reward ID')
+    .description('Show redemption events for a reward — includes the triggering event name, partner event ID, and cause event ID. Use this to verify what triggered the redemption signal and trace it back to the originating event.')
+    .allowExcessArguments(false)
+    .action(async function (rewardId) {
+      const opts = this.optsWithGlobals();
+      const token = resolveToken(opts);
+
+      const redeems = await apiJson(`/v2/rewards/${rewardId}/redeems`, token, { verbose: opts.verbose, baseUrl: API_BASE });
+      const list = Array.isArray(redeems) ? redeems : [];
+
+      if (opts.json) {
+        printJson(list, opts);
+        return;
+      }
+
+      if (list.length === 0) {
+        console.log(`No redemption events found for reward ${rewardId}.`);
+        return;
+      }
+
+      const ordered = list.slice().sort((a, b) => new Date(a.created_at) - new Date(b.created_at));
+
+      console.log(`Reward ${rewardId}  redeems (${ordered.length}):`);
+      console.log();
+      for (const r of ordered) {
+        console.log(`  ${formatEventDate(r.created_at)}`);
+        if (r.event_name)               console.log(`     event_name             ${r.event_name}`);
+        if (r.partner_event_id)         console.log(`     partner_event_id       ${r.partner_event_id}`);
+        if (r.partner_reward_redeem_id) console.log(`     partner_redeem_id      ${r.partner_reward_redeem_id}`);
+        if (r.cause_event_id)           console.log(`     cause_event_id         ${r.cause_event_id}`);
+        if (r.message)                  console.log(`     message                ${r.message}`);
+        console.log();
+      }
+    });
+
+  addGlobalOptions(redeemsCmd, {
+    output: true,
+    examples: [
+      'extole rewards redeems efda6f32db286845ac9f6272',
+      'extole rewards redeems efda6f32db286845ac9f6272 --json',
+    ],
+  });
+
+  cmd.addCommand(redeemsCmd);
+
+  // ── cancels ────────────────────────────────────────────────────────────
+
+  const cancelsCmd = new Command('cancels')
+    .argument('<reward_id>', 'Reward ID')
+    .description('Show cancellation events for a reward — includes who canceled it (operator_user_id) and why (message). Use this to answer "who canceled this reward and what was the reason?"')
+    .allowExcessArguments(false)
+    .action(async function (rewardId) {
+      const opts = this.optsWithGlobals();
+      const token = resolveToken(opts);
+
+      const cancels = await apiJson(`/v2/rewards/${rewardId}/cancels`, token, { verbose: opts.verbose, baseUrl: API_BASE });
+      const list = Array.isArray(cancels) ? cancels : [];
+
+      if (opts.json) {
+        printJson(list, opts);
+        return;
+      }
+
+      if (list.length === 0) {
+        console.log(`No cancellation events found for reward ${rewardId}.`);
+        return;
+      }
+
+      const ordered = list.slice().sort((a, b) => new Date(a.created_at) - new Date(b.created_at));
+
+      console.log(`Reward ${rewardId}  cancels (${ordered.length}):`);
+      console.log();
+      for (const c of ordered) {
+        console.log(`  ${formatEventDate(c.created_at)}`);
+        if (c.operator_user_id) console.log(`     operator     ${c.operator_user_id}`);
+        if (c.message)          console.log(`     message      ${c.message}`);
+        console.log();
+      }
+    });
+
+  addGlobalOptions(cancelsCmd, {
+    output: true,
+    examples: [
+      'extole rewards cancels efda6f32db286845ac9f6272',
+      'extole rewards cancels efda6f32db286845ac9f6272 --json',
+    ],
+  });
+
+  cmd.addCommand(cancelsCmd);
+
   // ── suppliers ──────────────────────────────────────────────────────────
 
   const suppliersCmd = new Command('suppliers')
