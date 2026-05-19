@@ -1,7 +1,9 @@
 import { Command } from 'commander';
 import { resolveToken, API_BASE } from '../config.js';
 
-const VALID_REWARD_STATES = new Set(['EARNED', 'FULFILLED', 'SENT', 'REDEEMED', 'CANCELED', 'FAILED', 'EXPIRED']);
+const VALID_REWARD_STATES = new Set(['EARNED', 'FULFILLED', 'SENT', 'REDEEMED', 'CANCELED', 'FAILED', 'REVOKED', 'EXPIRED']);
+const VALID_REWARD_TYPES = new Set(['MANUAL_COUPON', 'SALESFORCE_COUPON', 'TANGO_V2', 'CUSTOM_REWARD', 'PAYPAL_PAYOUTS']);
+const COUPON_SUPPLIER_TYPES = new Set(['MANUAL_COUPON', 'SALESFORCE_COUPON']);
 import { apiJson } from '../api.js';
 import { printJson } from '../output.js';
 import { addGlobalOptions, isValidEmail, formatEventDate } from '../utils.js';
@@ -21,7 +23,7 @@ function formatReward(r) {
 
 export function rewardsCommand() {
   const cmd = new Command('rewards')
-    .description('Look up rewards by email or reward ID')
+    .description('Look up, search, and inspect rewards')
     .allowExcessArguments(false)
     .option('--email <email>', 'Email address to look up')
     .option('--status <state>', 'Filter by state (EARNED, FULFILLED, SENT, REDEEMED, CANCELED, FAILED, EXPIRED)')
@@ -336,6 +338,263 @@ export function rewardsCommand() {
   });
 
   cmd.addCommand(findCouponCmd);
+
+  // ── list ───────────────────────────────────────────────────────────────
+  // Fleet-wide reward search — no email required. Uses /v2/rewards which
+  // supports filtering by state, supplier, type, and time without a person.
+
+  const listCmd = new Command('list')
+    .description('Search rewards account-wide by state, supplier, or type. No email required — use this for ops queries like "show all FAILED rewards today".')
+    .allowExcessArguments(false)
+    .option('--state <state>', 'Filter by state (EARNED, FULFILLED, SENT, REDEEMED, CANCELED, FAILED, REVOKED)')
+    .option('--supplier <id>', 'Filter by reward supplier ID')
+    .option('--reward-type <type>', 'Filter by supplier type (MANUAL_COUPON, SALESFORCE_COUPON, TANGO_V2, CUSTOM_REWARD, PAYPAL_PAYOUTS)')
+    .option('--all', 'Include non-successful rewards (disables success_only filter)')
+    .option('--limit <n>', 'Max rewards to return', '25')
+    .action(async function () {
+      const opts = this.optsWithGlobals();
+      const token = resolveToken(opts);
+
+      const limit = parseInt(opts.limit, 10);
+      if (isNaN(limit) || limit <= 0) {
+        console.error('--limit must be a positive integer');
+        process.exit(2);
+      }
+
+      if (opts.state && !VALID_REWARD_STATES.has(opts.state.toUpperCase())) {
+        console.error(`Error: --state must be one of: ${[...VALID_REWARD_STATES].join(', ')}`);
+        process.exit(2);
+      }
+
+      if (opts.rewardType && !VALID_REWARD_TYPES.has(opts.rewardType.toUpperCase())) {
+        console.error(`Error: --reward-type must be one of: ${[...VALID_REWARD_TYPES].join(', ')}`);
+        process.exit(2);
+      }
+
+      const params = new URLSearchParams({ limit: String(limit) });
+      if (opts.state) params.set('state', opts.state.toUpperCase());
+      if (opts.supplier) params.set('reward_supplier_id', opts.supplier);
+      if (opts.rewardType) params.set('reward_type', opts.rewardType.toUpperCase());
+      if (opts.all) params.set('success_only', 'false');
+
+      const rewards = await apiJson(`/v2/rewards?${params}`, token, { verbose: opts.verbose, baseUrl: API_BASE });
+      const list = Array.isArray(rewards) ? rewards : [];
+
+      if (opts.json) {
+        printJson(list, opts);
+        return;
+      }
+
+      if (list.length === 0) {
+        console.log('No rewards found matching the given filters.');
+        return;
+      }
+
+      const col = { state: 12, value: 18, journey: 16, date: 12 };
+      console.log(
+        'state'.padEnd(col.state) +
+        'face_value'.padEnd(col.value) +
+        'journey'.padEnd(col.journey) +
+        'created_at'.padEnd(col.date) +
+        'reward_id'
+      );
+      console.log('─'.repeat(col.state) + '─'.repeat(col.value) + '─'.repeat(col.journey) + '─'.repeat(col.date) + '─'.repeat(24));
+      for (const r of list) {
+        formatReward(r);
+      }
+    });
+
+  addGlobalOptions(listCmd, {
+    output: true,
+    examples: [
+      'extole rewards list --state FAILED',
+      'extole rewards list --state FAILED --all',
+      'extole rewards list --supplier abc123 --state EARNED',
+      'extole rewards list --reward-type TANGO_V2 --limit 50',
+      'extole rewards list --state FAILED --json | jq \'.[].reward_id\'',
+    ],
+  });
+
+  cmd.addCommand(listCmd);
+
+  // ── fulfillments ───────────────────────────────────────────────────────
+  // Shows per-attempt fulfillment detail including the raw supplier error
+  // message — the thing history doesn't carry.
+
+  const fulfillmentsCmd = new Command('fulfillments')
+    .argument('<reward_id>', 'Reward ID')
+    .description('Show fulfillment attempts for a reward — includes coupon code, cost_code, amount, and the raw supplier error message. Use this when history shows a failed fulfillment and you need the actual BHN/Tango error.')
+    .allowExcessArguments(false)
+    .action(async function (rewardId) {
+      const opts = this.optsWithGlobals();
+      const token = resolveToken(opts);
+
+      const fulfillments = await apiJson(`/v2/rewards/${rewardId}/fulfillments`, token, { verbose: opts.verbose, baseUrl: API_BASE });
+      const list = Array.isArray(fulfillments) ? fulfillments : [];
+
+      if (opts.json) {
+        printJson(list, opts);
+        return;
+      }
+
+      if (list.length === 0) {
+        console.log(`No fulfillment attempts found for reward ${rewardId}.`);
+        return;
+      }
+
+      const ordered = list.slice().sort((a, b) => new Date(a.created_at) - new Date(b.created_at));
+
+      console.log(`Reward ${rewardId}  fulfillments (${ordered.length}):`);
+      console.log();
+      for (const f of ordered) {
+        const ok = f.success ? '✓' : '✗';
+        console.log(`  ${ok}  ${formatEventDate(f.created_at)}`);
+        if (f.partner_reward_id) console.log(`     coupon_code   ${f.partner_reward_id}`);
+        if (f.cost_code)         console.log(`     cost_code     ${f.cost_code}`);
+        if (f.amount != null)    console.log(`     amount        ${f.amount}`);
+        if (f.message)           console.log(`     message       ${f.message}`);
+        console.log();
+      }
+    });
+
+  addGlobalOptions(fulfillmentsCmd, {
+    output: true,
+    examples: [
+      'extole rewards fulfillments efda6f32db286845ac9f6272',
+      'extole rewards fulfillments efda6f32db286845ac9f6272 --json',
+    ],
+  });
+
+  cmd.addCommand(fulfillmentsCmd);
+
+  // ── suppliers ──────────────────────────────────────────────────────────
+
+  const suppliersCmd = new Command('suppliers')
+    .description('List reward suppliers configured on this account.')
+    .allowExcessArguments(false)
+    .option('--include-archived', 'Include archived suppliers')
+    .action(async function () {
+      const opts = this.optsWithGlobals();
+      const token = resolveToken(opts);
+
+      const params = new URLSearchParams();
+      if (opts.includeArchived) params.set('include_archived', 'true');
+
+      const suppliers = await apiJson(`/v6/reward-suppliers?${params}`, token, { verbose: opts.verbose, baseUrl: API_BASE });
+      const list = Array.isArray(suppliers) ? suppliers : [];
+
+      if (opts.json) {
+        printJson(list, opts);
+        return;
+      }
+
+      if (list.length === 0) {
+        console.log('No reward suppliers found.');
+        return;
+      }
+
+      const trunc = (str, max) => str.length > max ? str.slice(0, max - 1) + '…' : str;
+
+      const MAX_NAME = 40;
+      const MAX_VAL  = 16;
+      const typeW = Math.max('type'.length, ...list.map(s => (s.reward_supplier_type || '').length));
+
+      console.log(
+        'type'.padEnd(typeW + 2) +
+        'name'.padEnd(MAX_NAME + 2) +
+        'face_value'.padEnd(MAX_VAL + 2) +
+        'en  ' +
+        'id'
+      );
+      console.log(
+        '─'.repeat(typeW + 2) + '─'.repeat(MAX_NAME + 2) +
+        '─'.repeat(MAX_VAL + 2) + '─'.repeat(4) + '─'.repeat(24)
+      );
+
+      for (const s of list) {
+        const type    = (s.reward_supplier_type || '').padEnd(typeW + 2);
+        const name    = trunc(s.display_name || s.name || '', MAX_NAME).padEnd(MAX_NAME + 2);
+        const rawVal  = s.face_value != null ? `${s.face_value} ${s.face_value_type || ''}`.trim() : '';
+        const val     = trunc(rawVal, MAX_VAL).padEnd(MAX_VAL + 2);
+        const enabled = s.enabled ? 'Y' : 'N';
+        const id      = (s.id || '').slice(0, 24);
+        console.log(`${type}${name}${val}  ${enabled}   ${id}`);
+      }
+    });
+
+  addGlobalOptions(suppliersCmd, {
+    output: true,
+    examples: [
+      'extole rewards suppliers',
+      'extole rewards suppliers --include-archived',
+      'extole rewards suppliers --json',
+      'extole rewards suppliers get <supplier_id>',
+    ],
+  });
+
+  // ── suppliers get ──────────────────────────────────────────────────────
+
+  const suppliersGetCmd = new Command('get')
+    .argument('<supplier_id>', 'Reward supplier ID')
+    .description('Get full detail for a reward supplier. For MANUAL_COUPON and SALESFORCE_COUPON suppliers, also shows coupon inventory (available vs. issued).')
+    .allowExcessArguments(false)
+    .action(async function (supplierId) {
+      const opts = this.optsWithGlobals();
+      const token = resolveToken(opts);
+
+      const s = await apiJson(`/v6/reward-suppliers/${supplierId}`, token, { verbose: opts.verbose, baseUrl: API_BASE });
+
+      let stats = null;
+      const supplierType = (s.reward_supplier_type || '').toUpperCase();
+      if (COUPON_SUPPLIER_TYPES.has(supplierType)) {
+        const statsPath = supplierType === 'MANUAL_COUPON'
+          ? `/v2/reward-suppliers/manual-coupons/${supplierId}/stats`
+          : `/v2/reward-suppliers/salesforce-coupons/${supplierId}/stats`;
+        stats = await apiJson(statsPath, token, { verbose: opts.verbose, baseUrl: API_BASE }).catch(() => null);
+      }
+
+      if (opts.json) {
+        printJson(stats ? { ...s, stats } : s, opts);
+        return;
+      }
+
+      const field = (label, value) => value != null && value !== ''
+        ? console.log(`${label.padEnd(24)}${value}`)
+        : null;
+
+      field('id',                   s.id);
+      field('name',                 s.name);
+      field('display_name',         s.display_name);
+      field('type',                 s.reward_supplier_type);
+      field('display_type',         s.display_type);
+      field('face_value',           s.face_value != null ? `${s.face_value} ${s.face_value_type || ''}`.trim() : null);
+      field('face_value_algorithm', s.face_value_algorithm_type);
+      field('enabled',              s.enabled != null ? String(s.enabled) : null);
+      field('partner_supplier_id',  s.partner_reward_supplier_id);
+      field('partner_key_type',     s.partner_reward_key_type);
+      field('limit_per_day',        s.limit_per_day);
+      field('limit_per_hour',       s.limit_per_hour);
+      const created = s.created_date || s.created_at;
+      field('created_at',           created ? formatEventDate(created) : null);
+
+      if (stats) {
+        console.log();
+        console.log('Coupon inventory:');
+        console.log(`  ${'available'.padEnd(12)}${stats.number_of_available_coupons ?? '—'}`);
+        console.log(`  ${'issued'.padEnd(12)}${stats.number_of_issued_coupons ?? '—'}`);
+      }
+    });
+
+  addGlobalOptions(suppliersGetCmd, {
+    output: true,
+    examples: [
+      'extole rewards suppliers get abc123def456',
+      'extole rewards suppliers get abc123def456 --json',
+    ],
+  });
+
+  suppliersCmd.addCommand(suppliersGetCmd);
+  cmd.addCommand(suppliersCmd);
 
   return cmd;
 }

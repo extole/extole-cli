@@ -25,7 +25,6 @@ Throttle the check to once per day via a timestamp in `~/.extole/config`.
 
 ---
 
-## 3. Feedback command
 
 ```
 extole feedback "suggestion or bug report"
@@ -37,17 +36,7 @@ Routes feedback to an internal channel (destination TBD — not GitHub).
 
 ---
 
-## 4. Audiences
 
-```
-extole audiences list
-extole audiences create --name "Closed Won 60d"
-extole audiences add <audience-id> --email jane@example.com
-extole audiences add <audience-id> --file members.csv
-extole audiences status <audience-id> --operation-id <op-id>
-```
-
-Wraps `/v1/audiences` and `/v1/audiences/{id}/operations`. Primary use case: testing the audience sync feature (e.g. SFDC-driven bulk enrollment) before it's built into the app.
 
 ---
 
