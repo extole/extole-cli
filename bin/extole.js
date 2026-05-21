@@ -25,6 +25,8 @@ import { audiencesCommand } from '../src/commands/audiences.js';
 import { notificationsCommand } from '../src/commands/notifications.js';
 import { rewardSuppliersCommand } from '../src/commands/reward-suppliers.js';
 import { wismrCommand } from '../src/commands/wismr.js';
+import { schemaCommand } from '../src/commands/schema.js';
+import { serveCommand } from '../src/commands/serve.js';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const { version } = JSON.parse(readFileSync(join(__dirname, '../package.json'), 'utf8'));
@@ -64,5 +66,9 @@ program.addCommand(mcpCommand());
 program.addCommand(feedbackCommand());
 program.addCommand(zonesCommand());
 program.addCommand(shareLinksCommand());
+
+// schema and serve introspect program, so registered after all other commands
+program.addCommand(schemaCommand(program));
+program.addCommand(serveCommand(program));
 
 program.parse();
