@@ -3,7 +3,6 @@
 
 // Tools excluded from serve mode: interactive, circular, or internal-only.
 export const SERVE_EXCLUDED = new Set([
-  'person_steps',      // has --watch polling mode; needs --duration before MCP is safe
   'auth_mcp-login',    // browser OAuth — can't run headless
   'auth_su',           // superuser token minting — internal Extole use only
   'mcp',               // circular (calls Extole AI agent)

@@ -50,6 +50,7 @@ export function personCommand() {
     .option('--limit <n>', 'Number of steps to return (one-shot)', '25')
     .option('--event <event_id>', 'Filter to steps caused by this event ID')
     .option('--watch', 'Poll for new steps until Ctrl+C')
+    .option('--duration <seconds>', 'Stop automatically after this many seconds (implies --watch)')
     .action(async function () {
       const opts = this.optsWithGlobals();
       if (!isValidEmail(opts.email)) {
@@ -64,7 +65,7 @@ export function personCommand() {
       }
       const personId = match.id;
 
-      if (!opts.watch) {
+      if (!opts.watch && !opts.duration) {
         const limit = parseInt(opts.limit, 10);
         if (isNaN(limit) || limit <= 0) {
           console.error('--limit must be a positive integer');
@@ -73,6 +74,11 @@ export function personCommand() {
         const steps = await getPersonSteps(personId, token, limit, opts.verbose, { causeEventId: opts.event });
         printJson(steps, opts);
         return;
+      }
+
+      if (opts.duration) {
+        const ms = Math.max(1, Number(opts.duration)) * 1000;
+        setTimeout(() => process.exit(0), ms);
       }
 
       const seen = new Set();
@@ -123,6 +129,7 @@ export function personCommand() {
       'extole person steps --email jane@example.com',
       'extole person steps --email jane@example.com --event EVENT_ID',
       'extole person steps --email jane@example.com --watch',
+      'extole person steps --email jane@example.com --duration 30',
     ],
   });
 
