@@ -338,9 +338,14 @@ extole webhooks dispatches <webhook-id> --limit 50
 
 extole webhooks dispatch-results <webhook-id>      # HTTP outcomes: response codes + bodies
 extole webhooks dispatch-results <webhook-id> --json
+
+extole webhooks watch <webhook-id>                 # tail dispatch results in real time (Ctrl-C to stop)
+extole webhooks watch <webhook-id> --interval 5   # custom poll interval (default 3s)
+extole webhooks watch <webhook-id> --show-body    # print full response body per row
+extole webhooks watch <webhook-id> --duration 60  # auto-exit after 60 seconds
 ```
 
-`dispatches` = one record per dispatch attempt. `dispatch-results` = HTTP response side — use this to debug failures (non-200s, timeouts, error bodies).
+`dispatches` = one record per dispatch attempt. `dispatch-results` = HTTP response side — use this to debug failures (non-200s, timeouts, error bodies). `watch` is the live-tail version of `dispatch-results` — seeds the seen-set on first poll so it only shows new attempts.
 
 ## Stream
 
@@ -352,10 +357,11 @@ extole stream --filter lead_created                   # filter by event name (re
 extole stream --email jane@example.com                # filter to one person
 extole stream --app-type my_integration               # filter by source (repeatable)
 extole stream --sandbox container-test                # filter by sandbox/container
+extole stream --duration 30                           # auto-exit after 30 seconds
 extole stream --json                                  # newline-delimited JSON
 ```
 
-Creates an ephemeral `/v6/event-streams` session, applies filters, polls every 2.5s, and deletes the stream on Ctrl+C.
+Creates an ephemeral `/v6/event-streams` session, applies filters, polls every 2.5s, and deletes the stream on Ctrl+C or when `--duration` expires.
 
 **Recommended starting filters for production clients** (unfiltered streams are very noisy):
 ```
