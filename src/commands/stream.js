@@ -78,6 +78,7 @@ export function streamCommand() {
     .option('--event-type <type>', 'Filter by event type, repeatable (INPUT, REWARD, STEP, SHARE...)', collect, [])
     .option('--app-type <type>', 'Filter by app/source type (repeatable)', collect, [])
     .option('--sandbox <name>', 'Filter by sandbox/container name')
+    .option('--duration <seconds>', 'Stop automatically after this many seconds')
     .action(async (opts) => {
       const token = resolveToken(opts);
 
@@ -91,6 +92,11 @@ export function streamCommand() {
       }
       process.once('SIGINT', () => cleanup(130));
       process.once('SIGTERM', () => cleanup(143));
+
+      if (opts.duration) {
+        const ms = Math.max(1, Number(opts.duration)) * 1000;
+        setTimeout(() => cleanup(0), ms);
+      }
 
       const filterPromises = [];
 
@@ -176,6 +182,7 @@ export function streamCommand() {
       'extole stream --email jane@example.com',
       'extole stream --filter lead_created --filter opp_closed_won',
       'extole stream --event-type REWARD',
+      'extole stream --duration 30',
     ],
   });
 }

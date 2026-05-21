@@ -653,13 +653,15 @@ export function webhooksCommand() {
     .description('Tail dispatch results for a webhook in real time. Polls every 3s and prints new attempts with their HTTP response code and body. Ctrl-C to stop.')
     .argument('<webhook-id>', 'Webhook ID')
     .option('--interval <seconds>', 'Poll interval in seconds (default 3)', '3')
+    .option('--duration <seconds>', 'Stop automatically after this many seconds')
     .option('--show-body', 'Print full response body on its own line under each row (default truncates to 80 chars inline)')
     .action(async (webhookId, _o, command) => {
       const opts = command.optsWithGlobals();
       const token = resolveToken(opts);
       const intervalMs = Math.max(1, Number(opts.interval) || 3) * 1000;
 
-      console.log(`Watching webhook ${webhookId} for dispatch results... (Ctrl-C to stop)\n`);
+      const stopLine = opts.duration ? ` (stops after ${opts.duration}s)` : ' (Ctrl-C to stop)';
+      console.log(`Watching webhook ${webhookId} for dispatch results...${stopLine}\n`);
 
       const seen = new Set();
       let firstPoll = true;
@@ -701,6 +703,7 @@ export function webhooksCommand() {
       const cleanup = () => { clearInterval(handle); process.exit(0); };
       process.on('SIGINT', cleanup);
       process.on('SIGTERM', cleanup);
+      if (opts.duration) setTimeout(cleanup, Math.max(1, Number(opts.duration)) * 1000);
     });
 
   addGlobalOptions(watchCmd, {
@@ -708,6 +711,7 @@ export function webhooksCommand() {
       'extole webhooks watch <webhook-id>',
       'extole webhooks watch <webhook-id> --interval 5',
       'extole webhooks watch <webhook-id> --show-body',
+      'extole webhooks watch <webhook-id> --duration 60',
     ],
   });
 
