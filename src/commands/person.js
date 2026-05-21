@@ -3,7 +3,7 @@ import { resolveToken, API_BASE } from '../config.js';
 import { apiJson } from '../api.js';
 import { printJson } from '../output.js';
 import { addGlobalOptions, SEEN_MAX_SIZE, SEEN_KEEP_SIZE, POLL_INTERVAL_MS, isValidEmail, formatEventTime } from '../utils.js';
-import { findPerson, getPersonSteps } from '../person-api.js';
+import { findPerson, getPersonSteps, getPersonRelationships, getPersonStats } from '../person-api.js';
 
 export function personCommand() {
   const person = new Command('person').description('Look up person profile and step history');
@@ -133,7 +133,105 @@ export function personCommand() {
     ],
   });
 
+  const relationshipsCmd = new Command('relationships')
+    .description('Show advocate↔friend referral relationships for a person')
+    .allowExcessArguments(false)
+    .requiredOption('--email <email>', 'Email address to look up')
+    .action(async function () {
+      const opts = this.optsWithGlobals();
+      if (!isValidEmail(opts.email)) {
+        console.error('Error: --email must be a valid email address.');
+        process.exit(2);
+      }
+      const token = resolveToken(opts);
+      const match = await findPerson(opts.email, token, opts.verbose);
+      if (!match) {
+        console.error(`No person found for ${opts.email}`);
+        process.exit(1);
+      }
+      const relationships = await getPersonRelationships(match.id, token, opts.verbose);
+      if (opts.json) {
+        printJson(relationships, opts);
+        return;
+      }
+      if (!relationships || relationships.length === 0) {
+        console.log(`No relationships found for ${opts.email}`);
+        return;
+      }
+      const roleW = 10, programW = 24, personW = 20, channelW = 12;
+      console.log(
+        'role'.padEnd(roleW) + 'program'.padEnd(programW) +
+        'other_person_id'.padEnd(personW) + 'channel'.padEnd(channelW) + 'date'
+      );
+      console.log('-'.repeat(roleW + programW + personW + channelW + 10));
+      for (const r of relationships) {
+        const channel = r.data?.channel?.value || r.data?.reason?.value || '';
+        const date = (r.created_date || '').slice(0, 10);
+        console.log(
+          (r.my_role || '').padEnd(roleW) +
+          (r.program || '').padEnd(programW) +
+          (r.other_person_id || '').padEnd(personW) +
+          channel.padEnd(channelW) +
+          date
+        );
+      }
+    });
+
+  addGlobalOptions(relationshipsCmd, {
+    output: true,
+    examples: [
+      'extole person relationships --email jane@example.com',
+      'extole person relationships --email jane@example.com --json',
+    ],
+  });
+
+  const statsCmd = new Command('stats')
+    .description('Show personal and referral network stats for a person')
+    .allowExcessArguments(false)
+    .requiredOption('--email <email>', 'Email address to look up')
+    .action(async function () {
+      const opts = this.optsWithGlobals();
+      if (!isValidEmail(opts.email)) {
+        console.error('Error: --email must be a valid email address.');
+        process.exit(2);
+      }
+      const token = resolveToken(opts);
+      const match = await findPerson(opts.email, token, opts.verbose);
+      if (!match) {
+        console.error(`No person found for ${opts.email}`);
+        process.exit(1);
+      }
+      const { stats, networkStats } = await getPersonStats(match.id, token, opts.verbose);
+      if (opts.json) {
+        printJson({ personal: stats, network: networkStats }, opts);
+        return;
+      }
+      const fmt = (v) => (v != null ? String(v) : '-');
+      const labelW = 12, colW = 14;
+      const header = ''.padEnd(labelW) + 'aov'.padEnd(colW) + 'ltv'.padEnd(colW) +
+        'activities'.padEnd(colW) + 'transactions'.padEnd(colW) + 'conversions';
+      console.log(header);
+      console.log('-'.repeat(header.length + 4));
+      const row = (label, s) =>
+        label.padEnd(labelW) +
+        fmt(s.aov).padEnd(colW) + fmt(s.ltv).padEnd(colW) +
+        fmt(s.activities).padEnd(colW) + fmt(s.transactions).padEnd(colW) +
+        fmt(s.conversions);
+      console.log(row('personal', stats));
+      console.log(row('network', networkStats));
+    });
+
+  addGlobalOptions(statsCmd, {
+    output: true,
+    examples: [
+      'extole person stats --email jane@example.com',
+      'extole person stats --email jane@example.com --json',
+    ],
+  });
+
   person.addCommand(getCmd);
   person.addCommand(stepsCmd);
+  person.addCommand(relationshipsCmd);
+  person.addCommand(statsCmd);
   return person;
 }

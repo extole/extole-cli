@@ -20,3 +20,15 @@ export async function getPersonSteps(personId, token, limit = 50, verbose = fals
     { verbose, baseUrl: API_BASE }
   );
 }
+
+export async function getPersonRelationships(personId, token, verbose = false) {
+  return apiJson(`/v5/persons/${personId}/relationships`, token, { verbose, baseUrl: API_BASE });
+}
+
+export async function getPersonStats(personId, token, verbose = false) {
+  const [stats, networkStats] = await Promise.all([
+    apiJson(`/v4/persons/${personId}/stats`, token, { verbose, baseUrl: API_BASE }),
+    apiJson(`/v4/persons/${personId}/network-stats`, token, { verbose, baseUrl: API_BASE }),
+  ]);
+  return { stats, networkStats };
+}
