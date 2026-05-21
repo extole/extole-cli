@@ -416,7 +416,7 @@ export function componentsCommand() {
     .requiredOption('--source <dir>', 'Local directory containing component.json (root of bundle)')
     .option('--component <id>', 'Existing component ID to update (omit to create new)')
     .option('--publish', 'Publish the campaign after uploading')
-    .option('--dry-run', 'Show resolved bundle file tree without uploading')
+    .option('--dry-run', 'Print resolved component.json contents (post-include expansion) without uploading')
     .action(async function () {
       const opts = this.optsWithGlobals();
       const sourceDir = resolve(opts.source);
@@ -436,8 +436,7 @@ export function componentsCommand() {
         processDir(sourceDir, stagingDir, sourceDir);
 
         if (opts.dryRun) {
-          console.log('Bundle contents (includes resolved):');
-          listDir(stagingDir, tmpDir);
+          printResolvedBundle(stagingDir, tmpDir);
           return;
         }
 
@@ -647,6 +646,25 @@ function listDir(dir, root) {
       listDir(p, root);
     } else {
       console.log(`  ${p.slice(root.length + 1)}`);
+    }
+  }
+}
+
+function printResolvedBundle(dir, root) {
+  for (const entry of readdirSync(dir)) {
+    const p = join(dir, entry);
+    if (statSync(p).isDirectory()) {
+      printResolvedBundle(p, root);
+    } else if (entry === 'component.json') {
+      const rel = p.slice(root.length + 1);
+      console.log(`# ${rel}`);
+      try {
+        const parsed = JSON.parse(readFileSync(p, 'utf8'));
+        console.log(JSON.stringify(parsed, null, 2));
+      } catch {
+        console.log(readFileSync(p, 'utf8'));
+      }
+      console.log();
     }
   }
 }
