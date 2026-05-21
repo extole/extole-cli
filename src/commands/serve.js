@@ -1,9 +1,48 @@
-import { readFileSync } from 'fs';
+import { readFileSync, writeFileSync, existsSync, mkdirSync } from 'fs';
 import { fileURLToPath } from 'url';
 import { dirname, join } from 'path';
-import { spawn } from 'child_process';
+import { spawn, execSync } from 'child_process';
+import { homedir } from 'os';
 import { Command } from 'commander';
 import { buildTools, toMcpTool } from '../schema.js';
+
+const MCP_SERVER_NAME = 'extole-cli';
+
+function resolveExtoleBin() {
+  try {
+    const p = execSync('which extole', { encoding: 'utf8' }).trim();
+    if (p) return { command: p, args: ['serve'] };
+  } catch {}
+  return { command: process.execPath, args: [process.argv[1], 'serve'] };
+}
+
+const CLIENTS = [
+  {
+    name: 'Claude Desktop',
+    configPath: () => {
+      if (process.platform === 'win32')
+        return join(process.env.APPDATA, 'Claude', 'claude_desktop_config.json');
+      return join(homedir(), 'Library', 'Application Support', 'Claude', 'claude_desktop_config.json');
+    },
+    mcpKey: 'mcpServers',
+  },
+  {
+    name: 'Claude Code',
+    configPath: () => join(homedir(), '.claude', 'settings.json'),
+    mcpKey: 'mcpServers',
+  },
+];
+
+function readJson(path) {
+  if (!existsSync(path)) return null;
+  try { return JSON.parse(readFileSync(path, 'utf8')); } catch { return null; }
+}
+
+function writeJson(path, data) {
+  const dir = dirname(path);
+  if (!existsSync(dir)) mkdirSync(dir, { recursive: true });
+  writeFileSync(path, JSON.stringify(data, null, 2) + '\n', 'utf8');
+}
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const BIN = join(__dirname, '../../bin/extole.js');
@@ -82,7 +121,7 @@ function send(msg) {
 }
 
 export function serveCommand(program) {
-  return new Command('serve')
+  const serve = new Command('serve')
     .description('Start an MCP stdio server — connect Claude Desktop or ChatGPT Desktop to your Extole account')
     .allowExcessArguments(false)
     .addHelpText('after', `
@@ -162,4 +201,60 @@ Examples:
       // Don't force-exit on stdin close — let pending tool calls finish first.
       // Node exits naturally once stdin is closed and the event loop drains.
     });
+
+  const bin = resolveExtoleBin();
+  const entry = { command: bin.command, args: bin.args };
+
+  serve
+    .command('setup')
+    .description('Register extole-cli as an MCP server in Claude Desktop, Claude Code, and other detected AI clients')
+    .allowExcessArguments(false)
+    .addHelpText('after', `\nExamples:\n  extole serve setup`)
+    .action(() => {
+      let anyFound = false;
+      for (const client of CLIENTS) {
+        const path = client.configPath();
+        if (!existsSync(path) && client.name !== 'Claude Code') continue;
+        anyFound = true;
+        const config = readJson(path) ?? {};
+        config[client.mcpKey] = config[client.mcpKey] ?? {};
+        const existing = config[client.mcpKey][MCP_SERVER_NAME];
+        config[client.mcpKey][MCP_SERVER_NAME] = entry;
+        writeJson(path, config);
+        if (existing) {
+          console.log(`${client.name}: updated  (${path})`);
+        } else {
+          console.log(`${client.name}: added    (${path})`);
+        }
+      }
+      if (!anyFound) {
+        console.log('No supported AI clients detected. Supported: Claude Desktop, Claude Code.');
+      } else {
+        console.log('\nRestart your AI client(s) to activate extole-cli.');
+      }
+    });
+
+  serve
+    .command('remove')
+    .description('Remove extole-cli MCP server registration from Claude Desktop, Claude Code, and other detected AI clients')
+    .allowExcessArguments(false)
+    .addHelpText('after', `\nExamples:\n  extole serve remove`)
+    .action(() => {
+      let anyRemoved = false;
+      for (const client of CLIENTS) {
+        const path = client.configPath();
+        const config = readJson(path);
+        if (!config) continue;
+        if (!config[client.mcpKey]?.[MCP_SERVER_NAME]) continue;
+        delete config[client.mcpKey][MCP_SERVER_NAME];
+        writeJson(path, config);
+        console.log(`${client.name}: removed  (${path})`);
+        anyRemoved = true;
+      }
+      if (!anyRemoved) {
+        console.log(`extole-cli not found in any AI client configs.`);
+      }
+    });
+
+  return serve;
 }
