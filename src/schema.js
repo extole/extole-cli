@@ -1,12 +1,9 @@
 // CLI introspection — builds MCP tool list from Commander program tree.
 // Used by `extole schema` (output) and `extole serve` (routing).
 
-// Tools excluded from serve mode: streaming, interactive, or circular.
+// Tools excluded from serve mode: interactive, circular, or internal-only.
 export const SERVE_EXCLUDED = new Set([
-  'stream',
-  'webhooks_listen',
-  'webhooks_watch',
-  'person_steps',      // has --watch polling mode; one-shot is fine but deprioritise for now
+  'person_steps',      // has --watch polling mode; needs --duration before MCP is safe
   'auth_mcp-login',    // browser OAuth — can't run headless
   'auth_su',           // superuser token minting — internal Extole use only
   'mcp',               // circular (calls Extole AI agent)
