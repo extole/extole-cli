@@ -1,6 +1,6 @@
 import { Command } from 'commander';
 import { resolveToken, API_BASE, getDefaultAccount } from '../config.js';
-import { apiJson } from '../api.js';
+import { apiJson, apiFetch } from '../api.js';
 import { printJson } from '../output.js';
 import { addGlobalOptions } from '../utils.js';
 
@@ -124,7 +124,48 @@ export function zonesCommand() {
     ],
   });
 
+  const callCmd = new Command('call')
+    .description('POST to a zone and return the response — useful for testing FRONTEND_CONTROLLER zones')
+    .argument('<zone_name>', 'Zone name to call (e.g. product_page)')
+    .allowExcessArguments(false)
+    .requiredOption('--email <email>', 'Email to identify the person')
+    .option('--param <kv>', 'Extra data field in key=value form (repeatable)', (v, prev) => prev.concat([v]), [])
+    .action(async function (zoneName) {
+      const opts = this.optsWithGlobals();
+      const token = resolveToken(opts);
+      const data = { email: opts.email };
+      for (const kv of opts.param) {
+        const eq = kv.indexOf('=');
+        if (eq === -1) { console.error(`Invalid --param "${kv}" — expected key=value`); process.exit(2); }
+        data[kv.slice(0, eq)] = kv.slice(eq + 1);
+      }
+      const res = await apiFetch(`/v5/zones/${encodeURIComponent(zoneName)}`, token, {
+        method: 'POST',
+        body: JSON.stringify({ data }),
+        verbose: opts.verbose,
+        baseUrl: API_BASE,
+      });
+      const text = await res.text();
+      let parsed;
+      try { parsed = JSON.parse(text); } catch { parsed = text; }
+      if (!res.ok) {
+        console.error(`Error ${res.status}: ${typeof parsed === 'object' ? JSON.stringify(parsed, null, 2) : parsed}`);
+        process.exit(1);
+      }
+      printJson(parsed, opts);
+    });
+
+  addGlobalOptions(callCmd, {
+    output: true,
+    examples: [
+      'extole zones call product_page --email jane@example.com',
+      'extole zones call overlay --email jane@example.com --param partner_user_id=abc123',
+      'extole zones call product_page --email jane@example.com --json',
+    ],
+  });
+
   cmd.addCommand(coreCmd);
   cmd.addCommand(tagCmd);
+  cmd.addCommand(callCmd);
   return cmd;
 }
