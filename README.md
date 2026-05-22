@@ -462,11 +462,23 @@ This distinction is the difference between "your wiring is wrong" and "your wiri
 
 ```
 extole person get --email jane@example.com         # profile data
+
 extole person steps --email jane@example.com       # step history (default 25)
 extole person steps --email jane@example.com --limit 100
-extole person steps --email jane@example.com --watch   # tail live steps (Ctrl+C to stop)
+extole person steps --email jane@example.com --watch        # tail live steps (Ctrl+C to stop)
+extole person steps --email jane@example.com --duration 30  # tail and auto-exit after 30s
 extole person steps --email jane@example.com --watch --json
+
+extole person relationships --email jane@example.com        # advocate↔friend referral relationships
+extole person relationships --email jane@example.com --json
+
+extole person stats --email jane@example.com                # personal + referral network stats
+extole person stats --email jane@example.com --json
 ```
+
+`relationships` shows each referral link the person is part of — their role (ADVOCATE or FRIEND), the program, the other person's ID, the channel (SHARE_LINK, ADVOCATE_CODE, etc.), and the date the relationship was created.
+
+`stats` shows two rows: the person's own AOV/LTV/activities/transactions/conversions, and the same metrics aggregated across everyone they've referred (their referral network). The network row is the delta — it shows what value this advocate's referrals have driven.
 
 ## Reports
 
@@ -609,7 +621,7 @@ extole components deploy --source ./my_integration --component <component-id>
 # Update and publish
 extole components deploy --source ./my_integration --component <component-id> --publish
 
-# Preview what would be sent without uploading
+# Print resolved component.json contents (post-%{...}% include expansion) without uploading
 extole components deploy --source ./my_integration --dry-run
 
 # Show full API error details on failure
@@ -702,6 +714,47 @@ extole share-links lookup chrisbackfillcw214 --json
 Error messages distinguish person-not-found from person-has-no-links:
 - `No person found for jane@example.com` — email not in Extole
 - `No share links found for jane@example.com (person ID: abc123)` — person exists, no links
+
+## Zones
+
+```
+extole zones                                           # list embed zone names for this account
+extole zones --json
+
+extole zones core                                      # print the core.js <script> tag for this account
+extole zones tag <zone_name>                           # print the embed snippet for a zone
+
+extole zones call <zone_name> --email <email>          # POST to a zone (test FRONTEND_CONTROLLER pipelines)
+extole zones call <zone_name> --email <email> --param partner_user_id=abc123
+extole zones call <zone_name> --email <email> --json
+```
+
+`zones call` POSTs to `/v5/zones/<zone_name>` with the given email and any extra `--param` fields. Useful for testing FRONTEND_CONTROLLER + DISPLAY action pipelines without a browser.
+
+## MCP server (Claude Desktop / Claude Code)
+
+`extole serve` runs the CLI as an MCP stdio server — Claude Desktop and Claude Code can spawn it and call any CLI command as a tool.
+
+```
+extole serve setup    # auto-configure Claude Desktop and Claude Code; restart the client to activate
+extole serve remove   # remove the MCP server registration from all detected clients
+extole serve          # start the MCP server (Claude Desktop spawns this automatically after setup)
+```
+
+`serve setup` detects Claude Desktop (`~/Library/Application Support/Claude/claude_desktop_config.json`) and Claude Code (`~/.claude/settings.json`) and writes the MCP server entry to each. Re-run after updating the CLI to pick up new tools.
+
+## API (escape hatch)
+
+Direct authenticated access to any Extole endpoint — for cases where no specific subcommand exists yet:
+
+```
+extole api /v2/campaigns/123/controllers
+extole api /v6/webhooks/built
+extole api /v2/campaigns/123/publish --method POST --body '{}'
+extole api /v4/tokens --auth-base              # use api.extole.com instead of api.extole.io
+```
+
+GET by default. `--method` to override, `--body` for POST/PUT/PATCH, `--auth-base` for the auth API. Output is JSON-formatted and supports `--compact`.
 
 ## Output conventions
 
