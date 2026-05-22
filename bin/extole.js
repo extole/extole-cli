@@ -24,6 +24,7 @@ import { campaignsCommand } from '../src/commands/campaigns.js';
 import { audiencesCommand } from '../src/commands/audiences.js';
 import { notificationsCommand } from '../src/commands/notifications.js';
 import { rewardSuppliersCommand } from '../src/commands/reward-suppliers.js';
+import { apiCommand } from '../src/commands/api.js';
 import { wismrCommand } from '../src/commands/wismr.js';
 import { schemaCommand } from '../src/commands/schema.js';
 import { serveCommand } from '../src/commands/serve.js';
@@ -66,6 +67,7 @@ program.addCommand(mcpCommand());
 program.addCommand(feedbackCommand());
 program.addCommand(zonesCommand());
 program.addCommand(shareLinksCommand());
+program.addCommand(apiCommand());
 
 // schema and serve introspect program, so registered after all other commands
 program.addCommand(schemaCommand(program));
