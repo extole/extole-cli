@@ -40,7 +40,7 @@ function optionToSchema(opt) {
   }
 
   const dv = opt.defaultValue;
-  if (dv !== undefined && dv !== false && dv !== null && !Array.isArray(dv)) {
+  if (dv !== undefined && dv !== false && dv !== null && !Array.isArray(dv) && name !== 'account') {
     prop.default = dv;
   }
 
