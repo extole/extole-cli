@@ -236,11 +236,11 @@ function diagnose(reward, history) {
 async function investigatePerson(email, opts, token, limit) {
   const match = await findPerson(email, token, opts.verbose);
   if (!match) {
-    if (opts.json) return { email, person_id: null, error: 'person_not_found', references: [] };
+    if (opts.json) return { email, person_id: null, error: 'person_not_found', references: [], other_person_emails: [] };
     console.log(`Person: ${email}  — not found in this account.`);
     console.log('  → email may not be in this account, or may not match an identity key on a person record.');
     console.log('  → if you expect the customer to exist here, verify the email and the --account context.');
-    return { email, person_id: null, references: [] };
+    return { email, person_id: null, references: [], other_person_emails: [] };
   }
 
   const rewards = await fetchPersonRewards(match.id, token, opts.verbose, limit);
@@ -306,11 +306,16 @@ async function investigatePerson(email, opts, token, limit) {
     otherRewardsMap.set(String(id), Array.isArray(rewards) ? rewards : []);
   }));
 
+  const getProfileEmail = (p) =>
+    p?.partner_user_id || p?.email ||
+    (p?.identities || []).find(i => i.type === 'EMAIL')?.value || null;
+  const otherPersonEmails = [...otherPersonMap.values()].map(getProfileEmail).filter(e => e && isValidEmail(e));
+
   const campaignNames = await resolveCampaignNames(campaignIds, token, opts.verbose);
 
   if (opts.json) {
     if (list.length === 0) {
-      return { email, person_id: match.id, rewards: [], rule_failures: ruleFailures, low_quality_steps: lowQualitySteps, references };
+      return { email, person_id: match.id, rewards: [], rule_failures: ruleFailures, low_quality_steps: lowQualitySteps, references, other_person_emails: otherPersonEmails };
     }
     const enriched = await Promise.all(list.map(async r => {
       const [history, rules] = await Promise.all([
@@ -326,7 +331,7 @@ async function investigatePerson(email, opts, token, limit) {
       const otherPerson = oid ? otherPersonMap.get(String(oid)) : null;
       return { reward: r, history, rule, supplier, diagnosis: diagnose(r, history), other_person: otherPerson || null };
     }));
-    return { email, person_id: match.id, rewards: enriched, rule_failures: ruleFailures, references };
+    return { email, person_id: match.id, rewards: enriched, rule_failures: ruleFailures, references, other_person_emails: otherPersonEmails };
   }
 
   // ── Human output ─────────────────────────────────────────────────────────
@@ -497,7 +502,7 @@ async function investigatePerson(email, opts, token, limit) {
     console.log('');
   }
 
-  return { email, person_id: match.id, references };
+  return { email, person_id: match.id, references, other_person_emails: otherPersonEmails };
 }
 
 // Given the per-person summaries collected from a multi-email wismr run,
@@ -560,7 +565,7 @@ function detectRelationships(summaries) {
 
 export function wismrCommand() {
   const cmd = new Command('wismr')
-    .description('"Where Is My Reward" — the canonical reward-issuance diagnostic. Walks a person\'s reward chain (person → rewards → state history → campaign rule → supplier) and surfaces the likely cause + next step. Accepts one email or a comma-separated list (e.g., to investigate an advocate + friend pair).')
+    .description('"Where Is My Reward" — the canonical reward-issuance diagnostic. Walks a person\'s reward chain (person → rewards → state history → campaign rule → supplier) and surfaces the likely cause + next step. When a reward references a referral counterpart (other_person_id), automatically follows and investigates that person too. Accepts one email or a comma-separated list.')
     .allowExcessArguments(false)
     .requiredOption('--email <email>', 'Customer email address (or comma-separated list)')
     .option('--limit <n>', 'Number of recent rewards to walk per person (default 5)', '5')
@@ -585,8 +590,17 @@ export function wismrCommand() {
         for (const email of emails) {
           summaries.push(await investigatePerson(email, opts, token, limit));
         }
-        const relationships = emails.length > 1 ? detectRelationships(summaries) : [];
-        printJson(emails.length > 1 ? { results: summaries, relationships } : summaries, opts);
+        const investigated = new Set(emails.map(e => e.toLowerCase()));
+        for (const s of [...summaries]) {
+          for (const e of (s.other_person_emails || [])) {
+            if (!investigated.has(e.toLowerCase())) {
+              investigated.add(e.toLowerCase());
+              summaries.push(await investigatePerson(e, opts, token, limit));
+            }
+          }
+        }
+        const relationships = summaries.length > 1 ? detectRelationships(summaries) : [];
+        printJson(summaries.length > 1 ? { results: summaries, relationships } : summaries[0], opts);
         return;
       }
 
@@ -598,8 +612,23 @@ export function wismrCommand() {
         summaries.push(await investigatePerson(emails[i], opts, token, limit));
       }
 
+      // Auto-follow referral counterparts resolved from other_person_id
+      const investigated = new Set(emails.map(e => e.toLowerCase()));
+      for (const s of [...summaries]) {
+        for (const e of (s.other_person_emails || [])) {
+          if (!investigated.has(e.toLowerCase())) {
+            investigated.add(e.toLowerCase());
+            console.log('═'.repeat(72));
+            console.log('');
+            console.log(`↳ Auto-following referral counterpart: ${e}`);
+            console.log('');
+            summaries.push(await investigatePerson(e, opts, token, limit));
+          }
+        }
+      }
+
       // Detected relationships footer (multi-email only)
-      if (emails.length > 1) {
+      if (summaries.length > 1) {
         const pairs = detectRelationships(summaries);
         if (pairs.length > 0) {
           console.log('═'.repeat(72));
