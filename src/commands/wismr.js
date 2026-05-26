@@ -307,7 +307,7 @@ async function investigatePerson(email, opts, token, limit) {
   }));
 
   const getProfileEmail = (p) =>
-    p?.partner_user_id || p?.email ||
+    p?.identity_key_value || p?.partner_user_id || p?.email ||
     (p?.identities || []).find(i => i.type === 'EMAIL')?.value || null;
   const otherPersonEmails = [...otherPersonMap.values()].map(getProfileEmail).filter(e => e && isValidEmail(e));
 
@@ -427,7 +427,7 @@ async function investigatePerson(email, opts, token, limit) {
       const rawRole = r.data?.rewardee_role;
       const myRole = (rawRole && typeof rawRole === 'object' ? rawRole.value : rawRole) || null;
       const otherRole = myRole ? (ADVOCATE_SIDE_ROLES.has(myRole.toLowerCase()) ? 'friend' : 'advocate') : 'other person';
-      const otherEmail = otherPerson?.partner_user_id || otherPerson?.email ||
+      const otherEmail = otherPerson?.identity_key_value || otherPerson?.partner_user_id || otherPerson?.email ||
         (otherPerson?.identities || []).find(i => i.type === 'EMAIL')?.value || null;
       const otherName = [otherPerson?.first_name, otherPerson?.last_name].filter(Boolean).join(' ') || null;
       const otherLabel = [otherEmail, otherName ? `(${otherName})` : null].filter(Boolean).join(' ') || otherId;
