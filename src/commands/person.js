@@ -3,31 +3,46 @@ import { resolveToken, API_BASE } from '../config.js';
 import { apiJson } from '../api.js';
 import { printJson } from '../output.js';
 import { addGlobalOptions, SEEN_MAX_SIZE, SEEN_KEEP_SIZE, POLL_INTERVAL_MS, isValidEmail, formatEventTime } from '../utils.js';
-import { findPerson, getPersonSteps, getPersonRelationships, getPersonStats } from '../person-api.js';
+import { findPerson, findPersonById, getPersonSteps, getPersonRelationships, getPersonStats } from '../person-api.js';
 
 export function personCommand() {
   const person = new Command('person').description('Look up person profile and step history');
 
   const getCmd = new Command('get')
-    .description('Look up a person by email')
+    .description('Look up a person by email or person ID')
     .allowExcessArguments(false)
-    .requiredOption('--email <email>', 'Email address to look up')
+    .option('--email <email>', 'Email address to look up')
+    .option('--id <person_id>', 'Person ID to look up')
     .action(async function () {
       const opts = this.optsWithGlobals();
-      if (!isValidEmail(opts.email)) {
+      if (!opts.email && !opts.id) {
+        console.error('Error: --email or --id is required.');
+        process.exit(2);
+      }
+      if (opts.email && !isValidEmail(opts.email)) {
         console.error('Error: --email must be a valid email address.');
         process.exit(2);
       }
       const token = resolveToken(opts);
-      const match = await findPerson(opts.email, token, opts.verbose);
-      if (!match) {
-        console.error(`No person found for ${opts.email}`);
-        process.exit(1);
+      let personId;
+      if (opts.id) {
+        personId = opts.id;
+      } else {
+        const match = await findPerson(opts.email, token, opts.verbose);
+        if (!match) {
+          console.error(`No person found for ${opts.email}`);
+          process.exit(1);
+        }
+        personId = match.id;
       }
       const [profile, dataEntries] = await Promise.all([
-        apiJson(`/v5/persons/${match.id}`, token, { verbose: opts.verbose, baseUrl: API_BASE }),
-        apiJson(`/v5/persons/${match.id}/data`, token, { verbose: opts.verbose, baseUrl: API_BASE }).catch(() => ({})),
+        apiJson(`/v5/persons/${personId}`, token, { verbose: opts.verbose, baseUrl: API_BASE }),
+        apiJson(`/v5/persons/${personId}/data`, token, { verbose: opts.verbose, baseUrl: API_BASE }).catch(() => ({})),
       ]);
+      if (!profile || profile.http_status_code >= 400) {
+        console.error(`No person found for id ${personId}`);
+        process.exit(1);
+      }
       const data = {};
       for (const [key, entry] of Object.entries(dataEntries)) {
         if (entry?.value != null) data[key] = entry.value;
@@ -39,6 +54,7 @@ export function personCommand() {
     output: true,
     examples: [
       'extole person get --email jane@example.com',
+      'extole person get --id 7336046528487947354',
       'extole person get --email jane@example.com --compact',
     ],
   });

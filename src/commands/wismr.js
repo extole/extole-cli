@@ -17,7 +17,7 @@ import { resolveToken, API_BASE } from '../config.js';
 import { apiJson } from '../api.js';
 import { printJson } from '../output.js';
 import { addGlobalOptions, isValidEmail, formatEventDate } from '../utils.js';
-import { findPerson, getPersonSteps } from '../person-api.js';
+import { findPerson, findPersonById, getPersonSteps } from '../person-api.js';
 
 async function fetchPersonRewards(personId, token, verbose, limit = 25) {
   const qs = new URLSearchParams({ limit: String(limit) });
@@ -289,6 +289,18 @@ async function investigatePerson(email, opts, token, limit) {
     ...ruleFailures.map(f => f.campaign_id),
     ...lowQualitySteps.map(s => s.campaign_id),
   ];
+
+  // Resolve other_person_id → email+name for inline display in each reward.
+  const otherPersonIds = [...new Set(list.map(r => {
+    const v = r.data?.other_person_id;
+    return v && typeof v === 'object' ? v.value : v;
+  }).filter(Boolean))];
+  const otherPersonMap = new Map();
+  await Promise.all(otherPersonIds.map(async (id) => {
+    const p = await findPersonById(id, token, opts.verbose);
+    if (p) otherPersonMap.set(String(id), p);
+  }));
+
   const campaignNames = await resolveCampaignNames(campaignIds, token, opts.verbose);
 
   if (opts.json) {
@@ -304,7 +316,10 @@ async function investigatePerson(email, opts, token, limit) {
       const supplier = (rule?.reward_supplier_id || r.reward_supplier_id)
         ? await fetchSupplier(rule?.reward_supplier_id || r.reward_supplier_id, token, opts.verbose).catch(() => null)
         : null;
-      return { reward: r, history, rule, supplier, diagnosis: diagnose(r, history) };
+      const rawOid = r.data?.other_person_id;
+      const oid = rawOid && typeof rawOid === 'object' ? rawOid.value : rawOid;
+      const otherPerson = oid ? otherPersonMap.get(String(oid)) : null;
+      return { reward: r, history, rule, supplier, diagnosis: diagnose(r, history), other_person: otherPerson || null };
     }));
     return { email, person_id: match.id, rewards: enriched, rule_failures: ruleFailures, references };
   }
@@ -395,6 +410,19 @@ async function investigatePerson(email, opts, token, limit) {
     console.log(`  [${i + 1}] ${stateLabel}  ${face.padEnd(14)}  ${r.journey_name || ''}  ${createdDate ? formatEventDate(createdDate) : ''}`);
     console.log(`      reward_id:    ${rewardId}`);
     if (r.partner_reward_id) console.log(`      coupon:       ${r.partner_reward_id}`);
+    const rawOtherId = r.data?.other_person_id;
+    const otherId = rawOtherId && typeof rawOtherId === 'object' ? rawOtherId.value : rawOtherId;
+    if (otherId) {
+      const otherPerson = otherPersonMap.get(String(otherId));
+      const rawRole = r.data?.rewardee_role;
+      const myRole = (rawRole && typeof rawRole === 'object' ? rawRole.value : rawRole) || null;
+      const otherRole = myRole ? (ADVOCATE_SIDE_ROLES.has(myRole.toLowerCase()) ? 'friend' : 'advocate') : 'other person';
+      const otherEmail = otherPerson?.partner_user_id || otherPerson?.email ||
+        (otherPerson?.identities || []).find(i => i.type === 'EMAIL')?.value || null;
+      const otherName = [otherPerson?.first_name, otherPerson?.last_name].filter(Boolean).join(' ') || null;
+      const otherLabel = [otherEmail, otherName ? `(${otherName})` : null].filter(Boolean).join(' ') || otherId;
+      console.log(`      ${otherRole}:      ${otherLabel}`);
+    }
     if (r.campaign_id) console.log(`      campaign:     ${fmtCampaign(r.campaign_id, campaignNames)}`);
 
     if (Array.isArray(history) && history.length) {

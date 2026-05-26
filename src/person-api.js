@@ -11,6 +11,12 @@ export async function findPerson(email, token, verbose = false) {
   return results[0];
 }
 
+export async function findPersonById(personId, token, verbose = false) {
+  try {
+    return await apiJson(`/v5/persons/${personId}`, token, { verbose, baseUrl: API_BASE });
+  } catch { return null; }
+}
+
 export async function getPersonSteps(personId, token, limit = 50, verbose = false, { causeEventId } = {}) {
   const params = new URLSearchParams({ limit: String(limit) });
   if (causeEventId) params.set('causeEventIds', causeEventId);
