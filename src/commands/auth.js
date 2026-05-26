@@ -2,12 +2,10 @@ import { createServer } from 'http';
 import { randomBytes, createHash } from 'crypto';
 import { exec } from 'child_process';
 import { Command, Option } from 'commander';
-import { loadConfig, saveConfig, setProfile, getProfile, getDefaultAccount, setDefaultAccount, AUTH_BASE, API_BASE } from '../config.js';
+import { loadConfig, saveConfig, saveMcpToken, setProfile, getProfile, getDefaultAccount, setDefaultAccount, AUTH_BASE, API_BASE, IDP_BASE, MCP_CLIENT_ID } from '../config.js';
 import { apiFetch, apiJson } from '../api.js';
 import { fetchWithTimeout } from '../utils.js';
 
-const IDP_BASE = 'https://idp.extole.com';
-const MCP_CLIENT_ID = 'extole-cli';
 
 export async function mintClientToken(suToken, clientId, verbose, fetchFn) {
   let res, text;
@@ -365,21 +363,12 @@ Examples:
       }
 
       const tokenData = await tokenRes.json();
-      const jwt = tokenData.access_token;
-      if (!jwt) {
+      if (!tokenData.access_token) {
         console.error('Error: no access_token in IDP response');
         process.exit(1);
       }
 
-      const config = loadConfig();
-      config._mcp = { token: jwt };
-      if (tokenData.expires_in) {
-        config._mcp.expiresAt = Date.now() + tokenData.expires_in * 1000;
-      }
-      if (tokenData.refresh_token) {
-        config._mcp.refreshToken = tokenData.refresh_token;
-      }
-      saveConfig(config);
+      saveMcpToken(tokenData);
 
       console.log('MCP login successful. Token saved.');
     });
