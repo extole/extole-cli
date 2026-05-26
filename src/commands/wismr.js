@@ -442,7 +442,7 @@ async function investigatePerson(email, opts, token, limit) {
           if (counterpart.face_value !== r.face_value) {
             const myFmt = `$${r.face_value}`;
             const theirFmt = `$${counterpart.face_value}`;
-            console.log(`      ⚠ amount mismatch: this person received ${myFmt}, ${otherRole} received ${theirFmt} — verify tier applied correctly`);
+            console.log(`      ⚠ this person received ${myFmt}, ${otherRole} received ${theirFmt} — reward amounts differ`);
           }
         }
       }
