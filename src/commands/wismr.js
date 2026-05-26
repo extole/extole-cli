@@ -653,7 +653,7 @@ export function wismrCommand() {
       'extole wismr --email jane@example.com',
       'extole wismr --email jane@example.com --limit 3',
       'extole wismr --email jane@example.com --json',
-      'extole wismr --email advocate@example.com,friend@example.com   # walk a related pair',
+      'extole wismr --email advocate@example.com,friend@example.com   # explicit pair (auto-follow handles this automatically)',
     ],
   });
 }

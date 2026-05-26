@@ -93,20 +93,22 @@ Error messages are unambiguous about whether the person exists:
 extole wismr --email jane@example.com                              # walk her most recent 5 rewards
 extole wismr --email jane@example.com --limit 3
 extole wismr --email jane@example.com --json
-extole wismr --email advocate@example.com,friend@example.com       # walk a related pair
+extole wismr --email advocate@example.com,friend@example.com       # explicitly walk a pair
 ```
 
-Comma-separated emails investigate multiple people in one call — useful when the people share a stated relationship (advocate + friend, two members of the same network, multiple support tickets that look related). Output is separated by a divider so per-person sections stay clearly distinct. Patterns across people (same campaign, same supplier failing, same timing) become visible in one view.
+When a reward references a referral counterpart via `data.other_person_id`, `wismr` **automatically follows and investigates that person too** — no need to know their email upfront. Run it with just the customer's email and you get both sides of the referral in one call.
 
-When two or more emails in the query reference each other via `data.other_person_id` on their rewards (i.e. confirmed referral pairs), a **Detected relationships** footer appears after the per-person sections. Bidirectional links are merged into one line with both roles, ordered advocate-side first:
+Comma-separated emails can still be passed explicitly — useful for multiple support tickets that look related, or people not directly linked via rewards.
+
+When investigated people reference each other via `data.other_person_id`, a **Detected relationships** footer appears. Bidirectional links are merged into one line with both roles, ordered advocate-side first:
 
 ```
-  michael@example.com (employee)  ↔  ben@example.com (friend)
-      campaign:  7625745896468247378
-      journey:   100_manual_tech_business_referral_reward  /  100_manual_friend_business_referral_reward
+  23war20@gmail.com (advocate)  →  penajohnny325@gmail.com
+      campaign:  7629430860101024140
+      journey:   advocate_reward_on_friend_account_qualified_burst_reward
 ```
 
-In JSON mode, multi-email queries return `{ results: [...], relationships: [...] }`; single-email queries still return the per-person object directly for backward compatibility.
+In JSON mode, multi-person results return `{ results: [...], relationships: [...] }`; single-person queries return the per-person object directly.
 
 The canonical reward-issuance diagnostic. A composite of person lookup, `rewards`, `rewards history`, `campaigns reward-rules`, and `reward-suppliers get`: for each of the person's recent rewards it prints the state, history timeline, the rule that fired, the supplier that minted it, and a state-aware diagnosis with the most likely next step (where to look, what to check).
 
