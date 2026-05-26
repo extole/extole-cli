@@ -290,15 +290,20 @@ async function investigatePerson(email, opts, token, limit) {
     ...lowQualitySteps.map(s => s.campaign_id),
   ];
 
-  // Resolve other_person_id → email+name for inline display in each reward.
+  // Resolve other_person_id → profile + rewards for inline display and anomaly detection.
   const otherPersonIds = [...new Set(list.map(r => {
     const v = r.data?.other_person_id;
     return v && typeof v === 'object' ? v.value : v;
   }).filter(Boolean))];
-  const otherPersonMap = new Map();
+  const otherPersonMap = new Map();   // id → profile
+  const otherRewardsMap = new Map();  // id → rewards[]
   await Promise.all(otherPersonIds.map(async (id) => {
-    const p = await findPersonById(id, token, opts.verbose);
+    const [p, rewards] = await Promise.all([
+      findPersonById(id, token, opts.verbose),
+      fetchPersonRewards(id, token, opts.verbose, 25).catch(() => []),
+    ]);
     if (p) otherPersonMap.set(String(id), p);
+    otherRewardsMap.set(String(id), Array.isArray(rewards) ? rewards : []);
   }));
 
   const campaignNames = await resolveCampaignNames(campaignIds, token, opts.verbose);
@@ -422,6 +427,25 @@ async function investigatePerson(email, opts, token, limit) {
       const otherName = [otherPerson?.first_name, otherPerson?.last_name].filter(Boolean).join(' ') || null;
       const otherLabel = [otherEmail, otherName ? `(${otherName})` : null].filter(Boolean).join(' ') || otherId;
       console.log(`      ${otherRole}:      ${otherLabel}`);
+
+      // Anomaly detection: find the other party's reward for this same referral
+      // and flag if face values differ.
+      if (r.face_value != null) {
+        const otherRewards = otherRewardsMap.get(String(otherId)) || [];
+        const unwrapV = v => v && typeof v === 'object' ? v.value : v;
+        const counterpart = otherRewards.find(or => {
+          if (or.campaign_id !== r.campaign_id) return false;
+          const orOtherId = unwrapV(or.data?.other_person_id);
+          return String(orOtherId) === String(match.id);
+        });
+        if (counterpart && counterpart.face_value != null) {
+          if (counterpart.face_value !== r.face_value) {
+            const myFmt = `$${r.face_value}`;
+            const theirFmt = `$${counterpart.face_value}`;
+            console.log(`      ⚠ amount mismatch: this person received ${myFmt}, ${otherRole} received ${theirFmt} — verify tier applied correctly`);
+          }
+        }
+      }
     }
     if (r.campaign_id) console.log(`      campaign:     ${fmtCampaign(r.campaign_id, campaignNames)}`);
 
