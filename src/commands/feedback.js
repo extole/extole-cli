@@ -29,7 +29,7 @@ export function feedbackCommand() {
           }
         }
 
-        const prompt = `report issue: ${message} (cli v${version} ${process.platform}${opts.account ? ` account:${opts.account}` : ''})`;
+        const prompt = `report issue: ${message} — cli v${version} ${process.platform}${opts.account ? ` account:${opts.account}` : ''}`;
         const result = spawnSync(process.execPath, [extoleBin, 'mcp', prompt], { stdio: 'inherit' });
         process.exit(result.status ?? 0);
       }),
