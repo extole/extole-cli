@@ -3,6 +3,8 @@ import { loadConfig, saveConfig } from '../config.js';
 import { addGlobalOptions, fetchWithTimeout } from '../utils.js';
 
 const AGENT_URL = 'https://agent.extole.com';
+const AGENT_NAME = 'extole_chat';
+const APP_TYPE = 'extole-cli';
 const IDP_TOKEN_URL = 'https://idp.extole.com/oauth2/token';
 const MCP_CLIENT_ID = 'extole-cli';
 
@@ -60,13 +62,14 @@ export async function sendToAgent(prompt) {
   const token = await resolveMcpToken();
   let res;
   try {
-    res = await fetchWithTimeout(`${AGENT_URL}/conversation:send`, {
+    res = await fetchWithTimeout(`${AGENT_URL}/conversations:agent?app_type=${APP_TYPE}`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
         'Authorization': `Bearer ${token}`,
+        'x-extole-app-type': APP_TYPE,
       },
-      body: JSON.stringify({ userPrompt: prompt }),
+      body: JSON.stringify({ agentName: AGENT_NAME, userPrompt: prompt }),
     }, 120_000);
   } catch {
     throw new Error('Extole AI agent server is unavailable');
