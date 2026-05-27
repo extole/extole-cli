@@ -1,11 +1,9 @@
 import { readFileSync } from 'fs';
 import { fileURLToPath } from 'url';
 import { dirname, join } from 'path';
-import { createServer } from 'http';
-import { randomBytes, createHash } from 'crypto';
-import { exec } from 'child_process';
+import { spawnSync } from 'child_process';
 import { Command } from 'commander';
-import { getMcpToken, saveMcpToken, getDefaultAccount, IDP_BASE, MCP_CLIENT_ID } from '../config.js';
+import { getMcpToken, getDefaultAccount } from '../config.js';
 import { addGlobalOptions } from '../utils.js';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
@@ -18,92 +16,15 @@ async function acquireMcpToken() {
   const existing = await getMcpToken();
   if (existing) return existing;
 
-  // No token — trigger browser PKCE flow
-  const codeVerifier = randomBytes(32).toString('base64url');
-  const codeChallenge = createHash('sha256').update(codeVerifier).digest('base64url');
-  const state = randomBytes(16).toString('base64url');
+  // No token — run mcp-login inline (handles browser PKCE flow and saves token)
+  console.error('Login required. Opening browser…');
+  const extoleBin = process.argv[1];
+  const result = spawnSync(process.execPath, [extoleBin, 'auth', 'mcp-login'], { stdio: 'inherit' });
+  if (result.status !== 0) throw new Error('Login failed or was cancelled');
 
-  let resolveCode, rejectCode;
-  const codePromise = new Promise((res, rej) => { resolveCode = res; rejectCode = rej; });
-
-  const server = createServer((req, res) => {
-    const url = new URL(req.url, 'http://127.0.0.1');
-    if (url.pathname !== '/oauth/callback') { res.writeHead(404); res.end(); return; }
-    const error = url.searchParams.get('error');
-    if (error) {
-      res.writeHead(400, { 'Content-Type': 'text/plain' });
-      res.end(`Login failed: ${error}`);
-      rejectCode(new Error(error));
-      return;
-    }
-    if (url.searchParams.get('state') !== state) {
-      res.writeHead(400, { 'Content-Type': 'text/plain' });
-      res.end('Login failed: state mismatch');
-      rejectCode(new Error('state mismatch'));
-      return;
-    }
-    const code = url.searchParams.get('code');
-    if (code) {
-      res.writeHead(200, { 'Content-Type': 'text/html' });
-      res.end('<html><body><p>Login successful — you may close this tab.</p></body></html>');
-      resolveCode(code);
-    }
-  });
-
-  await new Promise(resolve => server.listen(0, '127.0.0.1', resolve));
-  const port = server.address().port;
-  const redirectUri = `http://127.0.0.1:${port}/oauth/callback`;
-
-  const authUrl = new URL(`${IDP_BASE}/oauth2/authorize`);
-  authUrl.searchParams.set('client_id', MCP_CLIENT_ID);
-  authUrl.searchParams.set('response_type', 'code');
-  authUrl.searchParams.set('scope', 'openid profile email');
-  authUrl.searchParams.set('redirect_uri', redirectUri);
-  authUrl.searchParams.set('code_challenge', codeChallenge);
-  authUrl.searchParams.set('code_challenge_method', 'S256');
-  authUrl.searchParams.set('state', state);
-
-  console.error('Opening browser to complete login before sending feedback…');
-  console.error(`If the browser does not open, visit:\n${authUrl.toString()}\n`);
-
-  const openCmd = process.platform === 'win32' ? 'start' : process.platform === 'darwin' ? 'open' : 'xdg-open';
-  exec(`${openCmd} "${authUrl.toString()}"`);
-
-  const timeout = setTimeout(() => {
-    server.close();
-    rejectCode(new Error('Login timed out after 2 minutes'));
-  }, 120_000);
-
-  let code;
-  try {
-    code = await codePromise;
-  } finally {
-    clearTimeout(timeout);
-    server.close();
-  }
-
-  const tokenRes = await fetch(`${IDP_BASE}/oauth2/token`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-    body: new URLSearchParams({
-      grant_type: 'authorization_code',
-      client_id: MCP_CLIENT_ID,
-      code,
-      redirect_uri: redirectUri,
-      code_verifier: codeVerifier,
-    }),
-  });
-
-  if (!tokenRes.ok) {
-    const text = await tokenRes.text();
-    throw new Error(`Token exchange failed (${tokenRes.status}): ${text.slice(0, 200)}`);
-  }
-
-  const tokenData = await tokenRes.json();
-  if (!tokenData.access_token) throw new Error('No access_token in IDP response');
-  saveMcpToken(tokenData);
-  console.error('Login successful. Sending feedback…\n');
-  return tokenData.access_token;
+  const token = await getMcpToken();
+  if (!token) throw new Error('Login succeeded but no token was saved');
+  return token;
 }
 
 async function sendFeedbackViaMcp(feedbackText, contextText, token) {
