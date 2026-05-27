@@ -3,7 +3,7 @@ import { loadConfig, saveConfig } from '../config.js';
 import { addGlobalOptions, fetchWithTimeout } from '../utils.js';
 
 const AGENT_URL = 'https://agent.extole.com';
-const AGENT_NAME = 'extole_chat';
+const AGENT_NAME = 'extole_assistant';
 const APP_TYPE = 'extole-cli';
 const IDP_TOKEN_URL = 'https://idp.extole.com/oauth2/token';
 const MCP_CLIENT_ID = 'extole-cli';
