@@ -5,10 +5,10 @@ import { apiJson, apiFetch } from '../api.js';
 import { printJson } from '../output.js';
 import { collect, sleep, addGlobalOptions, formatEventDate } from '../utils.js';
 
-const REPORT_POLL_MAX_ATTEMPTS = 240; // 240 attempts × 1.5s = 6 minutes
+const REPORT_POLL_MAX_ATTEMPTS = 800; // 800 attempts × 1.5s = 20 minutes (Spark ALL_TIME reports can take 10+ min)
 const TERMINAL_STATES = new Set(['DONE', 'FAILED', 'CANCELLED', 'EXPIRED']);
 
-async function pollUntilDone(reportId, token, verbose) {
+export async function pollUntilDone(reportId, token, verbose) {
   const frames = ['⠋','⠙','⠹','⠸','⠼','⠴','⠦','⠧','⠇','⠏'];
   let frame = 0;
   let status = '';
@@ -194,6 +194,7 @@ export function reportsCommand() {
     .option('-p, --param <kv>', 'key=value parameter (repeatable)', collect, [])
     .option('--days <n>', 'Shortcut: set time_range to last N days')
     .option('--format <fmt>', 'Output format: JSON, JSONL, CSV (see `reports describe --type <t>`)')
+    .option('--scope <scope>', 'Visibility scope: CLIENT_SUPERUSER (hidden from client), CLIENT_ADMIN (default visible)', collect, [])
     .option('--wait', 'Poll until report is complete')
     .option('--download', 'Download and print result (implies --wait)')
     .action(async function () {
@@ -226,6 +227,7 @@ export function reportsCommand() {
 
       const body = { report_type: opts.type, parameters };
       if (opts.format) body.formats = [opts.format.toUpperCase()];
+      if (opts.scope && opts.scope.length > 0) body.scopes = opts.scope.map(s => s.toUpperCase());
       const createRes = await apiFetch('/v4/reports', token, {
         method: 'POST',
         body: JSON.stringify(body),
@@ -267,6 +269,7 @@ export function reportsCommand() {
   addGlobalOptions(runCmd, {
     examples: [
       'extole reports run --type summary --days 30 --download',
+      'extole reports run --type FUNNEL_RATES -p time_range=ALL_TIME -p period=WEEK --scope CLIENT_SUPERUSER --download',
       'extole reports run --type summary_per_program --days 7 --wait',
       'extole reports run --type summary --days 7 --format jsonl --download | jq -c .',
     ],

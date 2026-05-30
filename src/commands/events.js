@@ -4,6 +4,7 @@ import { apiFetch, apiJson } from '../api.js';
 import { printJson, printJsonText } from '../output.js';
 import { collect, sleep, addGlobalOptions, POLL_INTERVAL_MS, isValidEmail, formatEventTime } from '../utils.js';
 import { findPerson, getPersonSteps } from '../person-api.js';
+import { pollUntilDone } from './reports.js';
 
 
 export function eventsCommand() {
@@ -612,6 +613,114 @@ export function eventsCommand() {
     ],
   });
 
+  const showCmd = new Command('show')
+    .argument('<event_id>', 'Event ID to look up')
+    .description('Look up a single event by ID (uses EVENT_BY_EVENT_ID report; takes ~30-90s)')
+    .allowExcessArguments(false)
+    .action(async function (eventId) {
+      const opts = this.optsWithGlobals();
+      const token = resolveToken(opts);
+
+      process.stderr.write('Looking up event via report pipeline (takes ~30-90s)...\n');
+
+      const createRes = await apiFetch('/v4/reports', token, {
+        method: 'POST',
+        body: JSON.stringify({
+          report_type: 'EVENT_BY_EVENT_ID',
+          parameters: { event_id: eventId },
+          formats: ['JSONL'],
+        }),
+        verbose: opts.verbose,
+      });
+      const createText = await createRes.text();
+      if (!createRes.ok) {
+        console.error(`Failed to create report: ${createText.slice(0, 300)}`);
+        process.exit(1);
+      }
+      const reportId = JSON.parse(createText).report_id;
+
+      const status = await pollUntilDone(reportId, token, opts.verbose);
+      if (status !== 'DONE') {
+        console.error(`Report ended with status: ${status}`);
+        process.exit(1);
+      }
+
+      const dl = await apiFetch(`/v4/reports/${reportId}/download`, token, {
+        verbose: opts.verbose,
+        headers: { Accept: '*/*' },
+      });
+      if (!dl.ok) {
+        console.error(`Download failed: ${dl.status}`);
+        process.exit(1);
+      }
+      const raw = await dl.text();
+      const lines = raw.trim().split('\n').filter(Boolean);
+
+      if (lines.length === 0) {
+        console.log(`No event found for ID: ${eventId}`);
+        return;
+      }
+
+      if (opts.json) {
+        const parsed = lines.map(l => JSON.parse(l));
+        printJson(parsed.length === 1 ? parsed[0] : parsed, opts);
+        return;
+      }
+
+      for (const line of lines) {
+        const e = JSON.parse(line);
+        const fmt = (label, val) => { if (val != null && val !== '') console.log(`${label.padEnd(18)} ${val}`); };
+
+        fmt('event_id', e.event_id);
+        fmt('name', e.name);
+        fmt('type', e.event_type || e.type);
+        fmt('person_id', e.person_id);
+        fmt('email', e.email);
+        if (e.first_name || e.last_name) fmt('person', [e.first_name, e.last_name].filter(Boolean).join(' '));
+        fmt('campaign_id', e.campaign_id);
+        fmt('step', e.step);
+        fmt('zone', e.zone);
+        fmt('channel', e.channel);
+        fmt('event_date', e.event_date ? formatEventTime(e.event_date) : null);
+        fmt('request_time', e.request_time);
+        fmt('source_url', e.source_url);
+        fmt('source_ip', e.source_ip);
+        fmt('cause_event_id', e.cause_event_id);
+        fmt('root_event_id', e.root_event_id);
+        fmt('score_status', e.score_status);
+
+        if (e.parameters && Object.keys(e.parameters).length > 0) {
+          console.log('parameters:');
+          for (const [k, v] of Object.entries(e.parameters)) console.log(`  ${k}: ${v}`);
+        }
+
+        if (e.labels && e.labels.length > 0) {
+          fmt('labels', e.labels.map(l => l.name || l).join(', '));
+        }
+
+        if (e.log_messages && e.log_messages.length > 0) {
+          if (opts.verbose) {
+            console.log('log_messages:');
+            for (const msg of e.log_messages) console.log(`  ${msg}`);
+          } else {
+            fmt('log_messages', `${e.log_messages.length} entries (use --verbose to show)`);
+          }
+        }
+
+        if (lines.length > 1) console.log('');
+      }
+    });
+
+  addGlobalOptions(showCmd, {
+    output: true,
+    examples: [
+      'extole events show <event_id>',
+      'extole events show <event_id> --json',
+      'extole events show <event_id> --verbose',
+    ],
+  });
+
+  events.addCommand(showCmd);
   events.addCommand(fireCmd);
   return events;
 }
