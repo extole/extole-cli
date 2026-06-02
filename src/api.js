@@ -25,7 +25,7 @@ export function formatApiErrorBody(text) {
   if (parsed.unique_id) lines.push(`unique_id: ${parsed.unique_id} (share with Extole support for correlation)`);
   if (parsed.parameters && Object.keys(parsed.parameters).length > 0) {
     lines.push('parameters:');
-    lines.push(JSON.stringify(parsed.parameters, null, 2).split('\n').map(l => '  ' + l).join('\n'));
+    lines.push(JSON.stringify(parsed.parameters, null, 2).split('\n').map(line => '  ' + line).join('\n'));
   }
   return lines.length > 0 ? '\n' + lines.join('\n') : text.slice(0, 2000);
 }
@@ -47,7 +47,7 @@ export async function apiFetch(path, token, options = {}, fetchFn = fetch) {
   try {
     const isFormData = typeof FormData !== 'undefined' && options.body instanceof FormData;
     const hasBody = options.body != null;
-    const res = await fetchFn(url, {
+    const response = await fetchFn(url, {
       ...options,
       signal: controller.signal,
       headers: {
@@ -58,31 +58,31 @@ export async function apiFetch(path, token, options = {}, fetchFn = fetch) {
         ...(options.headers || {}),
       },
     });
-    return res;
-  } catch (e) {
-    if (e.name === 'AbortError') throw new Error(`Request timed out after ${REQUEST_TIMEOUT_MS / 1000}s`);
-    throw e;
+    return response;
+  } catch (error) {
+    if (error.name === 'AbortError') throw new Error(`Request timed out after ${REQUEST_TIMEOUT_MS / 1000}s`);
+    throw error;
   } finally {
     clearTimeout(timer);
   }
 }
 
 export async function apiJson(path, token, options = {}, fetchFn = fetch) {
-  const res = await apiFetch(path, token, options, fetchFn);
-  const text = await res.text();
-  if (!res.ok) {
-    if (res.status === 401) {
+  const response = await apiFetch(path, token, options, fetchFn);
+  const text = await response.text();
+  if (!response.ok) {
+    if (response.status === 401) {
       const suClient = getSuClientForToken(token);
       if (suClient) {
         throw new Error(`Token expired — auth su tokens are valid for 2 hours. Re-mint: extole auth su --token <SU_TOKEN> --client ${suClient}`);
       }
       throw new Error(`API error 401: authentication failed — token may be expired`);
     }
-    throw new Error(`API error ${res.status}: ${formatApiErrorBody(text)}`);
+    throw new Error(`API error ${response.status}: ${formatApiErrorBody(text)}`);
   }
   try {
     return JSON.parse(text);
   } catch {
-    throw new Error(`Non-JSON response (${res.status}): ${text.slice(0, 200)}`);
+    throw new Error(`Non-JSON response (${response.status}): ${text.slice(0, 200)}`);
   }
 }

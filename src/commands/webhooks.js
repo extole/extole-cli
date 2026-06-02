@@ -16,25 +16,25 @@ function confirm(question) {
 // ── API helpers ────────────────────────────────────────────────────────────────
 
 async function fetchWebhooks(token, params, verbose) {
-  const qs = new URLSearchParams(params);
-  const path = `/v6/webhooks/built${qs.toString() ? '?' + qs : ''}`;
+  const queryParams = new URLSearchParams(params);
+  const path = `/v6/webhooks/built${queryParams.toString() ? '?' + queryParams : ''}`;
   return apiJson(path, token, { verbose, baseUrl: API_BASE });
 }
 
-async function fetchWebhook(id, token, built, verbose) {
-  const path = `/v6/webhooks/${id}${built ? '/built' : ''}`;
+async function fetchWebhook(webhookId, token, built, verbose) {
+  const path = `/v6/webhooks/${webhookId}${built ? '/built' : ''}`;
   return apiJson(path, token, { verbose, baseUrl: API_BASE });
 }
 
-async function fetchDispatches(id, token, params, verbose) {
-  const qs = new URLSearchParams(params);
-  const path = `/v6/webhooks/${id}/dispatches/recent${qs.toString() ? '?' + qs : ''}`;
+async function fetchDispatches(webhookId, token, params, verbose) {
+  const queryParams = new URLSearchParams(params);
+  const path = `/v6/webhooks/${webhookId}/dispatches/recent${queryParams.toString() ? '?' + queryParams : ''}`;
   return apiJson(path, token, { verbose, baseUrl: API_BASE });
 }
 
-async function fetchDispatchResults(id, token, params, verbose) {
-  const qs = new URLSearchParams(params);
-  const path = `/v6/webhooks/${id}/dispatch-results/recent${qs.toString() ? '?' + qs : ''}`;
+async function fetchDispatchResults(webhookId, token, params, verbose) {
+  const queryParams = new URLSearchParams(params);
+  const path = `/v6/webhooks/${webhookId}/dispatch-results/recent${queryParams.toString() ? '?' + queryParams : ''}`;
   return apiJson(path, token, { verbose, baseUrl: API_BASE });
 }
 
@@ -48,29 +48,29 @@ export function webhooksCommand() {
     .option('--filter <substr>', 'Filter by name substring (case-insensitive)')
     .option('--limit <n>', 'Max results', '50')
     .option('--offset <n>', 'Offset for pagination', '0')
-    .action(async (opts) => {
-      const token = resolveToken(opts);
-      const params = { limit: opts.limit, offset: opts.offset, include_archived: 'false' };
-      if (opts.enabled !== undefined) params.enabled = opts.enabled;
-      if (opts.filterType) params.type = opts.filterType;
-      if (opts.filter) params.name = opts.filter;
+    .action(async (options) => {
+      const token = resolveToken(options);
+      const params = { limit: options.limit, offset: options.offset, include_archived: 'false' };
+      if (options.enabled !== undefined) params.enabled = options.enabled;
+      if (options.filterType) params.type = options.filterType;
+      if (options.filter) params.name = options.filter;
 
-      const data = await fetchWebhooks(token, params, opts.verbose);
-      const list = Array.isArray(data) ? data : (data.webhooks || data.results || []);
+      const data = await fetchWebhooks(token, params, options.verbose);
+      const webhookList = Array.isArray(data) ? data : (data.webhooks || data.results || []);
 
-      if (opts.json) { printJson(list, opts); return; }
-      if (list.length === 0) { console.log('No webhooks found.'); return; }
+      if (options.json) { printJson(webhookList, options); return; }
+      if (webhookList.length === 0) { console.log('No webhooks found.'); return; }
 
-      const idW = 24, typeW = 8, nameW = 30, urlW = 50;
-      console.log(`${'id'.padEnd(idW)}  ${'type'.padEnd(typeW)}  ${'name'.padEnd(nameW)}  url`);
-      console.log(`${'─'.repeat(idW)}  ${'─'.repeat(typeW)}  ${'─'.repeat(nameW)}  ${'─'.repeat(urlW)}`);
-      for (const w of list) {
-        const id = (w.webhook_id || w.id || '').padEnd(idW);
-        const type = (w.type || '').padEnd(typeW);
-        const name = (w.name || '').padEnd(nameW);
-        const url = w.url || '';
-        const urlTrunc = url.length > urlW ? url.slice(0, urlW - 1) + '…' : url;
-        console.log(`${id}  ${type}  ${name}  ${urlTrunc}`);
+      const idColumnWidth = 24, typeColumnWidth = 8, nameColumnWidth = 30, urlColumnWidth = 50;
+      console.log(`${'id'.padEnd(idColumnWidth)}  ${'type'.padEnd(typeColumnWidth)}  ${'name'.padEnd(nameColumnWidth)}  url`);
+      console.log(`${'─'.repeat(idColumnWidth)}  ${'─'.repeat(typeColumnWidth)}  ${'─'.repeat(nameColumnWidth)}  ${'─'.repeat(urlColumnWidth)}`);
+      for (const webhook of webhookList) {
+        const id = (webhook.webhook_id || webhook.id || '').padEnd(idColumnWidth);
+        const type = (webhook.type || '').padEnd(typeColumnWidth);
+        const name = (webhook.name || '').padEnd(nameColumnWidth);
+        const url = webhook.url || '';
+        const truncatedUrl = url.length > urlColumnWidth ? url.slice(0, urlColumnWidth - 1) + '…' : url;
+        console.log(`${id}  ${type}  ${name}  ${truncatedUrl}`);
       }
     });
 
@@ -92,52 +92,51 @@ export function webhooksCommand() {
     .argument('<webhook-id>', 'Webhook ID')
     .option('--built', 'Show resolved representation with inherited defaults applied')
     .action(async function (webhookId) {
-      const opts = this.optsWithGlobals();
-      const token = resolveToken(opts);
-      const w = await fetchWebhook(webhookId, token, opts.built, opts.verbose);
-      // For REWARD webhooks, fetch state filters
+      const options = this.optsWithGlobals();
+      const token = resolveToken(options);
+      const webhook = await fetchWebhook(webhookId, token, options.built, options.verbose);
       let rewardFilters = null;
-      if ((w.type || '').toUpperCase() === 'REWARD') {
+      if ((webhook.type || '').toUpperCase() === 'REWARD') {
         try {
-          rewardFilters = await apiJson(`/v4/webhooks/reward/${w.webhook_id || w.id}/filters`, token, { verbose: opts.verbose, baseUrl: API_BASE });
+          rewardFilters = await apiJson(`/v4/webhooks/reward/${webhook.webhook_id || webhook.id}/filters`, token, { verbose: options.verbose, baseUrl: API_BASE });
         } catch (_) { /* non-fatal */ }
       }
 
-      if (opts.json) {
-        const out = rewardFilters ? { ...w, filters: rewardFilters } : w;
-        printJson(out, opts);
+      if (options.json) {
+        const output = rewardFilters ? { ...webhook, filters: rewardFilters } : webhook;
+        printJson(output, options);
         return;
       }
 
-      console.log(`id:       ${w.webhook_id || w.id}`);
-      console.log(`name:     ${w.name || ''}`);
-      console.log(`type:     ${w.type || ''}`);
-      console.log(`enabled:  ${w.enabled}`);
-      console.log(`url:      ${w.url || ''}`);
-      if (w.description) console.log(`desc:     ${w.description}`);
-      if (w.default_method || w.defaultMethod) console.log(`method:   ${w.default_method || w.defaultMethod}`);
-      const tags = w.tags?.filter(t => !t.startsWith('internal:'));
-      const internalTags = w.tags?.filter(t => t.startsWith('internal:'));
+      console.log(`id:       ${webhook.webhook_id || webhook.id}`);
+      console.log(`name:     ${webhook.name || ''}`);
+      console.log(`type:     ${webhook.type || ''}`);
+      console.log(`enabled:  ${webhook.enabled}`);
+      console.log(`url:      ${webhook.url || ''}`);
+      if (webhook.description) console.log(`desc:     ${webhook.description}`);
+      if (webhook.default_method || webhook.defaultMethod) console.log(`method:   ${webhook.default_method || webhook.defaultMethod}`);
+      const tags = webhook.tags?.filter(tag => !tag.startsWith('internal:'));
+      const internalTags = webhook.tags?.filter(tag => tag.startsWith('internal:'));
       if (tags?.length) console.log(`tags:     ${tags.join(', ')}`);
       if (internalTags?.length) console.log(`internal: ${internalTags.join(', ')}`);
-      if (w.retry_intervals || w.retryIntervals) {
-        console.log(`retries:  ${(w.retry_intervals || w.retryIntervals).join(', ')}`);
+      if (webhook.retry_intervals || webhook.retryIntervals) {
+        console.log(`retries:  ${(webhook.retry_intervals || webhook.retryIntervals).join(', ')}`);
       }
       if (rewardFilters?.length) {
         console.log(`filters:`);
-        for (const f of rewardFilters) {
-          const type = f.type || f.filter_type || '?';
-          const detail = f.states ? `states=${f.states.join(', ')}`
-            : f.reward_supplier_ids ? `suppliers=${f.reward_supplier_ids.join(', ')}`
-            : f.tags ? `tags=${f.tags.join(', ')}`
-            : JSON.stringify(f);
-          console.log(`  ${type.padEnd(12)}  ${detail}`);
+        for (const rewardFilter of rewardFilters) {
+          const filterType = rewardFilter.type || rewardFilter.filter_type || '?';
+          const detail = rewardFilter.states ? `states=${rewardFilter.states.join(', ')}`
+            : rewardFilter.reward_supplier_ids ? `suppliers=${rewardFilter.reward_supplier_ids.join(', ')}`
+            : rewardFilter.tags ? `tags=${rewardFilter.tags.join(', ')}`
+            : JSON.stringify(rewardFilter);
+          console.log(`  ${filterType.padEnd(12)}  ${detail}`);
         }
       }
-      if (w.component_ids?.length) console.log(`components: ${w.component_ids.join(', ')}`);
-      if (w.request) {
+      if (webhook.component_ids?.length) console.log(`components: ${webhook.component_ids.join(', ')}`);
+      if (webhook.request) {
         console.log(`request:`);
-        console.log(w.request.split('\n').map(l => `  ${l}`).join('\n'));
+        console.log(webhook.request.split('\n').map(line => `  ${line}`).join('\n'));
       }
     });
 
@@ -184,8 +183,8 @@ export function webhooksCommand() {
       if (opts.requestFile) {
         try {
           requestScript = readFileSync(opts.requestFile, 'utf8').trim();
-        } catch (e) {
-          console.error(`error reading --request-file: ${e.message}`);
+        } catch (error) {
+          console.error(`error reading --request-file: ${error.message}`);
           process.exit(2);
         }
       }
@@ -210,23 +209,23 @@ export function webhooksCommand() {
         return;
       }
 
-      const res = await apiFetch('/v6/webhooks', token, {
+      const createResponse = await apiFetch('/v6/webhooks', token, {
         method: 'POST',
         body: JSON.stringify(payload),
         verbose: opts.verbose,
         baseUrl: API_BASE,
       });
-      const text = await res.text();
-      if (!res.ok) {
-        console.error(`Error ${res.status}: ${text.slice(0, 300)}`);
+      const createText = await createResponse.text();
+      if (!createResponse.ok) {
+        console.error(`Error ${createResponse.status}: ${createText.slice(0, 300)}`);
         process.exit(1);
       }
-      let w;
-      try { w = JSON.parse(text); } catch {
-        console.error(`Unexpected non-JSON response (${res.status}): ${text.slice(0, 200)}`);
+      let createdWebhook;
+      try { createdWebhook = JSON.parse(createText); } catch {
+        console.error(`Unexpected non-JSON response (${createResponse.status}): ${createText.slice(0, 200)}`);
         process.exit(1);
       }
-      const webhookId = w.webhook_id || w.id;
+      const webhookId = createdWebhook.webhook_id || createdWebhook.id;
 
       // Add state filters for REWARD webhooks
       if (opts.filterState?.length) {
@@ -243,7 +242,7 @@ export function webhooksCommand() {
       }
 
       // Optionally fetch built representation
-      const display = opts.built ? await fetchWebhook(webhookId, token, true, opts.verbose) : w;
+      const display = opts.built ? await fetchWebhook(webhookId, token, true, opts.verbose) : createdWebhook;
 
       if (opts.json) { printJson(display, opts); return; }
       console.log(`created: ${webhookId}`);
@@ -273,26 +272,23 @@ export function webhooksCommand() {
     .action(async function (webhookId) {
       const opts = this.optsWithGlobals();
       const token = resolveToken(opts);
-      const res = await apiFetch(`/v6/webhooks/${webhookId}`, token, {
+      const deleteResponse = await apiFetch(`/v6/webhooks/${webhookId}`, token, {
         method: 'DELETE',
         verbose: opts.verbose,
         baseUrl: API_BASE,
       });
-      if (!res.ok) {
-        const text = await res.text();
+      if (!deleteResponse.ok) {
+        const text = await deleteResponse.text();
         let detail = formatApiErrorBody(text);
         try {
-          const err = JSON.parse(text);
-          // The bind list lives under parameters.webhook_controller_actions in
-          // the structured error envelope. Surface it as a friendly hint
-          // alongside the formatted error.
-          const actions = err.parameters?.webhook_controller_actions || err.webhook_controller_actions;
+          const errorBody = JSON.parse(text);
+          const actions = errorBody.parameters?.webhook_controller_actions || errorBody.webhook_controller_actions;
           if (actions?.length) {
-            const lines = actions.map(a => `  - controller ${a.controller_id || '?'} on campaign ${a.campaign_id || '?'} (${a.controller_name || 'unnamed'})`);
+            const lines = actions.map(action => `  - controller ${action.controller_id || '?'} on campaign ${action.campaign_id || '?'} (${action.controller_name || 'unnamed'})`);
             detail = `${detail}\n\nWebhook is still wired to ${actions.length} controller action(s). Detach them first:\n${lines.join('\n')}`;
           }
         } catch (_) { /* use formatted body */ }
-        console.error(`Error ${res.status}: ${detail}`);
+        console.error(`Error ${deleteResponse.status}: ${detail}`);
         process.exit(1);
       }
       if (opts.json) { printJson({ deleted: webhookId }, opts); return; }
@@ -557,15 +553,15 @@ export function webhooksCommand() {
       setInterval(async () => {
         try {
           const data = await fetchDispatches(webhookId, token, { limit: '20' }, false);
-          const list = Array.isArray(data) ? data : (data.dispatches || data.results || []);
-          for (const d of list.reverse()) {
-            const id = d.event_id || d.dispatch_id || d.id || '';
+          const dispatchList = Array.isArray(data) ? data : (data.dispatches || data.results || []);
+          for (const dispatch of dispatchList.reverse()) {
+            const id = dispatch.event_id || dispatch.dispatch_id || dispatch.id || '';
             if (!id || seen.has(id)) continue;
             seen.add(id);
-            const ts = (d.event_time || d.dispatched_at || d.created_date || '').toString().slice(0, 19).replace('T', ' ');
-            console.log(`${ts.padEnd(19)}  ${id}`);
+            const timestamp = (dispatch.event_time || dispatch.dispatched_at || dispatch.created_date || '').toString().slice(0, 19).replace('T', ' ');
+            console.log(`${timestamp.padEnd(19)}  ${id}`);
           }
-        } catch (_) { /* ignore transient poll errors */ }
+        } catch (_) { /* ignore transient poll errors in listen loop */ }
       }, 3000);
     });
 
@@ -586,20 +582,20 @@ export function webhooksCommand() {
     .argument('<webhook-id>', 'Webhook ID')
     .option('--limit <n>', 'Max results', '20')
     .option('--offset <n>', 'Offset', '0')
-    .action(async (webhookId, _o, command) => {
-      const opts = command.optsWithGlobals();
-      const token = resolveToken(opts);
-      const data = await fetchDispatches(webhookId, token, { limit: opts.limit, offset: opts.offset }, opts.verbose);
-      const list = Array.isArray(data) ? data : (data.dispatches || data.results || []);
+    .action(async (webhookId, _unusedOptions, command) => {
+      const options = command.optsWithGlobals();
+      const token = resolveToken(options);
+      const data = await fetchDispatches(webhookId, token, { limit: options.limit, offset: options.offset }, options.verbose);
+      const dispatchList = Array.isArray(data) ? data : (data.dispatches || data.results || []);
 
-      if (opts.json) { printJson(list, opts); return; }
-      if (list.length === 0) { console.log('No dispatches found.'); return; }
+      if (options.json) { printJson(dispatchList, options); return; }
+      if (dispatchList.length === 0) { console.log('No dispatches found.'); return; }
 
-      for (const d of list) {
-        const ts = (d.event_time || d.dispatched_at || d.created_date || '').toString().slice(0, 19).replace('T', ' ');
-        const eventId = d.event_id || d.dispatch_id || d.id || '';
-        const causeId = d.cause_event_id || (d.event && d.event.cause_event_id) || '';
-        console.log(`${ts.padEnd(19)}  ${eventId.padEnd(20)}  cause=${causeId}`);
+      for (const dispatch of dispatchList) {
+        const timestamp = (dispatch.event_time || dispatch.dispatched_at || dispatch.created_date || '').toString().slice(0, 19).replace('T', ' ');
+        const eventId = dispatch.event_id || dispatch.dispatch_id || dispatch.id || '';
+        const causeId = dispatch.cause_event_id || (dispatch.event && dispatch.event.cause_event_id) || '';
+        console.log(`${timestamp.padEnd(19)}  ${eventId.padEnd(20)}  cause=${causeId}`);
       }
     });
 
@@ -619,21 +615,21 @@ export function webhooksCommand() {
     .argument('<webhook-id>', 'Webhook ID')
     .option('--limit <n>', 'Max results', '20')
     .option('--offset <n>', 'Offset', '0')
-    .action(async (webhookId, _o, command) => {
-      const opts = command.optsWithGlobals();
-      const token = resolveToken(opts);
-      const data = await fetchDispatchResults(webhookId, token, { limit: opts.limit, offset: opts.offset }, opts.verbose);
-      const list = Array.isArray(data) ? data : (data.results || []);
+    .action(async (webhookId, _unusedOptions, command) => {
+      const options = command.optsWithGlobals();
+      const token = resolveToken(options);
+      const data = await fetchDispatchResults(webhookId, token, { limit: options.limit, offset: options.offset }, options.verbose);
+      const resultList = Array.isArray(data) ? data : (data.results || []);
 
-      if (opts.json) { printJson(list, opts); return; }
-      if (list.length === 0) { console.log('No dispatch results found.'); return; }
+      if (options.json) { printJson(resultList, options); return; }
+      if (resultList.length === 0) { console.log('No dispatch results found.'); return; }
 
-      for (const d of list) {
-        const ts = (d.event_time || d.dispatched_at || d.created_date || '').toString().slice(0, 19).replace('T', ' ');
-        const code = String(d.response_status_code ?? d.response_code ?? d.http_status ?? d.status ?? '').padEnd(4);
-        const eventId = d.event_id || d.dispatch_id || d.id || '';
-        const msg = (d.response_body || d.response_message || '').toString().slice(0, 80);
-        console.log(`${ts.padEnd(19)}  ${code}  ${eventId.padEnd(20)}  ${msg}`);
+      for (const result of resultList) {
+        const timestamp = (result.event_time || result.dispatched_at || result.created_date || '').toString().slice(0, 19).replace('T', ' ');
+        const statusCode = String(result.response_status_code ?? result.response_code ?? result.http_status ?? result.status ?? '').padEnd(4);
+        const eventId = result.event_id || result.dispatch_id || result.id || '';
+        const responseMessage = (result.response_body || result.response_message || '').toString().slice(0, 80);
+        console.log(`${timestamp.padEnd(19)}  ${statusCode}  ${eventId.padEnd(20)}  ${responseMessage}`);
       }
     });
 
@@ -655,42 +651,39 @@ export function webhooksCommand() {
     .option('--interval <seconds>', 'Poll interval in seconds (default 3)', '3')
     .option('--duration <seconds>', 'Stop automatically after this many seconds')
     .option('--show-body', 'Print full response body on its own line under each row (default truncates to 80 chars inline)')
-    .action(async (webhookId, _o, command) => {
-      const opts = command.optsWithGlobals();
-      const token = resolveToken(opts);
-      const intervalMs = Math.max(1, Number(opts.interval) || 3) * 1000;
+    .action(async (webhookId, _unusedOptions, command) => {
+      const options = command.optsWithGlobals();
+      const token = resolveToken(options);
+      const intervalMs = Math.max(1, Number(options.interval) || 3) * 1000;
 
-      const stopLine = opts.duration ? ` (stops after ${opts.duration}s)` : ' (Ctrl-C to stop)';
+      const stopLine = options.duration ? ` (stops after ${options.duration}s)` : ' (Ctrl-C to stop)';
       console.log(`Watching webhook ${webhookId} for dispatch results...${stopLine}\n`);
 
-      const seen = new Set();
+      const seenIds = new Set();
       let firstPoll = true;
 
       const poll = async () => {
         try {
           const data = await fetchDispatchResults(webhookId, token, { limit: '20' }, false);
-          const list = Array.isArray(data) ? data : (data.results || []);
-          // Mark everything seen on the first poll without printing — we want
-          // to follow-tail, not dump history.
+          const resultList = Array.isArray(data) ? data : (data.results || []);
           if (firstPoll) {
-            for (const r of list) {
-              const id = r.event_id || r.webhook_event_id || r.id;
-              if (id) seen.add(id);
+            for (const result of resultList) {
+              const id = result.event_id || result.webhook_event_id || result.id;
+              if (id) seenIds.add(id);
             }
             firstPoll = false;
             return;
           }
-          // Print oldest-first so the timeline reads top-to-bottom.
-          for (const r of list.reverse()) {
-            const id = r.event_id || r.webhook_event_id || r.id || '';
-            if (!id || seen.has(id)) continue;
-            seen.add(id);
-            const ts = (r.event_time || r.dispatched_at || '').toString().slice(0, 19).replace('T', ' ');
-            const code = String(r.response_status_code ?? r.response_code ?? r.http_status ?? '???').padEnd(4);
-            const body = (r.response_body || '').toString();
-            const inline = opts.showBody ? '' : body.slice(0, 80);
-            console.log(`${ts.padEnd(19)}  ${code}  ${id.padEnd(20)}  ${inline}`);
-            if (opts.showBody && body) {
+          for (const result of resultList.reverse()) {
+            const id = result.event_id || result.webhook_event_id || result.id || '';
+            if (!id || seenIds.has(id)) continue;
+            seenIds.add(id);
+            const timestamp = (result.event_time || result.dispatched_at || '').toString().slice(0, 19).replace('T', ' ');
+            const statusCode = String(result.response_status_code ?? result.response_code ?? result.http_status ?? '???').padEnd(4);
+            const body = (result.response_body || '').toString();
+            const inlineBody = options.showBody ? '' : body.slice(0, 80);
+            console.log(`${timestamp.padEnd(19)}  ${statusCode}  ${id.padEnd(20)}  ${inlineBody}`);
+            if (options.showBody && body) {
               console.log(`  ${body}`);
             }
           }
@@ -699,11 +692,11 @@ export function webhooksCommand() {
 
       // Run immediately to seed seen-set, then on the interval.
       await poll();
-      const handle = setInterval(poll, intervalMs);
-      const cleanup = () => { clearInterval(handle); process.exit(0); };
+      const pollHandle = setInterval(poll, intervalMs);
+      const cleanup = () => { clearInterval(pollHandle); process.exit(0); };
       process.on('SIGINT', cleanup);
       process.on('SIGTERM', cleanup);
-      if (opts.duration) setTimeout(cleanup, Math.max(1, Number(opts.duration)) * 1000);
+      if (options.duration) setTimeout(cleanup, Math.max(1, Number(options.duration)) * 1000);
     });
 
   addGlobalOptions(watchCmd, {

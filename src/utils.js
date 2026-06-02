@@ -10,9 +10,9 @@ export async function fetchWithTimeout(url, options = {}, timeoutMs = 30_000) {
   const timer = setTimeout(() => controller.abort(), timeoutMs);
   try {
     return await fetch(url, { ...options, signal: controller.signal });
-  } catch (e) {
-    if (e.name === 'AbortError') throw new Error(`Request timed out after ${timeoutMs / 1000}s`);
-    throw e;
+  } catch (error) {
+    if (error.name === 'AbortError') throw new Error(`Request timed out after ${timeoutMs / 1000}s`);
+    throw error;
   } finally {
     clearTimeout(timer);
   }
@@ -22,8 +22,8 @@ export function collect(val, prev) {
   return prev.concat([val]);
 }
 
-export function sleep(ms) {
-  return new Promise(r => setTimeout(r, ms));
+export function sleep(milliseconds) {
+  return new Promise(resolve => setTimeout(resolve, milliseconds));
 }
 
 export const SEEN_MAX_SIZE = 5000;
@@ -49,12 +49,12 @@ export function formatEventDate(isoString) {
 export function logRequest(verbose, method, url, { headers = {}, body = null } = {}) {
   if (!verbose) return;
   const lines = [`→ ${method} ${url}`];
-  for (const [k, v] of Object.entries(headers)) {
-    if (k.toLowerCase() === 'authorization') {
-      const masked = v.length > 20 ? v.slice(0, 6) + '...' + v.slice(-4) : '***';
-      lines.push(`  ${k}: ${masked}`);
+  for (const [headerName, headerValue] of Object.entries(headers)) {
+    if (headerName.toLowerCase() === 'authorization') {
+      const masked = headerValue.length > 20 ? headerValue.slice(0, 6) + '...' + headerValue.slice(-4) : '***';
+      lines.push(`  ${headerName}: ${masked}`);
     } else {
-      lines.push(`  ${k}: ${v}`);
+      lines.push(`  ${headerName}: ${headerValue}`);
     }
   }
   if (body) lines.push(`  ${body}`);
@@ -115,7 +115,7 @@ export function addGlobalOptions(cmd, { output = false, examples = [], exitCodes
   }
 
   if (examples.length > 0) {
-    sections.push('\nExamples:\n' + examples.map(e => `  ${e}`).join('\n'));
+    sections.push('\nExamples:\n' + examples.map(example => `  ${example}`).join('\n'));
   }
 
   cmd.addHelpText('after', sections.join('\n'));

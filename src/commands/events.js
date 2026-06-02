@@ -37,10 +37,10 @@ export function eventsCommand() {
       if (opts.email) data.email = opts.email;
       if (opts.advocate_code) data.advocate_code = opts.advocate_code;
       if (opts.amount) data.amount = opts.amount;
-      for (const kv of opts.param) {
-        const idx = kv.indexOf('=');
-        if (idx < 0) { console.error(`Invalid param (expected key=value): ${kv}`); process.exit(2); }
-        data[kv.slice(0, idx)] = kv.slice(idx + 1);
+      for (const keyValue of opts.param) {
+        const separatorIndex = keyValue.indexOf('=');
+        if (separatorIndex < 0) { console.error(`Invalid param (expected key=value): ${keyValue}`); process.exit(2); }
+        data[keyValue.slice(0, separatorIndex)] = keyValue.slice(separatorIndex + 1);
       }
 
       if (opts.sandbox) data.sandbox = typeof opts.sandbox === 'string' ? opts.sandbox : 'production-test';
@@ -662,48 +662,48 @@ export function eventsCommand() {
       }
 
       if (opts.json) {
-        const parsed = lines.map(l => JSON.parse(l));
+        const parsed = lines.map(line => JSON.parse(line));
         printJson(parsed.length === 1 ? parsed[0] : parsed, opts);
         return;
       }
 
       for (const line of lines) {
-        const e = JSON.parse(line);
-        const fmt = (label, val) => { if (val != null && val !== '') console.log(`${label.padEnd(18)} ${val}`); };
+        const event = JSON.parse(line);
+        const printField = (label, value) => { if (value != null && value !== '') console.log(`${label.padEnd(18)} ${value}`); };
 
-        fmt('event_id', e.event_id);
-        fmt('name', e.name);
-        fmt('type', e.event_type || e.type);
-        fmt('person_id', e.person_id);
-        fmt('email', e.email);
-        if (e.first_name || e.last_name) fmt('person', [e.first_name, e.last_name].filter(Boolean).join(' '));
-        fmt('campaign_id', e.campaign_id);
-        fmt('step', e.step);
-        fmt('zone', e.zone);
-        fmt('channel', e.channel);
-        fmt('event_date', e.event_date ? formatEventTime(e.event_date) : null);
-        fmt('request_time', e.request_time);
-        fmt('source_url', e.source_url);
-        fmt('source_ip', e.source_ip);
-        fmt('cause_event_id', e.cause_event_id);
-        fmt('root_event_id', e.root_event_id);
-        fmt('score_status', e.score_status);
+        printField('event_id', event.event_id);
+        printField('name', event.name);
+        printField('type', event.event_type || event.type);
+        printField('person_id', event.person_id);
+        printField('email', event.email);
+        if (event.first_name || event.last_name) printField('person', [event.first_name, event.last_name].filter(Boolean).join(' '));
+        printField('campaign_id', event.campaign_id);
+        printField('step', event.step);
+        printField('zone', event.zone);
+        printField('channel', event.channel);
+        printField('event_date', event.event_date ? formatEventTime(event.event_date) : null);
+        printField('request_time', event.request_time);
+        printField('source_url', event.source_url);
+        printField('source_ip', event.source_ip);
+        printField('cause_event_id', event.cause_event_id);
+        printField('root_event_id', event.root_event_id);
+        printField('score_status', event.score_status);
 
-        if (e.parameters && Object.keys(e.parameters).length > 0) {
+        if (event.parameters && Object.keys(event.parameters).length > 0) {
           console.log('parameters:');
-          for (const [k, v] of Object.entries(e.parameters)) console.log(`  ${k}: ${v}`);
+          for (const [paramName, paramValue] of Object.entries(event.parameters)) console.log(`  ${paramName}: ${paramValue}`);
         }
 
-        if (e.labels && e.labels.length > 0) {
-          fmt('labels', e.labels.map(l => l.name || l).join(', '));
+        if (event.labels && event.labels.length > 0) {
+          printField('labels', event.labels.map(label => label.name || label).join(', '));
         }
 
-        if (e.log_messages && e.log_messages.length > 0) {
+        if (event.log_messages && event.log_messages.length > 0) {
           if (opts.verbose) {
             console.log('log_messages:');
-            for (const msg of e.log_messages) console.log(`  ${msg}`);
+            for (const message of event.log_messages) console.log(`  ${message}`);
           } else {
-            fmt('log_messages', `${e.log_messages.length} entries (use --verbose to show)`);
+            printField('log_messages', `${event.log_messages.length} entries (use --verbose to show)`);
           }
         }
 

@@ -93,8 +93,8 @@ export function personCommand() {
       }
 
       if (opts.duration) {
-        const ms = Math.max(1, Number(opts.duration)) * 1000;
-        setTimeout(() => process.exit(0), ms);
+        const durationMs = Math.max(1, Number(opts.duration)) * 1000;
+        setTimeout(() => process.exit(0), durationMs);
       }
 
       const seen = new Set();
@@ -123,8 +123,8 @@ export function personCommand() {
             }
           }
           errorCount = 0;
-        } catch (e) {
-          console.error(`poll error: ${e.message}`);
+        } catch (error) {
+          console.error(`poll error: ${error.message}`);
           if (++errorCount >= 10) {
             console.error('Too many consecutive poll errors, stopping.');
             process.exit(1);
@@ -174,20 +174,20 @@ export function personCommand() {
         console.log(`No relationships found for ${opts.email}`);
         return;
       }
-      const roleW = 10, programW = 24, personW = 20, channelW = 12;
+      const roleColumnWidth = 10, programColumnWidth = 24, personColumnWidth = 20, channelColumnWidth = 12;
       console.log(
-        'role'.padEnd(roleW) + 'program'.padEnd(programW) +
-        'other_person_id'.padEnd(personW) + 'channel'.padEnd(channelW) + 'date'
+        'role'.padEnd(roleColumnWidth) + 'program'.padEnd(programColumnWidth) +
+        'other_person_id'.padEnd(personColumnWidth) + 'channel'.padEnd(channelColumnWidth) + 'date'
       );
-      console.log('-'.repeat(roleW + programW + personW + channelW + 10));
-      for (const r of relationships) {
-        const channel = r.data?.channel?.value || r.data?.reason?.value || '';
-        const date = (r.created_date || '').slice(0, 10);
+      console.log('-'.repeat(roleColumnWidth + programColumnWidth + personColumnWidth + channelColumnWidth + 10));
+      for (const relationship of relationships) {
+        const channel = relationship.data?.channel?.value || relationship.data?.reason?.value || '';
+        const date = (relationship.created_date || '').slice(0, 10);
         console.log(
-          (r.my_role || '').padEnd(roleW) +
-          (r.program || '').padEnd(programW) +
-          (r.other_person_id || '').padEnd(personW) +
-          channel.padEnd(channelW) +
+          (relationship.my_role || '').padEnd(roleColumnWidth) +
+          (relationship.program || '').padEnd(programColumnWidth) +
+          (relationship.other_person_id || '').padEnd(personColumnWidth) +
+          channel.padEnd(channelColumnWidth) +
           date
         );
       }
@@ -222,17 +222,17 @@ export function personCommand() {
         printJson({ personal: stats, network: networkStats }, opts);
         return;
       }
-      const fmt = (v) => (v != null ? String(v) : '-');
-      const labelW = 12, colW = 14;
-      const header = ''.padEnd(labelW) + 'aov'.padEnd(colW) + 'ltv'.padEnd(colW) +
-        'activities'.padEnd(colW) + 'transactions'.padEnd(colW) + 'conversions';
+      const formatValue = (value) => (value != null ? String(value) : '-');
+      const labelColumnWidth = 12, valueColumnWidth = 14;
+      const header = ''.padEnd(labelColumnWidth) + 'aov'.padEnd(valueColumnWidth) + 'ltv'.padEnd(valueColumnWidth) +
+        'activities'.padEnd(valueColumnWidth) + 'transactions'.padEnd(valueColumnWidth) + 'conversions';
       console.log(header);
       console.log('-'.repeat(header.length + 4));
-      const row = (label, s) =>
-        label.padEnd(labelW) +
-        fmt(s.aov).padEnd(colW) + fmt(s.ltv).padEnd(colW) +
-        fmt(s.activities).padEnd(colW) + fmt(s.transactions).padEnd(colW) +
-        fmt(s.conversions);
+      const row = (label, statsRow) =>
+        label.padEnd(labelColumnWidth) +
+        formatValue(statsRow.aov).padEnd(valueColumnWidth) + formatValue(statsRow.ltv).padEnd(valueColumnWidth) +
+        formatValue(statsRow.activities).padEnd(valueColumnWidth) + formatValue(statsRow.transactions).padEnd(valueColumnWidth) +
+        formatValue(statsRow.conversions);
       console.log(row('personal', stats));
       console.log(row('network', networkStats));
     });

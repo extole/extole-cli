@@ -49,20 +49,20 @@ export async function pollUntilDone(reportId, token, verbose) {
 export function reportsCommand() {
   const reports = new Command('reports')
     .description('List report runners and run on-demand reports')
-    .action(async (opts) => {
-      const token = resolveToken(opts);
-      const data = await apiJson('/v7/report-runners', token, { verbose: opts.verbose });
+    .action(async (options) => {
+      const token = resolveToken(options);
+      const data = await apiJson('/v7/report-runners', token, { verbose: options.verbose });
       const runners = Array.isArray(data) ? data : (data.runners || []);
-      if (opts.json) {
-        printJson(runners, opts);
+      if (options.json) {
+        printJson(runners, options);
         return;
       }
       if (runners.length === 0) { console.log('No report runners found.'); return; }
-      const col1 = Math.max(20, ...runners.map(r => (r.runner_id || r.id || '').length)) + 2;
-      console.log('runner_id'.padEnd(col1) + 'display_name');
-      console.log('─'.repeat(col1) + '─'.repeat(40));
-      for (const r of runners) {
-        console.log(`${(r.runner_id || r.id || '').padEnd(col1)}${r.display_name || r.name || ''}`);
+      const idColumnWidth = Math.max(20, ...runners.map(runner => (runner.runner_id || runner.id || '').length)) + 2;
+      console.log('runner_id'.padEnd(idColumnWidth) + 'display_name');
+      console.log('─'.repeat(idColumnWidth) + '─'.repeat(40));
+      for (const runner of runners) {
+        console.log(`${(runner.runner_id || runner.id || '').padEnd(idColumnWidth)}${runner.display_name || runner.name || ''}`);
       }
     });
 
@@ -79,40 +79,40 @@ export function reportsCommand() {
     .allowExcessArguments(false)
     .option('--filter <substr>', 'Case-insensitive substring match against name, display_name, description, and categories')
     .action(async function () {
-      const opts = this.optsWithGlobals();
-      const token = resolveToken(opts);
-      const data = await apiJson('/v6/report-types', token, { verbose: opts.verbose });
-      let types = Array.isArray(data) ? data : (data.report_types || []);
+      const options = this.optsWithGlobals();
+      const token = resolveToken(options);
+      const data = await apiJson('/v6/report-types', token, { verbose: options.verbose });
+      let reportTypes = Array.isArray(data) ? data : (data.report_types || []);
 
-      if (opts.filter) {
-        const needle = opts.filter.toLowerCase();
-        types = types.filter(t => {
+      if (options.filter) {
+        const needle = options.filter.toLowerCase();
+        reportTypes = reportTypes.filter(reportType => {
           const haystack = [
-            t.report_type, t.name, t.display_name, t.description,
-            ...(t.categories || []),
+            reportType.report_type, reportType.name, reportType.display_name, reportType.description,
+            ...(reportType.categories || []),
           ].filter(Boolean).join(' ').toLowerCase();
           return haystack.includes(needle);
         });
       }
 
-      if (opts.json) {
-        printJson(types, opts);
+      if (options.json) {
+        printJson(reportTypes, options);
         return;
       }
-      if (types.length === 0) {
-        console.log(opts.filter
-          ? `No report types match "${opts.filter}".`
+      if (reportTypes.length === 0) {
+        console.log(options.filter
+          ? `No report types match "${options.filter}".`
           : 'No report types found.');
         return;
       }
-      const col1 = Math.max(20, ...types.map(t => (t.report_type || t.name || '').length)) + 2;
-      const col2 = 35;
-      console.log('report_type'.padEnd(col1) + 'display_name'.padEnd(col2) + 'executor_type');
-      console.log('─'.repeat(col1) + '─'.repeat(col2) + '─'.repeat(20));
-      for (const t of types) {
-        const id = (t.report_type || t.name || '').padEnd(col1);
-        const name = (t.display_name || '').slice(0, col2 - 2).padEnd(col2);
-        console.log(`${id}${name}${t.executor_type || ''}`);
+      const typeColumnWidth = Math.max(20, ...reportTypes.map(reportType => (reportType.report_type || reportType.name || '').length)) + 2;
+      const nameColumnWidth = 35;
+      console.log('report_type'.padEnd(typeColumnWidth) + 'display_name'.padEnd(nameColumnWidth) + 'executor_type');
+      console.log('─'.repeat(typeColumnWidth) + '─'.repeat(nameColumnWidth) + '─'.repeat(20));
+      for (const reportType of reportTypes) {
+        const id = (reportType.report_type || reportType.name || '').padEnd(typeColumnWidth);
+        const name = (reportType.display_name || '').slice(0, nameColumnWidth - 2).padEnd(nameColumnWidth);
+        console.log(`${id}${name}${reportType.executor_type || ''}`);
       }
     });
 
@@ -133,45 +133,45 @@ export function reportsCommand() {
     .allowExcessArguments(false)
     .option('--limit <n>', 'Max number of recommendations (default 5)')
     .action(async function () {
-      const opts = this.optsWithGlobals();
-      const token = resolveToken(opts);
-      const qs = opts.limit ? `?limit=${encodeURIComponent(opts.limit)}` : '';
-      const data = await apiJson(`/v6/report-types/recommendations${qs}`, token, { verbose: opts.verbose });
-      const recs = Array.isArray(data) ? data : (data.report_types || []);
+      const options = this.optsWithGlobals();
+      const token = resolveToken(options);
+      const queryString = options.limit ? `?limit=${encodeURIComponent(options.limit)}` : '';
+      const data = await apiJson(`/v6/report-types/recommendations${queryString}`, token, { verbose: options.verbose });
+      const recommendations = Array.isArray(data) ? data : (data.report_types || []);
 
-      if (opts.json) {
-        printJson(recs, opts);
+      if (options.json) {
+        printJson(recommendations, options);
         return;
       }
-      if (recs.length === 0) {
+      if (recommendations.length === 0) {
         console.log('No recommendations available.');
         return;
       }
 
-      console.log(`Recommended report types (${recs.length}):\n`);
-      const stripHtml = (s) => (s || '').replace(/<[^>]+>/g, '').replace(/\s+/g, ' ').trim();
+      console.log(`Recommended report types (${recommendations.length}):\n`);
+      const stripHtml = (text) => (text || '').replace(/<[^>]+>/g, '').replace(/\s+/g, ' ').trim();
       const wrap = (text, width, indent) => {
         const words = text.split(' ');
         const lines = [];
-        let line = '';
-        for (const w of words) {
-          if ((line + ' ' + w).trim().length > width) {
-            if (line) lines.push(line);
-            line = w;
+        let currentLine = '';
+        for (const word of words) {
+          if ((currentLine + ' ' + word).trim().length > width) {
+            if (currentLine) lines.push(currentLine);
+            currentLine = word;
           } else {
-            line = line ? `${line} ${w}` : w;
+            currentLine = currentLine ? `${currentLine} ${word}` : word;
           }
         }
-        if (line) lines.push(line);
-        return lines.map(l => `${indent}${l}`).join('\n');
+        if (currentLine) lines.push(currentLine);
+        return lines.map(line => `${indent}${line}`).join('\n');
       };
 
-      for (const r of recs) {
-        const id = r.report_type || r.name || '';
-        const display = r.display_name || '';
-        const cats = (r.categories && r.categories.length) ? `  [${r.categories.join(', ')}]` : '';
+      for (const recommendation of recommendations) {
+        const id = recommendation.report_type || recommendation.name || '';
+        const display = recommendation.display_name || '';
+        const cats = (recommendation.categories && recommendation.categories.length) ? `  [${recommendation.categories.join(', ')}]` : '';
         console.log(`  ${id}    ${display}${cats}`);
-        const desc = stripHtml(r.description);
+        const desc = stripHtml(recommendation.description);
         if (desc) console.log(wrap(desc, 76, '    '));
         console.log('');
       }
@@ -198,24 +198,24 @@ export function reportsCommand() {
     .option('--wait', 'Poll until report is complete')
     .option('--download', 'Download and print result (implies --wait)')
     .action(async function () {
-      const opts = this.optsWithGlobals();
-      if (!opts.type) {
+      const options = this.optsWithGlobals();
+      if (!options.type) {
         console.error('Error: --type REPORT_TYPE is required. Run `extole reports types` to see available types.');
         process.exit(2);
       }
-      const token = resolveToken(opts);
+      const token = resolveToken(options);
       const parameters = {};
-      for (const kv of opts.param) {
-        const idx = kv.indexOf('=');
-        if (idx < 0) { console.error(`Invalid param (expected key=value): ${kv}`); process.exit(2); }
-        parameters[kv.slice(0, idx)] = kv.slice(idx + 1);
+      for (const keyValue of options.param) {
+        const separatorIndex = keyValue.indexOf('=');
+        if (separatorIndex < 0) { console.error(`Invalid param (expected key=value): ${keyValue}`); process.exit(2); }
+        parameters[keyValue.slice(0, separatorIndex)] = keyValue.slice(separatorIndex + 1);
       }
-      if (opts.days && parameters.time_range) {
+      if (options.days && parameters.time_range) {
         console.error('Error: --days and -p time_range are mutually exclusive.');
         process.exit(2);
       }
-      if (opts.days && !parameters.time_range) {
-        const days = parseInt(opts.days, 10);
+      if (options.days && !parameters.time_range) {
+        const days = parseInt(options.days, 10);
         if (isNaN(days) || days <= 0) {
           console.error('--days must be a positive integer');
           process.exit(2);
@@ -225,17 +225,17 @@ export function reportsCommand() {
         parameters.time_range = `${start.toISOString()}/${end.toISOString()}`;
       }
 
-      const body = { report_type: opts.type, parameters };
-      if (opts.format) body.formats = [opts.format.toUpperCase()];
-      if (opts.scope && opts.scope.length > 0) body.scopes = opts.scope.map(s => s.toUpperCase());
-      const createRes = await apiFetch('/v4/reports', token, {
+      const body = { report_type: options.type, parameters };
+      if (options.format) body.formats = [options.format.toUpperCase()];
+      if (options.scope && options.scope.length > 0) body.scopes = options.scope.map(scope => scope.toUpperCase());
+      const createResponse = await apiFetch('/v4/reports', token, {
         method: 'POST',
         body: JSON.stringify(body),
-        verbose: opts.verbose,
+        verbose: options.verbose,
       });
-      const createText = await createRes.text();
-      if (!createRes.ok) {
-        console.error(`Create failed ${createRes.status}: ${createText.slice(0, 300)}`);
+      const createText = await createResponse.text();
+      if (!createResponse.ok) {
+        console.error(`Create failed ${createResponse.status}: ${createText.slice(0, 300)}`);
         process.exit(1);
       }
       let report;
@@ -248,22 +248,22 @@ export function reportsCommand() {
       const reportId = report.report_id;
       console.error(`Created report ${reportId}  status=${report.status}`);
 
-      if (!opts.wait && !opts.download) return;
+      if (!options.wait && !options.download) return;
 
-      const status = await pollUntilDone(reportId, token, opts.verbose);
+      const status = await pollUntilDone(reportId, token, options.verbose);
       if (status !== 'DONE') {
         console.error(`Report ended with status: ${status}`);
         process.exit(1);
       }
 
-      if (!opts.download) return;
+      if (!options.download) return;
 
-      const dl = await apiFetch(`/v4/reports/${reportId}/download`, token, { verbose: opts.verbose, headers: { Accept: '*/*' } });
-      if (!dl.ok) {
-        console.error(`Download failed ${dl.status}`);
+      const downloadResponse = await apiFetch(`/v4/reports/${reportId}/download`, token, { verbose: options.verbose, headers: { Accept: '*/*' } });
+      if (!downloadResponse.ok) {
+        console.error(`Download failed ${downloadResponse.status}`);
         process.exit(1);
       }
-      await pipeline(dl.body, process.stdout);
+      await pipeline(downloadResponse.body, process.stdout);
     });
 
   addGlobalOptions(runCmd, {
@@ -280,23 +280,23 @@ export function reportsCommand() {
     .allowExcessArguments(false)
     .option('--type <type>', 'Report type to describe')
     .action(async function () {
-      const opts = this.optsWithGlobals();
-      if (!opts.type) {
+      const options = this.optsWithGlobals();
+      if (!options.type) {
         console.error('Error: --type REPORT_TYPE is required. Run `extole reports types` to see available types.');
         process.exit(2);
       }
-      const token = resolveToken(opts);
-      const data = await apiJson(`/v6/report-types/${encodeURIComponent(opts.type)}`, token, { verbose: opts.verbose });
+      const token = resolveToken(options);
+      const data = await apiJson(`/v6/report-types/${encodeURIComponent(options.type)}`, token, { verbose: options.verbose });
 
-      if (opts.json) {
-        printJson(data, opts);
+      if (options.json) {
+        printJson(data, options);
         return;
       }
 
       console.log(`${data.display_name || data.name}`);
       if (data.description) {
-        const desc = data.description.replace(/<[^>]+>/g, '').trim();
-        if (desc) console.log(desc);
+        const description = data.description.replace(/<[^>]+>/g, '').trim();
+        if (description) console.log(description);
       }
       console.log(`executor: ${data.executor_type}   formats: ${(data.formats || []).join(', ')}`);
       console.log();
@@ -306,23 +306,23 @@ export function reportsCommand() {
         return;
       }
 
-      const required = data.parameters.filter(p => p.is_required);
-      const optional = data.parameters.filter(p => !p.is_required);
+      const requiredParams = data.parameters.filter(param => param.is_required);
+      const optionalParams = data.parameters.filter(param => !param.is_required);
 
-      const printParam = (p) => {
-        const req = p.is_required ? ' (required)' : '';
-        const def = p.default_value != null ? `  default: ${p.default_value}` : '';
-        const vals = p.type?.values?.length ? `\n    values: ${p.type.values.join(', ')}` : '';
-        console.log(`  ${p.name}${req}  [${p.type?.name || 'STRING'}]${def}${vals}`);
+      const printParam = (param) => {
+        const required = param.is_required ? ' (required)' : '';
+        const defaultValue = param.default_value != null ? `  default: ${param.default_value}` : '';
+        const allowedValues = param.type?.values?.length ? `\n    values: ${param.type.values.join(', ')}` : '';
+        console.log(`  ${param.name}${required}  [${param.type?.name || 'STRING'}]${defaultValue}${allowedValues}`);
       };
 
-      if (required.length) {
+      if (requiredParams.length) {
         console.log('Required:');
-        required.forEach(printParam);
+        requiredParams.forEach(printParam);
       }
-      if (optional.length) {
+      if (optionalParams.length) {
         console.log('\nOptional:');
-        optional.forEach(printParam);
+        optionalParams.forEach(printParam);
       }
     });
 
@@ -339,11 +339,11 @@ export function reportsCommand() {
     .allowExcessArguments(false)
     .argument('<report_id>', 'Report ID to check')
     .action(async function(reportId) {
-      const opts = this.optsWithGlobals();
-      const token = resolveToken(opts);
-      const report = await apiJson(`/v4/reports/${reportId}`, token, { verbose: opts.verbose });
-      if (opts.json) {
-        printJson(report, opts);
+      const options = this.optsWithGlobals();
+      const token = resolveToken(options);
+      const report = await apiJson(`/v4/reports/${reportId}`, token, { verbose: options.verbose });
+      if (options.json) {
+        printJson(report, options);
         return;
       }
       console.log(`report_id  ${report.report_id}`);
@@ -363,23 +363,23 @@ export function reportsCommand() {
     .argument('<report_id>', 'Report ID to download')
     .option('--wait', 'Poll until complete before downloading')
     .action(async function(reportId) {
-      const opts = this.optsWithGlobals();
-      const token = resolveToken(opts);
+      const options = this.optsWithGlobals();
+      const token = resolveToken(options);
 
-      if (opts.wait) {
-        const status = await pollUntilDone(reportId, token, opts.verbose);
+      if (options.wait) {
+        const status = await pollUntilDone(reportId, token, options.verbose);
         if (status === 'FAILED') {
           console.error('Report failed.');
           process.exit(1);
         }
       }
 
-      const dl = await apiFetch(`/v4/reports/${reportId}/download`, token, { verbose: opts.verbose, headers: { Accept: '*/*' } });
-      if (!dl.ok) {
-        console.error(`Download failed ${dl.status}`);
+      const downloadResponse = await apiFetch(`/v4/reports/${reportId}/download`, token, { verbose: options.verbose, headers: { Accept: '*/*' } });
+      if (!downloadResponse.ok) {
+        console.error(`Download failed ${downloadResponse.status}`);
         process.exit(1);
       }
-      await pipeline(dl.body, process.stdout);
+      await pipeline(downloadResponse.body, process.stdout);
     });
 
   addGlobalOptions(downloadCmd, {
