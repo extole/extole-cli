@@ -1,10 +1,12 @@
 import { Command } from 'commander';
 import { resolveToken, API_BASE } from '../config.js';
-import { apiJson } from '../api.js';
+import { pipeline } from 'node:stream/promises';
+import { apiJson, apiFetch } from '../api.js';
 import { printJson } from '../output.js';
 import { addGlobalOptions, SEEN_MAX_SIZE, SEEN_KEEP_SIZE, POLL_INTERVAL_MS, isValidEmail, formatEventTime } from '../utils.js';
 import { findPerson, findPersonById, getPersonSteps, getPersonRelationships, getPersonStats } from '../person-api.js';
 import { formatReward, VALID_REWARD_STATES } from './rewards.js';
+import { pollUntilDone } from './reports.js';
 
 export function personCommand() {
   const person = new Command('person').description('Look up person profile and step history');
@@ -297,10 +299,82 @@ export function personCommand() {
     ],
   });
 
+  const reportCmd = new Command('report')
+    .description('Profile events report for a person (uses PROFILE report ALL_TIME; takes ~30-90s)')
+    .allowExcessArguments(false)
+    .option('--email <email>', 'Email address to look up')
+    .option('--id <person_id>', 'Person ID (skips email lookup)')
+    .action(async function () {
+      const options = this.optsWithGlobals();
+      if (!options.email && !options.id) {
+        console.error('Error: --email or --id is required.');
+        process.exit(2);
+      }
+      const token = resolveToken(options);
+
+      let personId = options.id;
+      if (!personId) {
+        if (!isValidEmail(options.email)) {
+          console.error('Error: --email must be a valid email address.');
+          process.exit(2);
+        }
+        const match = await findPerson(options.email, token, options.verbose);
+        if (!match) {
+          console.error(`No person found for ${options.email}`);
+          process.exit(1);
+        }
+        personId = match.id;
+      }
+
+      process.stderr.write('Running full profile report (takes ~30-90s)...\n');
+
+      const createResponse = await apiFetch('/v4/reports', token, {
+        method: 'POST',
+        body: JSON.stringify({
+          report_type: 'PROFILE',
+          parameters: { profile_ids: personId, time_range: 'ALL_TIME' },
+          formats: ['JSONL'],
+        }),
+        verbose: options.verbose,
+      });
+      const createText = await createResponse.text();
+      if (!createResponse.ok) {
+        console.error(`Failed to create report: ${createText.slice(0, 300)}`);
+        process.exit(1);
+      }
+      const reportId = JSON.parse(createText).report_id;
+
+      const status = await pollUntilDone(reportId, token, options.verbose);
+      if (status !== 'DONE') {
+        console.error(`Report ended with status: ${status}`);
+        process.exit(1);
+      }
+
+      const downloadResponse = await apiFetch(`/v4/reports/${reportId}/download`, token, {
+        verbose: options.verbose,
+        headers: { Accept: '*/*' },
+      });
+      if (!downloadResponse.ok) {
+        console.error(`Download failed: ${downloadResponse.status}`);
+        process.exit(1);
+      }
+      await pipeline(downloadResponse.body, process.stdout);
+    });
+
+  addGlobalOptions(reportCmd, {
+    output: true,
+    examples: [
+      'extole person report --email jane@example.com',
+      'extole person report --id <person_id>',
+      'extole person report --email jane@example.com --json',
+    ],
+  });
+
   person.addCommand(getCmd);
   person.addCommand(stepsCmd);
   person.addCommand(rewardsCmd);
   person.addCommand(relationshipsCmd);
   person.addCommand(statsCmd);
+  person.addCommand(reportCmd);
   return person;
 }

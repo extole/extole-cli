@@ -451,6 +451,9 @@ extole person relationships --email jane@example.com --json
 
 extole person stats --email jane@example.com                # personal + referral network stats
 extole person stats --email jane@example.com --json
+
+extole person report --id <person_id>                       # profile events report ALL_TIME (~30-90s)
+extole person report --email jane@example.com               # looks up person ID then runs report
 ```
 
 `relationships` shows each referral link the person is part of — their role (ADVOCATE or FRIEND), the program, the other person's ID, the channel (SHARE_LINK, ADVOCATE_CODE, etc.), and the date the relationship was created.
@@ -662,7 +665,9 @@ extole chat "explain the reward supplier types available"
 extole chat "what's the difference between causeEventIds and rootEventIds on steps?"
 ```
 
-Uses your stored Extole token — no separate login required.
+Uses your stored Extole token — no separate login required. Uses a dedicated CLI agent (`extole_assistant_cli`) tuned for CLI workflows.
+
+`chat` and `feedback` are excluded from `extole serve` — they call the AI agent and would be circular if exposed as MCP tools.
 
 ## Share Links
 

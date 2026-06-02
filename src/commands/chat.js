@@ -3,7 +3,7 @@ import { resolveToken } from '../config.js';
 import { addGlobalOptions, fetchWithTimeout } from '../utils.js';
 
 const AGENT_URL = 'https://agent.extole.com';
-const AGENT_NAME = 'extole_chat';
+const AGENT_NAME = 'extole_assistant_cli';
 const APP_TYPE = 'extole-cli';
 
 export async function sendToAgent(prompt, token) {
@@ -16,7 +16,7 @@ export async function sendToAgent(prompt, token) {
         'Authorization': `Bearer ${token}`,
         'x-extole-app-type': APP_TYPE,
       },
-      body: JSON.stringify({ agentName: AGENT_NAME, userPrompt: prompt }),
+      body: JSON.stringify({ agentName: AGENT_NAME, userPrompt: prompt, surface: APP_TYPE }),
     }, 120_000);
   } catch {
     throw new Error('Extole AI agent server is unavailable');
