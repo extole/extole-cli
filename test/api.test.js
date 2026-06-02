@@ -10,15 +10,24 @@ function makeFetch({ status = 200, ok = true, body = '' }) {
   });
 }
 
-test('apiFetch sets Authorization and Content-Type headers', async () => {
+test('apiFetch sets Authorization and Accept headers', async () => {
   let capturedOpts;
   const fetchFn = async (url, opts) => { capturedOpts = opts; return { ok: true, status: 200, text: async () => '' }; };
 
   await apiFetch('/test', 'my-token', {}, fetchFn);
 
   assert.equal(capturedOpts.headers['Authorization'], 'Bearer my-token');
-  assert.equal(capturedOpts.headers['Content-Type'], 'application/json');
   assert.equal(capturedOpts.headers['Accept'], 'application/json');
+  assert.equal(capturedOpts.headers['Content-Type'], undefined); // no body — Content-Type not set
+});
+
+test('apiFetch sets Content-Type when body is present', async () => {
+  let capturedOpts;
+  const fetchFn = async (url, opts) => { capturedOpts = opts; return { ok: true, status: 200, text: async () => '' }; };
+
+  await apiFetch('/test', 'my-token', { method: 'POST', body: JSON.stringify({ key: 'value' }) }, fetchFn);
+
+  assert.equal(capturedOpts.headers['Content-Type'], 'application/json');
 });
 
 test('apiFetch allows caller headers to override defaults', async () => {
