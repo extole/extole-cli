@@ -123,7 +123,7 @@ export function shareLinksCommand() {
       // The shareable's person_id is a *profile* record. Follow the identity
       // chain (/v5/persons/{id} returns identity_id + identity_key_value) so
       // the operator sees the email up front and knows which person_id to
-      // use for downstream wismr / person commands.
+      // use for downstream person commands.
       let identity = null;
       if (shareable.person_id) {
         try {

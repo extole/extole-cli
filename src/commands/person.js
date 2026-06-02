@@ -4,6 +4,7 @@ import { apiJson } from '../api.js';
 import { printJson } from '../output.js';
 import { addGlobalOptions, SEEN_MAX_SIZE, SEEN_KEEP_SIZE, POLL_INTERVAL_MS, isValidEmail, formatEventTime } from '../utils.js';
 import { findPerson, findPersonById, getPersonSteps, getPersonRelationships, getPersonStats } from '../person-api.js';
+import { formatReward, VALID_REWARD_STATES } from './rewards.js';
 
 export function personCommand() {
   const person = new Command('person').description('Look up person profile and step history');
@@ -60,13 +61,13 @@ export function personCommand() {
   });
 
   const stepsCmd = new Command('steps')
-    .description('Show step history for a person (use --watch to tail live)')
+    .description('Show step history for a person (use --listen to tail live)')
     .allowExcessArguments(false)
     .requiredOption('--email <email>', 'Email address to look up')
     .option('--limit <n>', 'Number of steps to return (one-shot)', '25')
     .option('--event <event_id>', 'Filter to steps caused by this event ID')
-    .option('--watch', 'Poll for new steps until Ctrl+C')
-    .option('--duration <seconds>', 'Stop automatically after this many seconds (implies --watch)')
+    .option('--listen', 'Poll for new steps until Ctrl+C')
+    .option('--duration <seconds>', 'Stop automatically after this many seconds (implies --listen)')
     .action(async function () {
       const opts = this.optsWithGlobals();
       if (!isValidEmail(opts.email)) {
@@ -81,7 +82,7 @@ export function personCommand() {
       }
       const personId = match.id;
 
-      if (!opts.watch && !opts.duration) {
+      if (!opts.listen && !opts.duration) {
         const limit = parseInt(opts.limit, 10);
         if (isNaN(limit) || limit <= 0) {
           console.error('--limit must be a positive integer');
@@ -99,11 +100,11 @@ export function personCommand() {
 
       const seen = new Set();
       let errorCount = 0;
-      if (!opts.json) console.error(`Watching steps for ${opts.email} — Ctrl+C to stop\n`);
+      if (!opts.json) console.error(`Listening for steps for ${opts.email} — Ctrl+C to stop\n`);
 
       async function poll() {
         try {
-          const steps = await getPersonSteps(personId, token, 50, opts.verbose);
+          const steps = await getPersonSteps(personId, token, 50, opts.verbose, { causeEventId: opts.event });
           for (const step of steps.reverse()) {
             if (!seen.has(step.id)) {
               seen.add(step.id);
@@ -144,7 +145,7 @@ export function personCommand() {
     examples: [
       'extole person steps --email jane@example.com',
       'extole person steps --email jane@example.com --event EVENT_ID',
-      'extole person steps --email jane@example.com --watch',
+      'extole person steps --email jane@example.com --listen',
       'extole person steps --email jane@example.com --duration 30',
     ],
   });
@@ -245,8 +246,60 @@ export function personCommand() {
     ],
   });
 
+  const rewardsCmd = new Command('rewards')
+    .description('Show rewards for a person')
+    .allowExcessArguments(false)
+    .requiredOption('--email <email>', 'Email address to look up')
+    .option('--status <state>', 'Filter by state (EARNED, FULFILLED, SENT, REDEEMED, CANCELED, FAILED, EXPIRED)')
+    .option('--limit <n>', 'Max rewards to return', '25')
+    .action(async function () {
+      const options = this.optsWithGlobals();
+      if (!isValidEmail(options.email)) {
+        console.error('Error: --email must be a valid email address.');
+        process.exit(2);
+      }
+      const token = resolveToken(options);
+      const limit = parseInt(options.limit, 10);
+      if (isNaN(limit) || limit <= 0) {
+        console.error('--limit must be a positive integer');
+        process.exit(2);
+      }
+      const match = await findPerson(options.email, token, options.verbose);
+      if (!match) {
+        console.error(`No person found for ${options.email}`);
+        process.exit(1);
+      }
+      if (options.status && !VALID_REWARD_STATES.has(options.status.toUpperCase())) {
+        console.error(`Error: --status must be one of: ${[...VALID_REWARD_STATES].join(', ')}`);
+        process.exit(2);
+      }
+      const params = new URLSearchParams({ limit: String(limit) });
+      if (options.status) params.set('state', options.status.toUpperCase());
+      const rewards = await apiJson(`/v5/persons/${match.id}/rewards?${params}`, token, { verbose: options.verbose, baseUrl: API_BASE });
+      if (!Array.isArray(rewards) || rewards.length === 0) {
+        const suffix = options.status ? ` with state=${options.status.toUpperCase()}` : '';
+        console.error(`No rewards found for ${options.email}${suffix}`);
+        return;
+      }
+      if (options.json) { printJson(rewards, options); return; }
+      const col = { state: 12, value: 18, journey: 16, date: 12 };
+      console.log('state'.padEnd(col.state) + 'face_value'.padEnd(col.value) + 'journey'.padEnd(col.journey) + 'created_at'.padEnd(col.date) + 'reward_id');
+      console.log('─'.repeat(col.state + col.value + col.journey + col.date + 24));
+      for (const reward of rewards) formatReward(reward);
+    });
+
+  addGlobalOptions(rewardsCmd, {
+    output: true,
+    examples: [
+      'extole person rewards --email jane@example.com',
+      'extole person rewards --email jane@example.com --status EARNED',
+      'extole person rewards --email jane@example.com --json',
+    ],
+  });
+
   person.addCommand(getCmd);
   person.addCommand(stepsCmd);
+  person.addCommand(rewardsCmd);
   person.addCommand(relationshipsCmd);
   person.addCommand(statsCmd);
   return person;

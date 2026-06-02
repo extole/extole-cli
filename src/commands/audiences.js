@@ -257,12 +257,12 @@ export function audiencesCommand() {
   // ── history ─────────────────────────────────────────────────────────────
 
   const historyCmd = new Command('history')
-    .description('Show recent ADD / REMOVE / REPLACE / ACTION runs against an audience. Use --watch to tail new runs as they arrive.')
+    .description('Show recent ADD / REMOVE / REPLACE / ACTION runs against an audience. Use --listen to tail new runs as they arrive.')
     .allowExcessArguments(false)
     .argument('<audience>', 'Audience name (substring match) or audience ID')
     .option('--limit <n>', 'Max history entries to show (default 20)', '20')
-    .option('--watch', 'Poll for new runs and print them as they arrive (Ctrl-C to stop)')
-    .option('--interval <seconds>', 'Poll interval in seconds when --watch is set (default 5)', '5')
+    .option('--listen', 'Poll for new runs and print them as they arrive (Ctrl-C to stop)')
+    .option('--interval <seconds>', 'Poll interval in seconds when --listen is set (default 5)', '5')
     .action(async function (arg) {
       const opts = this.optsWithGlobals();
       const token = resolveToken(opts);
@@ -275,7 +275,7 @@ export function audiencesCommand() {
         console.log(`${indent}${o.id}  ${(o.type || '').padEnd(8)}  ${ds}${tags}`);
       };
 
-      if (!opts.watch) {
+      if (!opts.listen) {
         const data = await fetchOnce();
         const list = Array.isArray(data) ? data : [];
 
@@ -291,7 +291,7 @@ export function audiencesCommand() {
         return;
       }
 
-      // --watch: follow-tail. Seed the seen-set on the first poll (don't dump history).
+      // --listen: follow-tail. Seed the seen-set on the first poll (don't dump history).
       const intervalMs = Math.max(1, Number(opts.interval) || 5) * 1000;
       console.log(`Watching ${nameOf(target)} (${target.id}) for new runs... (Ctrl-C to stop)\n`);
       const seen = new Set();
@@ -327,8 +327,8 @@ export function audiencesCommand() {
     examples: [
       'extole audiences history sfdc_pushed',
       'extole audiences history sfdc_pushed --limit 50',
-      'extole audiences history sfdc_pushed --watch',
-      'extole audiences history sfdc_pushed --watch --interval 3',
+      'extole audiences history sfdc_pushed --listen',
+      'extole audiences history sfdc_pushed --listen --interval 3',
     ],
   });
 

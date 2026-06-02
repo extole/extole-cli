@@ -422,7 +422,7 @@ export function webhooksCommand() {
 
   // ── listen ────────────────────────────────────────────────────────────────
 
-  const listenCmd = new Command('listen')
+  const traceCmd = new Command('trace')
     .description('Temporarily wire a URL to a campaign event and tail incoming dispatches. Creates a webhook + controller, publishes the campaign, polls for dispatch results every 3 seconds, then deletes everything on Ctrl-C. The URL must be publicly reachable — Extole makes outbound HTTP POSTs to it.')
     .requiredOption('--url <url>', 'Publicly reachable URL to receive webhook POSTs')
     .requiredOption('--campaign <id>', 'Campaign ID to wire the webhook into')
@@ -537,12 +537,24 @@ export function webhooksCommand() {
         if (cleaningUp) return;
         cleaningUp = true;
         console.log('\nCleaning up...');
-        await apiFetch(`/v2/campaigns/${opts.campaign}/controllers/${controllerId}`, token, { method: 'DELETE', baseUrl: API_BASE });
-        console.log(`deleted controller: ${controllerId}`);
-        await apiFetch(`/v6/webhooks/${webhookId}`, token, { method: 'DELETE', baseUrl: API_BASE });
-        console.log(`deleted webhook:    ${webhookId}`);
-        await apiFetch(`/v2/campaigns/${opts.campaign}/live`, token, { method: 'POST', baseUrl: API_BASE });
-        console.log(`republished:        campaign ${opts.campaign}`);
+        try {
+          await apiFetch(`/v2/campaigns/${opts.campaign}/controllers/${controllerId}`, token, { method: 'DELETE', baseUrl: API_BASE });
+          console.log(`deleted controller: ${controllerId}`);
+        } catch (error) {
+          console.log(`  warning: could not delete controller ${controllerId}: ${error.message}`);
+        }
+        try {
+          await apiFetch(`/v6/webhooks/${webhookId}`, token, { method: 'DELETE', baseUrl: API_BASE });
+          console.log(`deleted webhook:    ${webhookId}`);
+        } catch (error) {
+          console.log(`  warning: could not delete webhook ${webhookId}: ${error.message}`);
+        }
+        try {
+          await apiFetch(`/v2/campaigns/${opts.campaign}/live`, token, { method: 'POST', baseUrl: API_BASE });
+          console.log(`republished:        campaign ${opts.campaign}`);
+        } catch (error) {
+          console.log(`  warning: could not republish campaign ${opts.campaign}: ${error.message}`);
+        }
       }
 
       process.on('SIGINT', async () => { await cleanup(); process.exit(0); });
@@ -565,15 +577,15 @@ export function webhooksCommand() {
       }, 3000);
     });
 
-  addGlobalOptions(listenCmd, {
+  addGlobalOptions(traceCmd, {
     examples: [
-      'extole webhooks listen --url https://my-server.com/hook --campaign <id> --event signed_up',
-      'extole webhooks listen --url https://my-server.com/hook --campaign <id> --event conversion --event-type STEP',
-      'extole webhooks listen --url https://my-server.com/hook --campaign <id> --event signed_up --yes',
+      'extole webhooks trace --url https://my-server.com/hook --campaign <id> --event signed_up',
+      'extole webhooks trace --url https://my-server.com/hook --campaign <id> --event conversion --event-type STEP',
+      'extole webhooks trace --url https://my-server.com/hook --campaign <id> --event signed_up --yes',
     ],
   });
 
-  webhooks.addCommand(listenCmd);
+  webhooks.addCommand(traceCmd);
 
   // ── dispatches ────────────────────────────────────────────────────────────
 
@@ -645,7 +657,7 @@ export function webhooksCommand() {
   // ── watch ─────────────────────────────────────────────────────────────────
   // Follow-tail of dispatch results (HTTP responses) for one webhook. Replaces
   // the manual repeat of `dispatch-results` while debugging integrations.
-  const watchCmd = new Command('watch')
+  const listenCmd = new Command('listen')
     .description('Tail dispatch results for a webhook in real time. Polls every 3s and prints new attempts with their HTTP response code and body. Ctrl-C to stop.')
     .argument('<webhook-id>', 'Webhook ID')
     .option('--interval <seconds>', 'Poll interval in seconds (default 3)', '3')
@@ -699,12 +711,12 @@ export function webhooksCommand() {
       if (options.duration) setTimeout(cleanup, Math.max(1, Number(options.duration)) * 1000);
     });
 
-  addGlobalOptions(watchCmd, {
+  addGlobalOptions(listenCmd, {
     examples: [
-      'extole webhooks watch <webhook-id>',
-      'extole webhooks watch <webhook-id> --interval 5',
-      'extole webhooks watch <webhook-id> --show-body',
-      'extole webhooks watch <webhook-id> --duration 60',
+      'extole webhooks listen <webhook-id>',
+      'extole webhooks listen <webhook-id> --interval 5',
+      'extole webhooks listen <webhook-id> --show-body',
+      'extole webhooks listen <webhook-id> --duration 60',
     ],
   });
 
@@ -713,7 +725,7 @@ export function webhooksCommand() {
   webhooks.addCommand(deleteCmd);
   webhooks.addCommand(dispatchesCmd);
   webhooks.addCommand(dispatchResultsCmd);
-  webhooks.addCommand(watchCmd);
+  webhooks.addCommand(listenCmd);
 
   return webhooks;
 }

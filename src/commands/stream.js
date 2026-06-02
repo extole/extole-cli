@@ -69,16 +69,17 @@ function formatStreamEvent(item, opts) {
   console.log(`${time}  ${name}  ${data}`);
 }
 
-export function streamCommand() {
-  const cmd = new Command('stream')
-    .description('Tail live Extole events in real time')
+export function buildStreamCommand(name) {
+  const cmd = new Command(name)
+    .description('Tail live Extole events in real time. With no filters, captures ALL events across the account.')
     .allowExcessArguments(false)
     .option('--filter <name>', 'Filter by event name (repeatable)', collect, [])
     .option('--email <email>', 'Filter to a specific person by email')
     .option('--event-type <type>', 'Filter by event type, repeatable (INPUT, REWARD, STEP, SHARE...)', collect, [])
     .option('--app-type <type>', 'Filter by app/source type (repeatable)', collect, [])
     .option('--sandbox <name>', 'Filter by sandbox/container name')
-    .option('--duration <seconds>', 'Stop automatically after this many seconds')
+    .option('--duration <seconds>', 'Stop after this many seconds (useful for non-interactive tools)')
+    .option('--tail <n>', 'Stop after receiving this many events (useful for non-interactive tools)')
     .action(async (opts) => {
       const token = resolveToken(opts);
 
@@ -129,11 +130,14 @@ export function streamCommand() {
 
       await Promise.all(filterPromises);
 
-      if (!opts.json) process.stderr.write('Streaming events — Ctrl+C to stop\n\n');
+      const maxCount = opts.tail ? Math.max(1, parseInt(opts.tail, 10)) : null;
+      const stopLine = maxCount ? ` (stops after ${maxCount} events)` : opts.duration ? ` (stops after ${opts.duration}s)` : ' — Ctrl+C to stop';
+      if (!opts.json) process.stderr.write(`Streaming events${stopLine}\n\n`);
 
       const seen = new Set();
       let since = new Date().toISOString();
       let errorCount = 0;
+      let eventCount = 0;
 
       async function poll() {
         try {
@@ -147,19 +151,24 @@ export function streamCommand() {
               if (seen.size > SEEN_MAX_SIZE) {
                 const arr = [...seen];
                 seen.clear();
-                arr.slice(-SEEN_KEEP_SIZE).forEach(i => seen.add(i));
+                arr.slice(-SEEN_KEEP_SIZE).forEach(seenId => seen.add(seenId));
               }
             }
             const evName = item.event?.name || '';
             if (INTERNAL_EVENT_NAMES.has(evName)) continue;
             formatStreamEvent(item, opts);
+            eventCount++;
+            if (maxCount && eventCount >= maxCount) {
+              cleanup(0);
+              return;
+            }
           }
           if (items.length > 0) {
             const last = items[items.length - 1];
             since = last.event_time || last.event?.event_time || since;
           }
-        } catch (e) {
-          process.stderr.write(`poll error: ${e.message}\n`);
+        } catch (error) {
+          process.stderr.write(`poll error: ${error.message}\n`);
           if (++errorCount >= 10) {
             process.stderr.write('Too many consecutive poll errors, stopping.\n');
             process.exit(1);
@@ -174,15 +183,31 @@ export function streamCommand() {
       await schedulePoll();
     });
 
+  cmd.addHelpText('after', `
+Notes:
+  With no filters, the stream captures ALL events across the account — can be
+  very noisy. Use --filter, --email, or --event-type to narrow the scope.
+
+  For non-interactive tools (Cursor, Claude Desktop, scripts):
+    --tail <n>       exit after N events — avoids hanging indefinitely
+    --duration <s>   exit after N seconds — use as a fallback timeout
+    Combine both:    --tail 10 --duration 30`);
+
+  const prefix = name === 'listen' ? 'extole events listen' : 'extole stream';
   return addGlobalOptions(cmd, {
     output: true,
     examples: [
-      'extole stream',
-      'extole stream --app-type my_integration',
-      'extole stream --email jane@example.com',
-      'extole stream --filter lead_created --filter opp_closed_won',
-      'extole stream --event-type REWARD',
-      'extole stream --duration 30',
+      `${prefix} --filter lead_created --filter opp_closed_won`,
+      `${prefix} --email jane@example.com`,
+      `${prefix} --event-type REWARD`,
+      `${prefix} --app-type my_integration`,
+      `${prefix} --tail 10`,
+      `${prefix} --filter conversion --tail 5 --duration 30`,
+      `${prefix} --duration 30`,
     ],
   });
+}
+
+export function streamCommand() {
+  return buildStreamCommand('stream');
 }

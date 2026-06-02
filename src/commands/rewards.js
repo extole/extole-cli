@@ -1,7 +1,7 @@
 import { Command } from 'commander';
 import { resolveToken, API_BASE } from '../config.js';
 
-const VALID_REWARD_STATES = new Set(['EARNED', 'FULFILLED', 'SENT', 'REDEEMED', 'CANCELED', 'FAILED', 'REVOKED', 'EXPIRED']);
+export const VALID_REWARD_STATES = new Set(['EARNED', 'FULFILLED', 'SENT', 'REDEEMED', 'CANCELED', 'FAILED', 'REVOKED', 'EXPIRED']);
 const VALID_REWARD_TYPES = new Set(['MANUAL_COUPON', 'SALESFORCE_COUPON', 'TANGO_V2', 'CUSTOM_REWARD', 'PAYPAL_PAYOUTS']);
 const COUPON_SUPPLIER_TYPES = new Set(['MANUAL_COUPON', 'SALESFORCE_COUPON']);
 import { apiJson } from '../api.js';
@@ -9,7 +9,7 @@ import { printJson } from '../output.js';
 import { addGlobalOptions, isValidEmail, formatEventDate } from '../utils.js';
 import { findPerson, getPersonSteps } from '../person-api.js';
 
-function formatReward(r) {
+export function formatReward(r) {
   const state    = (r.state || '').padEnd(12);
   const value    = r.face_value != null
     ? `${r.face_value} ${r.face_value_type || ''}`.trim().padEnd(18)

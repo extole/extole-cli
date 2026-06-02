@@ -5,27 +5,29 @@ import { printJson, printJsonText } from '../output.js';
 import { collect, sleep, addGlobalOptions, POLL_INTERVAL_MS, isValidEmail, formatEventTime } from '../utils.js';
 import { findPerson, getPersonSteps } from '../person-api.js';
 import { pollUntilDone } from './reports.js';
+import { buildStreamCommand } from './stream.js';
 
 
 export function eventsCommand() {
-  const events = new Command('events').description('Fire events and watch downstream steps');
+  const events = new Command('events').description('Fire events and listen to downstream steps');
 
   const fireCmd = new Command('fire')
     .argument('<event_name>', 'Event name to fire')
-    .description('Fire a single event via POST /v5/events')
+    .description('Fire a single event')
     .allowExcessArguments(false)
     .option('--email <email>', 'email param shortcut')
     .option('--advocate_code <code>', 'advocate_code param shortcut')
     .option('--amount <amount>', 'amount param shortcut')
     .option('-p, --param <kv>', 'key=value param (repeatable)', collect, [])
-    .option('--live', 'Fire the event against the live production API')
-    .option('--sandbox [name]', 'Fire in sandbox mode (default: production-test); mutually exclusive with --live')
+    .option('--data <json>', 'Event data as a JSON object — merged with any -p params')
+    .option('--live', 'Fire against the live production API (default is sandbox)')
+    .option('--sandbox [name]', 'Fire in sandbox mode — optional name (default: production-test)')
     .option('--dry-run', 'Print request payload without sending')
-    .option('--watch', 'After firing, tail the event stream for this email for 15s')
-    .option('--watch-timeout <seconds>', 'How long to tail when using --watch', '15')
-    .option('--route', 'After firing, trace which campaigns the event reached. Requires --email.')
-    .option('--route-timeout <seconds>', 'Seconds to wait for steps to appear when using --route', '8')
-    .option('--route-webhook <id>', 'With --route, also check this webhook for dispatches caused by the event')
+    .option('--listen', 'After firing, tail the event stream for this email for 15s')
+    .option('--listen-timeout <seconds>', 'How long to tail when using --listen', '15')
+    .option('--trace', 'After firing, trace which campaigns the event reached')
+    .option('--trace-timeout <seconds>', 'Seconds to wait for steps to appear when using --trace', '8')
+    .option('--trace-webhook <id>', 'With --trace, also check this webhook for dispatches caused by the event')
     .action(async function (eventName) {
       const opts = this.optsWithGlobals();
       if (opts.live && opts.sandbox) {
@@ -33,7 +35,16 @@ export function eventsCommand() {
         process.exit(2);
       }
       const token = resolveToken(opts);
-      const data = {};
+      let data = {};
+      if (opts.data) {
+        try {
+          data = JSON.parse(opts.data);
+          if (typeof data !== 'object' || Array.isArray(data)) throw new Error('must be a JSON object');
+        } catch (error) {
+          console.error(`Error: --data must be a valid JSON object: ${error.message}`);
+          process.exit(2);
+        }
+      }
       if (opts.email) data.email = opts.email;
       if (opts.advocate_code) data.advocate_code = opts.advocate_code;
       if (opts.amount) data.amount = opts.amount;
@@ -43,24 +54,18 @@ export function eventsCommand() {
         data[keyValue.slice(0, separatorIndex)] = keyValue.slice(separatorIndex + 1);
       }
 
-      if (opts.sandbox) data.sandbox = typeof opts.sandbox === 'string' ? opts.sandbox : 'production-test';
+      const sandboxName = opts.sandbox === true ? 'production-test' : (opts.sandbox || null);
+      if (!opts.live) data.sandbox = sandboxName || 'production-test';
 
-      const payload = { event_name: eventName, data };
       if (opts.dryRun) {
-        console.log(JSON.stringify(payload, null, 2));
+        console.log(JSON.stringify(data, null, 2));
         return;
       }
 
-      if (!opts.live && !opts.sandbox) {
-        console.error('Error: --live or --sandbox is required to fire events.');
-        console.error('Use --dry-run to preview the payload, --live to fire for real, or --sandbox to fire in sandbox mode.');
-        process.exit(2);
-      }
-
       const fireTime = new Date().toISOString();
-      const res = await apiFetch('/v5/events', token, {
+      const res = await apiFetch(`/v6/events/${encodeURIComponent(eventName)}`, token, {
         method: 'POST',
-        body: JSON.stringify(payload),
+        body: JSON.stringify(data),
         verbose: opts.verbose,
       });
       const text = await res.text();
@@ -78,13 +83,9 @@ export function eventsCommand() {
       let firedEventId = null;
       try { firedEventId = JSON.parse(text)?.id || null; } catch { /* ignore */ }
 
-      if (opts.route) {
-        if (opts.watch) {
-          console.error('Error: --route and --watch are mutually exclusive.');
-          process.exit(2);
-        }
-        if (!opts.email) {
-          console.error('Error: --route requires --email.');
+      if (opts.trace) {
+        if (opts.listen) {
+          console.error('Error: --trace and --listen are mutually exclusive.');
           process.exit(2);
         }
         if (!firedEventId) {
@@ -92,23 +93,27 @@ export function eventsCommand() {
           process.exit(1);
         }
 
-        const routeTimeout = parseInt(opts.routeTimeout, 10);
-        if (isNaN(routeTimeout) || routeTimeout <= 0) {
-          console.error('--route-timeout must be a positive integer');
+        const traceTimeout = parseInt(opts.traceTimeout, 10);
+        if (isNaN(traceTimeout) || traceTimeout <= 0) {
+          console.error('--trace-timeout must be a positive integer');
           process.exit(2);
         }
 
-        const match = await findPerson(opts.email, token, opts.verbose);
-        if (match) {
-          console.error(`\nTracing route for event ${firedEventId} (waiting up to ${routeTimeout}s for steps)...`);
+        let match = null;
+        if (opts.email) {
+          match = await findPerson(opts.email, token, opts.verbose);
+          if (match) {
+            console.error(`\nTracing route for event ${firedEventId} (waiting up to ${traceTimeout}s for steps)...`);
+          } else {
+            console.error(`\nThe fire succeeded (HTTP 200), but person lookup didn't return a record for ${opts.email}.`);
+            console.error(`  → most likely: identity-key index hasn't propagated yet (race after fire — common right after first contact)`);
+            console.error(`  → person-level diagnostics (step trace, journey check) are skipped; running campaign-wiring diagnostics only`);
+          }
         } else {
-          console.error(`\nThe fire succeeded (HTTP 200), but person lookup didn't return a record for ${opts.email}.`);
-          console.error(`  → most likely: identity-key index hasn't propagated yet (race after fire — common right after first contact)`);
-          console.error(`  → less likely: the email is genuinely new and not yet indexed, or has lookup ambiguity`);
-          console.error(`  → person-level diagnostics (step trace, journey check) are skipped; running campaign-wiring diagnostics only`);
+          console.error(`\nTracing campaign wiring for event "${eventName}" (no --email; skipping person-level diagnostics)...`);
         }
 
-        const deadline = Date.now() + routeTimeout * 1000;
+        const deadline = Date.now() + traceTimeout * 1000;
         const stepsById = new Map();
         let stableCount = 0;
         while (match && Date.now() < deadline) {
@@ -364,7 +369,7 @@ export function eventsCommand() {
             console.log(`  → also: event has no journey assignment. Campaigns scoped to a specific journey (ADVOCATE / FRIEND) require the person to be enrolled in that journey first.`);
           }
 
-          if (sample.container === 'test' && opts.sandbox) {
+          if (sample.container === 'test') {
             console.log(`  → also: --sandbox routed to container=test. By default campaigns accept both containers, but if a LIVE campaign has been restricted to container=production it won't see this event. Check campaign config if other diagnostics don't explain the miss.`);
           }
 
@@ -422,18 +427,18 @@ export function eventsCommand() {
             }
             console.log('');
             console.log(`  → wiring is in place; person-level qualification can't be checked from here.`);
-            console.log(`  → re-run --route once the person record is queryable (a few seconds after the fire) for full diagnostics.`);
+            console.log(`  → re-run --trace once the person record is queryable (a few seconds after the fire) for full diagnostics.`);
           }
         } else if (allSteps.length === 0) {
-          console.log(`\nNo steps caused by event ${firedEventId} after ${routeTimeout}s.`);
+          console.log(`\nNo steps caused by event ${firedEventId} after ${traceTimeout}s.`);
           const subscribers = await findSubscribers();
           if (subscribers !== null && subscribers.length === 0) {
             reportSubscribers(subscribers);
           } else {
             console.log('  → event may have been rejected, processing may be incomplete, or the API call did not produce step records.');
-            console.log('  → try increasing --route-timeout, or fire with --verbose to see the API response.');
+            console.log('  → try increasing --trace-timeout, or fire with --verbose to see the API response.');
             if (subscribers !== null && subscribers.length > 0) {
-              console.log(`  → ${subscribers.length} campaign(s) use "${eventName}" but no steps were generated — unusual; try --route-timeout 30.`);
+              console.log(`  → ${subscribers.length} campaign(s) use "${eventName}" but no steps were generated — unusual; try --trace-timeout 30.`);
             }
           }
         } else if (campaignSteps.length === 0) {
@@ -453,7 +458,7 @@ export function eventsCommand() {
 
           // Even though no campaign matched, probe subscribing campaigns' webhooks — if any DID dispatch
           // despite no step record, that's a surprising signal worth surfacing.
-          if (!opts.routeWebhook && subscribers && subscribers.length > 0) {
+          if (!opts.traceWebhook && subscribers && subscribers.length > 0) {
             const built = await getBuilt();
             const checked = new Set();
             const probes = [];
@@ -498,7 +503,7 @@ export function eventsCommand() {
             }
 
             // Auto-discover webhooks for this campaign and report dispatch outcomes
-            if (!opts.routeWebhook) {
+            if (!opts.traceWebhook) {
               const built = await getBuilt();
               const webhooks = getCampaignWebhooks(built, campaignId);
               if (webhooks.length > 0) {
@@ -517,12 +522,12 @@ export function eventsCommand() {
           }
         }
 
-        if (opts.routeWebhook) {
-          console.log(`Checking webhook ${opts.routeWebhook} for dispatches...`);
+        if (opts.traceWebhook) {
+          console.log(`Checking webhook ${opts.traceWebhook} for dispatches...`);
           let dispatches = [];
           try {
             dispatches = await apiJson(
-              `/v6/webhooks/${opts.routeWebhook}/dispatch-results/recent?limit=50`,
+              `/v6/webhooks/${opts.traceWebhook}/dispatch-results/recent?limit=50`,
               token,
               { verbose: opts.verbose, baseUrl: API_BASE }
             );
@@ -530,7 +535,7 @@ export function eventsCommand() {
             console.log(`  → could not fetch dispatches: ${e.message}`);
           }
           const list = Array.isArray(dispatches) ? dispatches : (dispatches?.results || []);
-          const matching = list.filter(d => d.cause_event_id === firedEventId);
+          const matching = list.filter(d => d.cause_event_id === firedEventId || d.root_event_id === firedEventId);
           if (matching.length === 0) {
             console.log(`  → no dispatches found for cause_event_id=${firedEventId}`);
             console.log(`    (webhook had ${list.length} recent dispatches, none caused by this event)`);
@@ -547,30 +552,30 @@ export function eventsCommand() {
         return;
       }
 
-      if (!opts.watch) return;
+      if (!opts.listen) return;
 
       const email = opts.email;
       if (!email) {
-        console.error('--watch requires --email to be set');
+        console.error('--listen requires --email to be set');
         process.exit(2);
       }
 
-      const watchTimeout = parseInt(opts.watchTimeout, 10);
-      if (isNaN(watchTimeout) || watchTimeout <= 0) {
-        console.error('--watch-timeout must be a positive integer');
+      const listenTimeout = parseInt(opts.listenTimeout, 10);
+      if (isNaN(listenTimeout) || listenTimeout <= 0) {
+        console.error('--listen-timeout must be a positive integer');
         process.exit(2);
       }
 
       const match = await findPerson(email, token, opts.verbose);
       if (!match) {
-        console.error(`No person found for ${email} — cannot watch`);
+        console.error(`No person found for ${email} — cannot listen`);
         process.exit(1);
       }
 
-      const deadline = Date.now() + watchTimeout * 1000;
+      const deadline = Date.now() + listenTimeout * 1000;
       const seen = new Set();
 
-      console.error(`\nWatching steps for ${email} for ${watchTimeout}s...\n`);
+      console.error(`\nWatching steps for ${email} for ${listenTimeout}s...\n`);
 
       while (Date.now() < deadline) {
         try {
@@ -597,25 +602,43 @@ export function eventsCommand() {
         await sleep(POLL_INTERVAL_MS);
       }
 
-      console.error(`\nDone watching (${watchTimeout}s).`);
+      console.error(`\nDone watching (${listenTimeout}s).`);
     });
+
+  fireCmd.addHelpText('after', `
+Usage patterns:
+  1. Choose a target (sandbox is the default):
+       (no flag)       fire in sandbox mode — safe, no flags needed
+       --live          fire against the live production API
+       --dry-run       preview the payload without firing
+
+  2. Pass event data (pick any combination):
+       --email / --amount / --advocate_code   common field shorthands
+       -p key=value                           any field, repeatable
+       --data '{"key":"value"}'               full JSON object, merged with -p
+
+  3. Observe what happens after firing (optional):
+       --listen         tail step activity for this email in real time
+       --trace         show which campaigns the event reached and why
+       --trace-webhook also check a specific webhook for dispatches`);
 
   addGlobalOptions(fireCmd, {
     output: true,
     examples: [
       'extole events fire lead_created --email jane@example.com --dry-run',
-      'extole events fire lead_created --email jane@example.com --live',
       'extole events fire lead_created --email jane@example.com --sandbox',
-      'extole events fire conversion -p amount=500 --live',
-      'extole events fire lead_created --email jane@example.com --live --watch',
-      'extole events fire lead_created --email jane@example.com --live --route',
-      'extole events fire signed_up --email jane@example.com --live --route --route-webhook <id>',
+      'extole events fire lead_created --email jane@example.com --live',
+      'extole events fire conversion --data \'{"email":"jane@example.com","amount":"500"}\' --live',
+      'extole events fire conversion -p email=jane@example.com -p amount=500 --live',
+      'extole events fire lead_created --email jane@example.com --live --listen',
+      'extole events fire lead_created --email jane@example.com --live --trace',
+      'extole events fire signed_up --email jane@example.com --live --trace --trace-webhook <id>',
     ],
   });
 
-  const showCmd = new Command('show')
-    .argument('<event_id>', 'Event ID to look up')
-    .description('Look up a single event by ID (uses EVENT_BY_EVENT_ID report; takes ~30-90s)')
+  const reportCmd = new Command('report')
+    .argument('<event_id>', 'Event ID to look up (runs EVENT_BY_EVENT_ID report; takes ~30-90s)')
+    .description('Look up a single event by ID via report pipeline')
     .allowExcessArguments(false)
     .action(async function (eventId) {
       const opts = this.optsWithGlobals();
@@ -711,16 +734,17 @@ export function eventsCommand() {
       }
     });
 
-  addGlobalOptions(showCmd, {
+  addGlobalOptions(reportCmd, {
     output: true,
     examples: [
-      'extole events show <event_id>',
-      'extole events show <event_id> --json',
-      'extole events show <event_id> --verbose',
+      'extole events report <event_id>',
+      'extole events report <event_id> --json',
+      'extole events report <event_id> --verbose',
     ],
   });
 
-  events.addCommand(showCmd);
+  events.addCommand(reportCmd);
   events.addCommand(fireCmd);
+  events.addCommand(buildStreamCommand('listen'));
   return events;
 }

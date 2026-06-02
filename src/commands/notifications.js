@@ -70,8 +70,8 @@ export function notificationsCommand() {
     .option('--offset <n>', 'Pagination offset (default 0)', '0')
     .option('--level <level>', 'Filter to a level: ERROR, WARN, INFO (case-insensitive). Client-side filter.')
     .option('--tag <tag>', 'Filter to notifications with this tag (server-side; repeatable)', (v, acc) => acc.concat([v]), [])
-    .option('--watch', 'Tail new notifications as they arrive (Ctrl-C to stop)')
-    .option('--interval <seconds>', 'Poll interval for --watch (default 10)', '10')
+    .option('--listen', 'Tail new notifications as they arrive (Ctrl-C to stop)')
+    .option('--interval <seconds>', 'Poll interval for --listen (default 10)', '10')
     .action(async (opts) => {
       const token = resolveToken(opts);
       const userId = MONITORING_USER_ID;
@@ -86,7 +86,7 @@ export function notificationsCommand() {
         ? (n) => (n.level || '').toUpperCase() === opts.level.toUpperCase()
         : () => true;
 
-      if (!opts.watch) {
+      if (!opts.listen) {
         const data = await fetchNotifications(userId, token, params, opts.verbose);
         const list = (Array.isArray(data) ? data : []).filter(filterByLevel);
 
@@ -101,7 +101,7 @@ export function notificationsCommand() {
         return;
       }
 
-      // --watch: follow-tail. Seed seen-set on first poll, then print new ones.
+      // --listen: follow-tail. Seed seen-set on first poll, then print new ones.
       const intervalMs = Math.max(1, Number(opts.interval) || 10) * 1000;
       console.log(`Watching for new platform notifications... (Ctrl-C to stop)\n`);
       const seen = new Set();
@@ -139,7 +139,7 @@ export function notificationsCommand() {
       'extole notifications --limit 50',
       'extole notifications --level ERROR',
       'extole notifications --tag technical',
-      'extole notifications --watch',
+      'extole notifications --listen',
       'extole notifications --json',
     ],
   });

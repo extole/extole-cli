@@ -30,36 +30,27 @@ curl -H "Authorization: Bearer $(extole auth token)" https://api.extole.io/v6/we
 ```
 
 All commands use the default account unless `--account NAME` is specified.
-Set `EXTOLE_ACCOUNT=NAME` in your shell to override without passing it on every command.
-Pass `--token TOKEN` to override the token for a single call without saving.
 
-### Superuser access
+**Prefer environment variables over command-line arguments for tokens** — tokens passed on the command line are visible in shell history and process lists. Use environment variables instead:
 
-If you have a superuser token, use `auth su` to mint a client-scoped token (valid 2 hours) and save it as a named account:
-
-```
-extole auth su --token SU_TOKEN --client CLIENT_ID
+```bash
+export EXTOLE_TOKEN=your-token-here     # use this token for all commands
+export EXTOLE_ACCOUNT=acme              # use this account for all commands
 ```
 
-The account is named after the client ID by default. Use `--account` to override, and `--set-default` to make it the default account:
+Both variables are read automatically by every command. `--token` and `--account` flags are available as overrides but should not be the primary way you supply credentials in scripts or CI.
 
-```
-extole auth su --token SU_TOKEN --client CLIENT_ID --account acme --set-default
-```
-
-When it expires (2 hours), run the same command again to re-mint.
 
 ## ping / whoami
 
 ```
 extole ping                                # verify connectivity (exit 0 = OK)
-extole whoami                              # show current account, token, and base URLs
-extole whoami --ping                       # same + connectivity check with latency
+extole whoami                              # verify token and show client identity, scopes, and expiry
 extole whoami --account other-client      # check a non-default account
 extole whoami --json
 ```
 
-`whoami` reads from local config — no API call unless `--ping` is passed. Useful when switching between multiple saved accounts.
+`whoami` calls `/v4/tokens` to verify the token is valid and returns the client name, scopes, token type, and days until expiry.
 
 ## Rewards
 
@@ -87,32 +78,6 @@ Error messages are unambiguous about whether the person exists:
 
 > A note on "REDEEMED": Extole transitions a reward to `REDEEMED` when it receives a redemption signal from the merchant's commerce backend (a redemption event or webhook). If that integration isn't wired up, a coupon can be used at checkout and the reward stays in `SENT` forever. So `REDEEMED` means "someone told Extole it was used," not "definitely used at point of sale."
 
-### wismr — "Where Is My Reward"
-
-```
-extole wismr --email jane@example.com                              # walk her most recent 5 rewards
-extole wismr --email jane@example.com --limit 3
-extole wismr --email jane@example.com --json
-extole wismr --email advocate@example.com,friend@example.com       # explicitly walk a pair
-```
-
-When a reward references a referral counterpart via `data.other_person_id`, `wismr` **automatically follows and investigates that person too** — no need to know their email upfront. Run it with just the customer's email and you get both sides of the referral in one call.
-
-Comma-separated emails can still be passed explicitly — useful for multiple support tickets that look related, or people not directly linked via rewards.
-
-When investigated people reference each other via `data.other_person_id`, a **Detected relationships** footer appears. Bidirectional links are merged into one line with both roles, ordered advocate-side first:
-
-```
-  23war20@gmail.com (advocate)  →  penajohnny325@gmail.com
-      campaign:  7629430860101024140
-      journey:   advocate_reward_on_friend_account_qualified_burst_reward
-```
-
-In JSON mode, multi-person results return `{ results: [...], relationships: [...] }`; single-person queries return the per-person object directly.
-
-The canonical reward-issuance diagnostic. A composite of person lookup, `rewards`, `rewards history`, `campaigns reward-rules`, and `reward-suppliers get`: for each of the person's recent rewards it prints the state, history timeline, the rule that fired, the supplier that minted it, and a state-aware diagnosis with the most likely next step (where to look, what to check).
-
-If the person has zero rewards, `wismr` scans their recent step history for `*_reward_rule_evaluated` entries with `LOW` quality — the most common "rewards is empty but should not be" cause. When found (e.g., risk-evaluation declined, reward-limit hit, has-email-address failed), it surfaces the failing rule, its description, the campaign + journey, and a remediation hint (manual issuance, threshold review). When no rule-eval failures are visible, it falls back to suggesting `person steps` and `events fire --route` for upstream debugging.
 
 ## Reward Suppliers
 
@@ -152,8 +117,8 @@ extole audiences members <name|id> --email-only             # emails only, one p
 extole audiences members <name|id> --limit 500 --offset 0   # paginate
 
 extole audiences history <name|id>                          # recent ADD / REMOVE / REPLACE / ACTION runs
-extole audiences history <name|id> --watch                  # tail new runs as they arrive (Ctrl-C to stop)
-extole audiences history <name|id> --watch --interval 3     # custom poll interval (default 5s)
+extole audiences history <name|id> --listen                  # tail new runs as they arrive (Ctrl-C to stop)
+extole audiences history <name|id> --listen --interval 3     # custom poll interval (default 5s)
 ```
 
 The `<audience>` argument resolves in this order: exact ID, exact name, then case-insensitive substring of name. If multiple audiences match the substring, the CLI lists them and asks for a more specific input.
@@ -192,11 +157,11 @@ extole notifications                          # last 20 most-recent-first
 extole notifications --limit 50               # paginate (default 20)
 extole notifications --level ERROR            # ERROR / WARN / INFO filter
 extole notifications --tag technical          # tag filter (server-side; repeat for multiple)
-extole notifications --watch                  # tail new ones as they arrive (default 10s poll)
+extole notifications --listen                  # tail new ones as they arrive (default 10s poll)
 extole notifications --json                   # raw response, suitable for scripting
 ```
 
-Each notification shows time, level, name (e.g. `webhook_action_no_webhook`), the human message, and the key data fields (campaign_id, controller_id, person_id, cause_event_id) — most of which feed straight into other CLI commands (`extole events fire ... --route` with the cause_event_id, etc.).
+Each notification shows time, level, name (e.g. `webhook_action_no_webhook`), the human message, and the key data fields (campaign_id, controller_id, person_id, cause_event_id) — most of which feed straight into other CLI commands (`extole events fire ... --trace` with the cause_event_id, etc.).
 
 ## Health
 
@@ -322,10 +287,10 @@ node ~/projects/webhook-listen.js --create-webhook --account acme  # also create
 
 The script prints each inbound request — method, headers, pretty-printed JSON body — and deletes the webhook on Ctrl-C if it created one.
 
-`listen` is a lower-level alternative that wires a URL to a campaign event and tails dispatch results directly from the API:
+`webhooks trace` temporarily wires a URL to a campaign event and tails dispatch results directly from the API — no external tunnel needed:
 
 ```
-extole webhooks listen \
+extole webhooks trace \
   --url https://my-server.com/hook \
   --campaign <campaign-id> \
   --event signed_up \
@@ -341,35 +306,38 @@ extole webhooks dispatches <webhook-id> --limit 50
 extole webhooks dispatch-results <webhook-id>      # HTTP outcomes: response codes + bodies
 extole webhooks dispatch-results <webhook-id> --json
 
-extole webhooks watch <webhook-id>                 # tail dispatch results in real time (Ctrl-C to stop)
-extole webhooks watch <webhook-id> --interval 5   # custom poll interval (default 3s)
-extole webhooks watch <webhook-id> --show-body    # print full response body per row
-extole webhooks watch <webhook-id> --duration 60  # auto-exit after 60 seconds
+extole webhooks listen <webhook-id>                 # tail dispatch results in real time (Ctrl-C to stop)
+extole webhooks listen <webhook-id> --interval 5   # custom poll interval (default 3s)
+extole webhooks listen <webhook-id> --show-body    # print full response body per row
+extole webhooks listen <webhook-id> --duration 60  # auto-exit after 60 seconds
 ```
 
-`dispatches` = one record per dispatch attempt. `dispatch-results` = HTTP response side — use this to debug failures (non-200s, timeouts, error bodies). `watch` is the live-tail version of `dispatch-results` — seeds the seen-set on first poll so it only shows new attempts.
+`dispatches` = one record per dispatch attempt. `dispatch-results` = HTTP response side — use this to debug failures (non-200s, timeouts, error bodies). `listen` is the live-tail version of `dispatch-results` — seeds the seen-set on first poll so it only shows new attempts.
 
 ## Stream
 
+`extole events listen` is the preferred way to tail live events. `extole stream` is the underlying command and accepts the same options.
+
 ```
-extole stream                                         # all events (noisy on prod)
-extole stream --event-type INPUT                      # filter by event type (repeatable)
-extole stream --event-type INPUT --event-type REWARD
-extole stream --filter lead_created                   # filter by event name (repeatable)
-extole stream --email jane@example.com                # filter to one person
-extole stream --app-type my_integration               # filter by source (repeatable)
-extole stream --sandbox container-test                # filter by sandbox/container
-extole stream --duration 30                           # auto-exit after 30 seconds
-extole stream --json                                  # newline-delimited JSON
+extole events listen                                      # all events (noisy on prod — add filters)
+extole events listen --event-type INPUT                   # filter by event type (repeatable)
+extole events listen --event-type INPUT --event-type REWARD
+extole events listen --filter lead_created                # filter by event name (repeatable)
+extole events listen --email jane@example.com             # filter to one person
+extole events listen --app-type my_integration            # filter by source (repeatable)
+extole events listen --sandbox container-test             # filter by sandbox/container
+extole events listen --duration 30                        # auto-exit after 30 seconds
+extole events listen --tail 10                            # exit after 10 events (non-interactive tools)
+extole events listen --json                               # newline-delimited JSON
 ```
 
-Creates an ephemeral `/v6/event-streams` session, applies filters, polls every 2.5s, and deletes the stream on Ctrl+C or when `--duration` expires.
+Creates an ephemeral `/v6/event-streams` session, applies filters, polls every 2.5s, and deletes the stream on Ctrl+C or when `--duration`/`--tail` is reached.
 
 **Recommended starting filters for production clients** (unfiltered streams are very noisy):
 ```
-extole stream --event-type INPUT                     # business events fired by integrations
-extole stream --event-type INPUT --event-type REWARD # business events + reward issuance
-extole stream --app-type my_integration              # only events from a specific integration
+extole events listen --event-type INPUT                      # business events fired by integrations
+extole events listen --event-type INPUT --event-type REWARD  # business events + reward issuance
+extole events listen --app-type my_integration               # only events from a specific integration
 ```
 
 **Event type reference:**
@@ -393,29 +361,32 @@ extole stream --app-type my_integration              # only events from a specif
 ## Events
 
 ```
+extole events fire <event_name>                               # fire in sandbox mode (default — safe)
 extole events fire <event_name> --live                        # fire against the live production API
-extole events fire <event_name> --sandbox                     # fire in sandbox mode (defaults to production-test)
-extole events fire <event_name> --sandbox my-sandbox          # fire in a specific sandbox
+extole events fire <event_name> --sandbox my-sandbox          # fire in a specific named sandbox
+extole events fire lead_created --email jane@example.com
 extole events fire lead_created --email jane@example.com --live
-extole events fire lead_created --email jane@example.com --sandbox
 
 extole events fire <event_name> --param key=value [--param key=value ...] --live
+extole events fire <event_name> --data '{"email":"jane@example.com","amount":"500"}'
 extole events fire <event_name> --dry-run                     # print payload without sending
-extole events fire <event_name> --live --watch                # fire then tail steps for --email for 15s
-extole events fire <event_name> --live --watch --watch-timeout 30
 
-extole events fire <event_name> --email <e> --live --route                         # trace which campaigns the event reached
-extole events fire <event_name> --email <e> --live --route --route-webhook <id>    # also check that webhook for dispatches caused by this event
-extole events fire <event_name> --email <e> --live --route --route-timeout 15      # wait longer for slower processing
+extole events report <event_id>                               # look up a past event by ID (uses report pipeline, ~30-90s)
+extole events fire <event_name> --live --listen               # fire then tail steps for --email for 15s
+extole events fire <event_name> --live --listen --listen-timeout 30
+
+extole events fire <event_name> --email <e> --live --trace                          # trace which campaigns the event reached
+extole events fire <event_name> --email <e> --live --trace --trace-webhook <id>    # also check that webhook for dispatches caused by this event
+extole events fire <event_name> --email <e> --live --trace --trace-timeout 15      # wait longer for slower processing
 ```
 
-Either `--live` or `--sandbox` is required to send an event. Use `--dry-run` to preview the payload safely.
+Sandbox mode is the default — no flags needed for safe testing. Use `--live` to fire against production. Use `--dry-run` to preview the payload without sending.
 
 `--sandbox` adds a `sandbox` param to the event data (default: `production-test`). Pass a value to target a different sandbox: `--sandbox my-sandbox`.
 
-### Route tracing (`--route`)
+### Trace (`--trace`)
 
-Use `--route` after firing to see exactly which campaigns the event reached. Steps are filtered by `cause_event_id` matching the fired event, then grouped by campaign:
+Use `--trace` after firing to see exactly which campaigns the event reached. Steps are filtered by `cause_event_id` matching the fired event, then grouped by campaign:
 
 ```
 Reached 1 campaign(s):
@@ -425,7 +396,7 @@ Reached 1 campaign(s):
     16:20:02  advocate_mobile_experience_rendered
 ```
 
-If no campaign matched, `--route` checks `/v2/campaigns/built` to determine *why* and reports the actual cause rather than speculating:
+If no campaign matched, `--trace` checks `/v2/campaigns/built` to determine *why* and reports the actual cause rather than speculating:
 
 **Case A — event isn't wired to any campaign:**
 ```
@@ -458,7 +429,7 @@ No campaigns matched.
 
 This distinction is the difference between "your wiring is wrong" and "your wiring is right but a filter excluded the test person" — two very different fixes.
 
-`--route` automatically discovers webhooks attached to campaigns using this event and probes each for dispatches caused by the fired event. Use `--route-webhook <id>` to override and check a specific webhook directly.
+`--trace` automatically discovers webhooks attached to campaigns using this event and probes each for dispatches caused by the fired event. Use `--trace-webhook <id>` to override and check a specific webhook directly.
 
 ## Person
 
@@ -467,9 +438,13 @@ extole person get --email jane@example.com         # profile data
 
 extole person steps --email jane@example.com       # step history (default 25)
 extole person steps --email jane@example.com --limit 100
-extole person steps --email jane@example.com --watch        # tail live steps (Ctrl+C to stop)
-extole person steps --email jane@example.com --duration 30  # tail and auto-exit after 30s
-extole person steps --email jane@example.com --watch --json
+extole person steps --email jane@example.com --listen        # tail live steps (Ctrl+C to stop)
+extole person steps --email jane@example.com --duration 30   # tail and auto-exit after 30s
+extole person steps --email jane@example.com --listen --json
+
+extole person rewards --email jane@example.com              # rewards for this person
+extole person rewards --email jane@example.com --status EARNED
+extole person rewards --email jane@example.com --json
 
 extole person relationships --email jane@example.com        # advocate↔friend referral relationships
 extole person relationships --email jane@example.com --json
@@ -550,7 +525,7 @@ Extole's configuration is built from **components** — typed, composable buildi
 
 **Components wire together via sockets.** A rule component references a reward-supplier via a named socket. `--sockets` shows what a component connects to; `--tree` shows the full downstream subgraph.
 
-**The agentic pattern: learn from examples.** There is no static schema doc for what a `reward-supplier-v10.0` requires. The reliable approach is to find a known-good instance (`extole components --filter-type reward-supplier-v10`), read its full config (`extole components get <id>`), and reason from that. `extole mcp` can also answer type-specific questions.
+**The agentic pattern: learn from examples.** There is no static schema doc for what a `reward-supplier-v10.0` requires. The reliable approach is to find a known-good instance (`extole components --filter-type reward-supplier-v10`), read its full config (`extole components get <id>`), and reason from that. `extole chat` can also answer type-specific questions.
 
 ```
 extole components                                  # all components, account-wide
@@ -667,11 +642,11 @@ extole feedback the --filter-state flag should mention it is REWARD-only in the 
 extole feedback auth login flow was confusing at first, needed to read the README
 ```
 
-Sends a message directly to the Extole CLI team's Slack channel. Includes your account name and CLI version automatically — no sign-up or setup required.
+Creates a Jira ticket via the Extole AI agent. Includes your account name and CLI version automatically.
 
-## AI (extole mcp)
+## AI (extole chat)
 
-`extole mcp` gives you access to an Extole AI agent with deep knowledge of Extole's API surface, program configuration model, event semantics, component type system, and reward flows. Use it **before** exploring the API blindly — it can tell you which endpoint to use, what parameters it accepts, what the response shape is, and how concepts relate to each other.
+`extole chat` gives you access to an Extole AI agent with deep knowledge of Extole's API surface, program configuration model, event semantics, component type system, and reward flows. Use it **before** exploring the API blindly — it can tell you which endpoint to use, what parameters it accepts, what the response shape is, and how concepts relate to each other.
 
 Good uses:
 - **API discovery**: "what endpoint do I use to filter steps by a specific event?"
@@ -681,19 +656,13 @@ Good uses:
 - **Schema lookup**: "what fields does the reward-supplier component type require?"
 
 ```
-extole mcp "what endpoint filters person steps by cause event id?"
-extole mcp "why aren't events firing for jane@example.com"
-extole mcp "explain the reward supplier types available"
-extole mcp "what's the difference between causeEventIds and rootEventIds on steps?"
+extole chat "what endpoint filters person steps by cause event id?"
+extole chat "why aren't events firing for jane@example.com"
+extole chat "explain the reward supplier types available"
+extole chat "what's the difference between causeEventIds and rootEventIds on steps?"
 ```
 
-Requires MCP authentication (separate from the Extole API token):
-
-```
-extole auth mcp-login
-```
-
-Opens a browser for login. Token is saved automatically and refreshed as needed. Re-run `mcp-login` if the session expires.
+Uses your stored Extole token — no separate login required.
 
 ## Share Links
 
