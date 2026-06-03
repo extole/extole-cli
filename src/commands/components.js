@@ -604,6 +604,8 @@ export function componentsCommand() {
     ],
   });
 
+  deleteCmd._mcpDescription = 'Delete a component by ID. DESTRUCTIVE — deleting a root component archives the entire campaign and all its child components. Use --dry-run first to confirm what will be deleted. Call this only when the user explicitly requests deletion and has confirmed the target component-id. For investigation, use components_get --tree to inspect the subtree before acting.';
+
   components._mcpDescription = 'List and browse components on the account. Components are the building blocks of Extole campaigns — each campaign has a root component and a tree of child components (integrations, extensions, reward rules, etc.). Returns component_id, name, type, and campaign. Use components_get for full config, or components_get with --tree for the full subtree under a campaign root.';
   getCmd._mcpDescription = 'Show full configuration for a component — settings, type, tags, and parent campaign. Use --tree to show the entire downstream subtree rooted at this component (useful for mapping a full campaign structure). Use --sockets to see references to other components. Start here when diagnosing a misconfigured integration or verifying a deploy landed correctly.';
   typesCmd._mcpDescription = 'List all registered component type families (e.g. integration-v1, extension, business-event-v10). Use to discover valid --type values for components_create. Registered types enforce a settings schema; omit --type in components_create for custom/untyped components.';
