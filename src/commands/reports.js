@@ -390,7 +390,7 @@ export function reportsCommand() {
     ],
   });
 
-  reports._mcpDescription = 'Entry point for the reports namespace. Lists saved report runners. The workflow is: reports_recommended or reports_types → reports_describe → reports_run → reports_download. Do not confuse with reports_run which is the actual execution command — this base command only lists runners.';
+  reports._mcpDescription = 'List saved report runners on the account. Rarely needed directly — start with reports_recommended to find the right report type, then reports_run to execute it. Call this only when the user specifically asks to see existing saved runners or scheduled reports. Do not call this as a preamble to reports_run; reports_run does not require a saved runner.';
   typesCmd._mcpDescription = 'List all available report types on the account. Use a type name from here as the --type argument to reports_describe to see required parameters before running. For curated starting points prefer reports_recommended over browsing this full list.';
   recommendedCmd._mcpDescription = 'Get curated report type recommendations for this account. Returns the most useful report types with descriptions. Use as a starting point when you don\'t know which report to run — the recommendations are tailored to what\'s configured on this specific account.';
   describeCmd._mcpDescription = 'Show all parameters for a report type — required vs optional, type (TIME_RANGE, STRING, ENUM, etc.), defaults, and allowed values. This is the contract for reports_run. Read this before running any report to understand what parameters it accepts.';
