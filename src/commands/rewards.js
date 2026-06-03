@@ -733,7 +733,7 @@ export function rewardsCommand() {
     ],
   });
 
-  cmd._mcpDescription = 'List rewards for a person by email. Returns reward_id, state (EARNED/FULFILLED/SENT/REDEEMED/CANCELED/FAILED), face value, journey, and created date. Use --status to filter. Feed reward_id into rewards_get for full detail or rewards_history to debug a stuck reward.';
+  cmd._mcpDescription = 'List rewards for a person by email — the entry point for the rewards investigation namespace. Returns reward_id, state, face value, and journey. Prefer person_rewards when you are already investigating a person and only need to see their rewards. Use this (rewards) when you need to chain into rewards_get, rewards_history, rewards_find-coupon, or rewards_state-summary, since those sub-commands live under this namespace. Use --status to filter by state.';
   getCmd._mcpDescription = 'Get full detail for a single reward by reward_id. Returns coupon code (partner_reward_id), reward supplier, campaign, face value, all state metadata, and optionally the recipient\'s step history (--steps). Use when a customer asks "what coupon code did I get?" or to confirm fulfillment details.';
   historyCmd._mcpDescription = 'Show the state-transition timeline for a reward — EARNED → FULFILLED → SENT → REDEEMED. Each row shows when the state changed and whether it succeeded. The definitive answer for "why is this reward stuck?" — the failure reason appears on the failed transition row.';
   stateSummaryCmd._mcpDescription = 'Account-wide reward counts bucketed by state (EARNED, FULFILLED, SENT, REDEEMED, CANCELED, FAILED) over a time window. Use for ops health checks — a spike in FAILED rewards indicates a fulfillment problem. Use rewards_list with --state for individual reward records.';
