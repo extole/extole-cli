@@ -71,6 +71,8 @@ export function programsCommand() {
       }
     });
 
+  cmd._mcpDescription = 'List all campaigns on the account. Returns campaign_id, name, and status. campaign_id is the key input for campaigns_reward-rules, campaigns_maxmind, campaigns_quality-rules, and webhooks_attach. Use to discover campaign IDs when you only have a name.';
+
   return addGlobalOptions(cmd, {
     output: true,
     examples: [

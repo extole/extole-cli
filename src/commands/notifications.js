@@ -132,7 +132,7 @@ export function notificationsCommand() {
       process.on('SIGTERM', cleanup);
     });
 
-  cmd._mcpDescription = 'Show recent platform notifications — webhook failures, integration errors, campaign processing errors, and other actionable system alerts. Each notification includes campaign_id, controller_id, person_id, and cause_event_id which feed directly into other CLI tools. Use when debugging "the integration is wired up but nothing is happening" — notifications often name the exact failure. Use --level ERROR to filter to actionable issues only.';
+  cmd._mcpDescription = 'Show recent platform notifications. First stop when investigating silent failures — surfaces webhook dispatch errors, integration faults, campaign publishing errors, and operational alerts that don\'t appear in person or reward flows. Use when a webhook appears to not be firing and events_listen shows no activity. Each notification includes campaign_id, controller_id, person_id, and cause_event_id that feed into other tools. Use --level ERROR to filter to actionable issues only.';
 
   return addGlobalOptions(cmd, {
     output: true,

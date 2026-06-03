@@ -604,6 +604,11 @@ export function componentsCommand() {
     ],
   });
 
+  components._mcpDescription = 'List and browse components on the account. Components are the building blocks of Extole campaigns — each campaign has a root component and a tree of child components (integrations, extensions, reward rules, etc.). Returns component_id, name, type, and campaign. Use components_get for full config, or components_get with --tree for the full subtree under a campaign root.';
+  getCmd._mcpDescription = 'Show full configuration for a component — settings, type, tags, and parent campaign. Use --tree to show the entire downstream subtree rooted at this component (useful for mapping a full campaign structure). Use --sockets to see references to other components. Start here when diagnosing a misconfigured integration or verifying a deploy landed correctly.';
+  typesCmd._mcpDescription = 'List all registered component type families (e.g. integration-v1, extension, business-event-v10). Use to discover valid --type values for components_create. Registered types enforce a settings schema; omit --type in components_create for custom/untyped components.';
+  deployCmd._mcpDescription = 'Bundle a local component directory (containing component.json) and upload it to the platform. Use --component to update an existing component, omit to create new. Use --dry-run to preview the resolved component.json after include expansion without uploading. Use --publish to publish the parent campaign immediately after upload.';
+
   components.addCommand(setCmd);
 
   return components;

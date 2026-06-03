@@ -202,11 +202,11 @@ Examples:
   const tokenCmd = auth.commands.find(c => c.name() === 'token');
 
   if (loginCmd) loginCmd._mcpDescription = 'Save an Extole API token for an account. Call this when the user provides a new token or when a tool returns a 401/403 error indicating the current token is invalid or expired. Use --account to name it and --set-default to make it the active account.';
-  if (logoutCmd) logoutCmd._mcpDescription = 'Remove a saved account token. Call this when the user explicitly asks to log out or remove credentials for an account. Does not revoke the token on the Extole side.';
+  if (logoutCmd) logoutCmd._mcpDescription = 'Remove a saved account token from local storage. After logout, tool calls targeting that account will fail with a 401 until a new token is saved via auth_login. Does not invalidate the token on the Extole server — only removes the local copy. Use auth_list first to confirm which accounts are configured.';
   if (listCmd) listCmd._mcpDescription = 'List all saved Extole accounts with masked tokens and the default marker. Call this when the user asks which accounts are configured, or when you need to know what account names are available before switching. Use whoami to verify the active token is working.';
   if (statusCmd) statusCmd._mcpDescription = 'Verify a saved token is valid and measure API latency. Call this when troubleshooting authentication issues or confirming a newly saved token works before using it. Returns account name, masked token, and ping latency.';
-  if (defaultCmd) defaultCmd._mcpDescription = 'Set the default account for all commands. Call this when the user wants to switch which Extole account they are working with. Use auth_list to see available account names first.';
-  if (tokenCmd) tokenCmd._mcpDescription = 'Print the raw bearer token for an account. Call this only when another tool explicitly needs the raw token value. Prints a credential warning to stderr. Prefer using --account on other tools rather than extracting the raw token.';
+  if (defaultCmd) defaultCmd._mcpDescription = 'Set the default account used when no --account flag is passed. Prefer --account per-call when running one-off commands against a non-default account to avoid silently changing the default for subsequent calls.';
+  if (tokenCmd) tokenCmd._mcpDescription = 'Print the raw bearer token for a saved account. SECURITY SENSITIVE — output is a live credential. Use only when a downstream tool or script requires the raw token. Use whoami to verify token validity without exposing the raw value.';
 
   return auth;
 }
