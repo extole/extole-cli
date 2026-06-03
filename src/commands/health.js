@@ -260,6 +260,8 @@ export function healthCommand() {
     ],
   });
 
+  healthCmd._mcpDescription = 'Check domain and email deliverability health for the account. First stop when emails are not sending or program domains appear broken. Validates SPF, DMARC, DKIM, MX, and A records for email domains, and CNAME/A records for program domains. All checks are read-only — nothing is created or modified.';
+
   healthCmd.addCommand(dkimCmd);
 
   return healthCmd;
