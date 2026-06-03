@@ -231,8 +231,6 @@ Examples:
       console.log(`\nTo connect any MCP-compatible client (Cursor, VS Code, etc.), add to its mcpServers config:\n\n${snippet}\n`);
       if (!anyFound) {
         console.log('No supported AI clients detected. Supported: Claude Desktop, Claude Code.');
-      } else {
-        console.log('Restart your AI client(s) to activate extole-cli.');
       }
     });
 
