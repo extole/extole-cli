@@ -720,6 +720,16 @@ export function webhooksCommand() {
     ],
   });
 
+  webhooks._mcpDescription = 'List outbound webhooks configured on this account. Returns webhook_id, type (GENERIC/CLIENT/REWARD/PARTNER), name, enabled status, and destination URL. webhook_id feeds into webhooks_get, webhooks_dispatches, webhooks_dispatch-results, and webhooks_listen.';
+  getCmd._mcpDescription = 'Get full configuration for a webhook by webhook_id. Returns URL, HTTP method, tags, retry intervals, and for REWARD webhooks also the state/supplier filters. Use --built to see inherited defaults applied. Tags reveal which component integrations use this webhook.';
+  createCmd._mcpDescription = 'Create an outbound webhook. GENERIC fires for person/journey events; CLIENT fires for admin/operational events (config changes, report completions); REWARD fires on reward state transitions; PARTNER is manual-dispatch only. Returns webhook_id.';
+  deleteCmd._mcpDescription = 'Archive a webhook by webhook_id. Fails with a helpful error listing the controller actions still wired to it if it\'s still attached to campaigns — detach those first with webhooks_attach or by deleting the controller.';
+  attachCmd._mcpDescription = 'Wire a webhook to a campaign so that matching events trigger a dispatch. Creates a controller with an event trigger and webhook action, then publishes the campaign. Use --event for the event name and --skip-publish when attaching multiple events to publish once at the end.';
+  dispatchesCmd._mcpDescription = 'Show recent dispatch attempts for a webhook — the outbound HTTP request records. Use to confirm Extole tried to send (attempt records). Pair with webhooks_dispatch-results for the HTTP response side. Returns event_id, timestamp, and cause_event_id.';
+  dispatchResultsCmd._mcpDescription = 'Show recent dispatch results for a webhook — HTTP response codes, response bodies, and request bodies. Use to debug integration failures: non-200 status codes, error messages, timeouts. The definitive answer for "did Extole send this and what did the endpoint say back?"';
+  listenCmd._mcpDescription = 'Tail dispatch results for an existing webhook in real time. Polls every 3s and prints new dispatch attempts with HTTP status and body. Use --duration or --tail to set a time/count limit for non-interactive use. Best for watching a live integration in action.';
+  traceCmd._mcpDescription = 'Temporarily wire a URL to a campaign event and tail incoming dispatches — creates a webhook + controller, publishes the campaign, polls for results, then tears everything down on exit. Use for end-to-end integration testing when you want to inspect raw payloads hitting your endpoint.';
+
   webhooks.addCommand(getCmd);
   webhooks.addCommand(createCmd);
   webhooks.addCommand(deleteCmd);

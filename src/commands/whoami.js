@@ -5,9 +5,11 @@ import { printJson } from '../output.js';
 import { addGlobalOptions } from '../utils.js';
 
 export function whoamiCommand() {
+  const cmd = new Command('whoami')
+    .description('Verify the current token and show client identity and scopes');
+  cmd._mcpDescription = 'Verify the stored Extole token and return client identity. Returns client_name, client_id, scopes (CLIENT_ADMIN, USER_SUPPORT, CLIENT_SUPERUSER), token type, and days until expiry. Call this first to confirm authentication is working and to get the client_id for context. A 401 or 403 means the token needs refreshing via auth_login.';
   return addGlobalOptions(
-    new Command('whoami')
-      .description('Verify the current token and show client identity and scopes')
+    cmd
       .allowExcessArguments(false)
       .action(async function () {
         const options = this.optsWithGlobals();

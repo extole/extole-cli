@@ -390,6 +390,14 @@ export function reportsCommand() {
     ],
   });
 
+  reports._mcpDescription = 'List saved report runners on this account. The reports namespace provides the full discovery → describe → run workflow for any Extole report type. Start with reports_recommended or reports_types to find a report, use reports_describe to see its parameters, then reports_run to execute it.';
+  typesCmd._mcpDescription = 'List all available report types on this account. Use --filter to search by name, description, or category. Returns report_type (the ID to pass to reports_run), display_name, and executor_type. The starting point for discovering what data is available.';
+  recommendedCmd._mcpDescription = 'Get curated report type recommendations for this account. Returns the most useful report types with descriptions. Use as a starting point when you don\'t know which report to run — the recommendations are tailored to what\'s configured on this specific account.';
+  describeCmd._mcpDescription = 'Show all parameters for a report type — required vs optional, type (TIME_RANGE, STRING, ENUM, etc.), defaults, and allowed values. This is the contract for reports_run. Read this before running any report to understand what parameters it accepts.';
+  runCmd._mcpDescription = 'Create and run an on-demand report. Use --type for the report type (from reports_types), -p key=value for parameters, --days N as a shortcut for time_range. Use --download to stream results directly to stdout. Returns report_id immediately; use --wait to poll until done. Results are JSON or JSONL.';
+  statusCmd._mcpDescription = 'Check the status of a running report by report_id. Returns status (RUNNING/DONE/FAILED/CANCELLED) and created timestamp. Use when you started a report with reports_run and want to know if it\'s ready to download.';
+  downloadCmd._mcpDescription = 'Download the results of a completed report by report_id. Streams output to stdout. Use --wait to poll until the report finishes before downloading. Pipe through jq for filtering. Results are typically JSON or JSONL format.';
+
   reports.addCommand(typesCmd);
   reports.addCommand(recommendedCmd);
   reports.addCommand(describeCmd);

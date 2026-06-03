@@ -9,6 +9,19 @@ export const SERVE_EXCLUDED = new Set([
   'serve',             // would spawn a second MCP server
 ]);
 
+// Tools that mutate state — marked destructive so MCP clients can prompt appropriately.
+// Everything else is read-only (GET operations) and auto-approved by supporting clients.
+const DESTRUCTIVE_TOOLS = new Set([
+  'auth_login', 'auth_logout', 'auth_default',
+  'events_fire',
+  'webhooks_create', 'webhooks_delete', 'webhooks_attach', 'webhooks_trace',
+  'components_create', 'components_delete', 'components_deploy', 'components_set',
+  'health_provision-dkim',
+  'reports_run',
+  'zones_call',
+  'audiences_history',  // can trigger pushes
+]);
+
 const GLOBAL_PROPERTIES = {
   account: { type: 'string', description: 'Saved account name (or set EXTOLE_ACCOUNT)' },
   token:   { type: 'string', description: 'Override token for this call (or set EXTOLE_TOKEN)' },
@@ -49,7 +62,7 @@ function buildToolEntry(cmd, name, path) {
   const properties = { ...GLOBAL_PROPERTIES };
   const required = [];
   const positional = [];
-  const hasJson = (cmd.options ?? []).some(o => o.attributeName?.() === 'json');
+  const hasJson = (cmd.options ?? []).some(o => o.long === '--json');
 
   for (const arg of cmd.registeredArguments ?? cmd._args ?? []) {
     const argName = arg.name();
@@ -76,7 +89,7 @@ function buildToolEntry(cmd, name, path) {
 
   return {
     name,
-    description: cmd.description() || '',
+    description: cmd._mcpDescription || cmd.description() || '',
     inputSchema: {
       type: 'object',
       properties,
@@ -116,7 +129,18 @@ export function buildTools(program) {
   return tools;
 }
 
-// Strip internal metadata fields for MCP wire format
+// Strip internal metadata fields for MCP wire format.
+// Adds MCP annotations so clients like Claude Desktop can auto-approve read-only tools.
 export function toMcpTool({ name, description, inputSchema }) {
-  return { name, description, inputSchema };
+  const destructive = DESTRUCTIVE_TOOLS.has(name);
+  return {
+    name,
+    description,
+    inputSchema,
+    annotations: {
+      readOnlyHint: !destructive,
+      destructiveHint: destructive,
+      idempotentHint: !destructive,
+    },
+  };
 }

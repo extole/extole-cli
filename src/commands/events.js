@@ -743,6 +743,9 @@ Usage patterns:
     ],
   });
 
+  reportCmd._mcpDescription = 'Look up a single event by ID using the EVENT_BY_EVENT_ID report pipeline. Returns the full ConsumerEvent — event name, type, person_id, email, campaign_id, step, cause_event_id, root_event_id, parameters, labels, score_status, and log_messages. Takes ~30-90s. Use when you have an event_id and need to understand what happened and why.';
+  fireCmd._mcpDescription = 'Fire a named consumer event for testing. Defaults to sandbox mode (safe) — pass --live for production. Use --trace to immediately see which campaigns the event reached and why (or why not). Use --data \'{"email":"...", "amount":"..."}\' for the full event payload. Returns event_id which feeds into events_report.';
+
   events.addCommand(reportCmd);
   events.addCommand(fireCmd);
   events.addCommand(buildStreamCommand('listen'));
