@@ -213,7 +213,7 @@ export function rewardSuppliersCommand() {
     ],
   });
 
-  cmd._mcpDescription = 'List all reward suppliers configured on this account — manual coupon batches, Tango/BHN gift cards, PayPal payouts, custom suppliers. Returns supplier_id, type, name, face value, and enabled status. Use supplier_id with reward-suppliers_get for full config or reward-suppliers_coupons to check inventory levels.';
+  cmd._mcpDescription = 'START HERE for reward supplier investigations. Lists all reward suppliers — manual coupon batches, Tango/BHN gift cards, PayPal payouts, custom suppliers. Returns supplier_id, type, name, face value, and enabled status. Next steps: reward-suppliers_get for full config of one supplier, reward-suppliers_coupons to check coupon inventory. Note: rewards_suppliers and rewards_suppliers_get are aliases excluded from MCP — always use the reward-suppliers namespace.';
   getCmd._mcpDescription = 'Get full configuration for a reward supplier by supplier_id. Returns face value, auto-fulfillment settings, expiry, tags, limits, and type-specific config (Tango UTID, PayPal account, etc.). Use when you need to understand how a supplier is configured or to verify it is set up correctly.';
   couponsCmd._mcpDescription = 'For MANUAL_COUPON suppliers: show inventory count and a sample of available codes. Use to check if a supplier is running low before a campaign launch. Use --list to dump all codes (paged). Returns count, warn_limit, and sample codes. Refuses non-MANUAL_COUPON suppliers with a clear error.';
 

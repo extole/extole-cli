@@ -375,7 +375,7 @@ export function personCommand() {
   rewardsCmd._mcpDescription = 'List rewards for a person by email. Returns reward_id, state (EARNED/FULFILLED/SENT/REDEEMED/CANCELED/FAILED), face value, journey, and created date. Use reward_id with rewards_get for full detail or rewards_history to debug a stuck reward.';
   relationshipsCmd._mcpDescription = 'Show advocate↔friend referral relationships for a person. Returns each referral link — their role (ADVOCATE or FRIEND), the program, the other_person_id, channel (SHARE_LINK, ADVOCATE_CODE), and creation date. Use other_person_id with person_get to investigate the counterpart.';
   statsCmd._mcpDescription = 'Show personal and referral network stats for a person. Returns two rows: the person\'s own AOV/LTV/activities/transactions/conversions, and the same aggregated across everyone they\'ve referred. The network row shows the total value this advocate\'s referrals have driven.';
-  reportCmd._mcpDescription = 'Run the PROFILE report for a person ALL_TIME — returns every profile event associated with this person\'s identity across their full history. Takes ~30-90s. Use --id <person_id> (preferred) or --email for lookup. Best for deep-dive investigations when person_steps is insufficient.';
+  reportCmd._mcpDescription = 'SLOW (~30-90 seconds): Run the PROFILE report for a person ALL_TIME. Warn the user before calling. Returns every profile event associated with this person\'s identity across their full history. Use --id <person_id> (preferred) or --email for lookup. Best for deep-dive investigations when person_steps is insufficient.';
 
   person.addCommand(getCmd);
   person.addCommand(stepsCmd);

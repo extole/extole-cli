@@ -194,5 +194,19 @@ Examples:
       }
     });
 
+  const loginCmd = auth.commands.find(c => c.name() === 'login');
+  const logoutCmd = auth.commands.find(c => c.name() === 'logout');
+  const listCmd = auth.commands.find(c => c.name() === 'list');
+  const statusCmd = auth.commands.find(c => c.name() === 'status');
+  const defaultCmd = auth.commands.find(c => c.name() === 'default');
+  const tokenCmd = auth.commands.find(c => c.name() === 'token');
+
+  if (loginCmd) loginCmd._mcpDescription = 'Save an Extole API token for an account. Call this when the user provides a new token or when a tool returns a 401/403 error indicating the current token is invalid or expired. Use --account to name it and --set-default to make it the active account.';
+  if (logoutCmd) logoutCmd._mcpDescription = 'Remove a saved account token. Call this when the user explicitly asks to log out or remove credentials for an account. Does not revoke the token on the Extole side.';
+  if (listCmd) listCmd._mcpDescription = 'List all saved Extole accounts with masked tokens and the default marker. Call this when the user asks which accounts are configured, or when you need to know what account names are available before switching. Use whoami to verify the active token is working.';
+  if (statusCmd) statusCmd._mcpDescription = 'Verify a saved token is valid and measure API latency. Call this when troubleshooting authentication issues or confirming a newly saved token works before using it. Returns account name, masked token, and ping latency.';
+  if (defaultCmd) defaultCmd._mcpDescription = 'Set the default account for all commands. Call this when the user wants to switch which Extole account they are working with. Use auth_list to see available account names first.';
+  if (tokenCmd) tokenCmd._mcpDescription = 'Print the raw bearer token for an account. Call this only when another tool explicitly needs the raw token value. Prints a credential warning to stderr. Prefer using --account on other tools rather than extracting the raw token.';
+
   return auth;
 }

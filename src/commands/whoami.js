@@ -7,7 +7,7 @@ import { addGlobalOptions } from '../utils.js';
 export function whoamiCommand() {
   const cmd = new Command('whoami')
     .description('Verify the current token and show client identity and scopes');
-  cmd._mcpDescription = 'Verify the stored Extole token and return client identity. Returns client_name, client_id, scopes (CLIENT_ADMIN, USER_SUPPORT, CLIENT_SUPERUSER), token type, and days until expiry. Call this first to confirm authentication is working and to get the client_id for context. A 401 or 403 means the token needs refreshing via auth_login.';
+  cmd._mcpDescription = 'Verify the stored token and return full client identity — client_name, client_id, scopes (CLIENT_ADMIN/USER_SUPPORT/CLIENT_SUPERUSER), token type, and days until expiry. Use this (not ping) when you need the client_id or scopes for context, or when a 401/403 error requires diagnosing whether it is a scope issue vs an expired token. ping is faster but returns nothing useful beyond pass/fail.';
   return addGlobalOptions(
     cmd
       .allowExcessArguments(false)

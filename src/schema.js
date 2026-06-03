@@ -7,6 +7,9 @@ export const SERVE_EXCLUDED = new Set([
   'feedback',          // circular (calls Extole AI agent via chat)
   'schema',            // internal plumbing for serve
   'serve',             // would spawn a second MCP server
+  'stream',            // duplicate of events_listen — use events_listen as the canonical MCP surface
+  'rewards_suppliers', // duplicate of reward-suppliers — use reward-suppliers namespace instead
+  'rewards_suppliers_get', // duplicate of reward-suppliers_get
 ]);
 
 // Tools that mutate state — marked destructive so MCP clients can prompt appropriately.

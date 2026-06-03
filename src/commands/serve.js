@@ -256,5 +256,11 @@ Examples:
       }
     });
 
+  const setupCmd = serve.commands.find(c => c.name() === 'setup');
+  const removeCmd = serve.commands.find(c => c.name() === 'remove');
+
+  if (setupCmd) setupCmd._mcpDescription = 'META-TOOL: Registers extole-cli as an MCP server in Claude Desktop and Claude Code config files. DO NOT call this autonomously — only call if the user explicitly asks to set up or reconfigure their Claude MCP integration. Calling this unexpectedly will modify the user\'s AI client configuration files.';
+  if (removeCmd) removeCmd._mcpDescription = 'META-TOOL: Removes extole-cli MCP server registration from Claude Desktop and Claude Code config files. DO NOT call this autonomously — only call if the user explicitly asks to remove or uninstall the extole-cli MCP integration. This will disable extole-cli as a tool source for the user\'s AI clients.';
+
   return serve;
 }

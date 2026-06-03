@@ -47,5 +47,7 @@ export function apiCommand() {
     ],
   });
 
+  cmd._mcpDescription = 'ESCAPE HATCH — make an authenticated GET (default) or POST/PUT/PATCH request to any Extole endpoint. Use only when no purpose-built tool exists for what you need. Prefer specific tools (person_get, rewards, webhooks, etc.) over this — they have better error handling, structured output, and safer defaults. Do not use this to fire consumer events (use events_fire), manage webhooks (use webhooks_*), or run reports (use reports_run). Valid uses: accessing endpoints not yet covered by other tools, one-off admin calls the user explicitly requests.';
+
   return cmd;
 }
