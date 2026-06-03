@@ -122,7 +122,7 @@ function send(msg) {
 
 export function serveCommand(program) {
   const serve = new Command('serve')
-    .description('Start an MCP stdio server — connect Claude Desktop or ChatGPT Desktop to your Extole account')
+    .description('Start an MCP stdio server — connect Claude Desktop, Claude Code, or any MCP-compatible client to your Extole account')
     .allowExcessArguments(false)
     .addHelpText('after', `
 Add to Claude Desktop (~/.claude/claude_desktop_config.json):
