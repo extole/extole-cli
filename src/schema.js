@@ -14,7 +14,7 @@ export const SERVE_EXCLUDED = new Set([
 
 // Tools that mutate state — marked destructive so MCP clients can prompt appropriately.
 // Everything else is read-only (GET operations) and auto-approved by supporting clients.
-const DESTRUCTIVE_TOOLS = new Set([
+export const DESTRUCTIVE_TOOLS = new Set([
   'auth_login', 'auth_logout', 'auth_default',
   'events_fire',
   'webhooks_create', 'webhooks_delete', 'webhooks_attach', 'webhooks_trace',

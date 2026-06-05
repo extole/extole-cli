@@ -4,7 +4,7 @@ import { dirname, join } from 'path';
 import { spawn, execSync } from 'child_process';
 import { homedir } from 'os';
 import { Command } from 'commander';
-import { buildTools, toMcpTool } from '../schema.js';
+import { buildTools, toMcpTool, DESTRUCTIVE_TOOLS } from '../schema.js';
 
 const MCP_SERVER_NAME = 'extole-cli';
 
@@ -211,6 +211,11 @@ Examples:
     .allowExcessArguments(false)
     .addHelpText('after', `\nExamples:\n  extole serve setup`)
     .action(() => {
+      const allTools = buildTools(program);
+      const readOnlyTools = allTools
+        .filter(t => !t._excluded && !DESTRUCTIVE_TOOLS.has(t.name))
+        .map(t => `mcp__${MCP_SERVER_NAME}__${t.name}`);
+
       let anyFound = false;
       for (const client of CLIENTS) {
         const path = client.configPath();
@@ -220,6 +225,12 @@ Examples:
         config[client.mcpKey] = config[client.mcpKey] ?? {};
         const existing = config[client.mcpKey][MCP_SERVER_NAME];
         config[client.mcpKey][MCP_SERVER_NAME] = entry;
+
+        // Pre-approve read-only tools so clients don't prompt for each one
+        const allowed = new Set(config.allowedTools ?? []);
+        for (const tool of readOnlyTools) allowed.add(tool);
+        config.allowedTools = [...allowed];
+
         writeJson(path, config);
         if (existing) {
           console.log(`${client.name}: updated  (${path})`);
