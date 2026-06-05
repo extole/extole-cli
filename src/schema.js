@@ -92,7 +92,7 @@ function buildToolEntry(cmd, name, path) {
 
   return {
     name,
-    description: cmd._mcpDescription || cmd.description() || '',
+    description: cmd._mcpDescription ? `[extole-cli] ${cmd._mcpDescription}` : (cmd.description() || ''),
     inputSchema: {
       type: 'object',
       properties,
