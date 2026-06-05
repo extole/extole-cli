@@ -227,8 +227,9 @@ Examples:
           console.log(`${client.name}: added    (${path})`);
         }
       }
-      const snippet = JSON.stringify({ [MCP_SERVER_NAME]: entry }, null, 2);
-      console.log(`\nTo connect any MCP-compatible client (Cursor, VS Code, etc.), add to its mcpServers config:\n\n${snippet}\n`);
+      const snippet = JSON.stringify({ mcpServers: { [MCP_SERVER_NAME]: entry } }, null, 2)
+        .replace(/\[\n\s+"(.*?)"\n\s+\]/g, '["$1"]');
+      console.log(`\nTo connect any MCP-compatible client (Cursor, VS Code, etc.), add to its config:\n\n${snippet}\n`);
       if (!anyFound) {
         console.log('No supported AI clients detected. Supported: Claude Desktop, Claude Code.');
       }
