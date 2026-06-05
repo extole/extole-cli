@@ -1,5 +1,5 @@
 {
-  "name": "extole-cli",
+  "name": "@extole/cli",
   "version": "0.4.0",
   "description": "Extole developer CLI",
   "bin": {
@@ -17,7 +17,19 @@
     "node": ">=18"
   },
   "type": "module",
-  "private": true,
+  "license": "UNLICENSED",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/extole/extole-cli.git"
+  },
+  "bugs": {
+    "url": "https://github.com/extole/extole-cli/issues"
+  },
+  "homepage": "https://github.com/extole/extole-cli#readme",
+  "publishConfig": {
+    "access": "public",
+    "provenance": true
+  },
   "files": [
     "bin",
     "src"

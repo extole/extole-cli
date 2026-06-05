@@ -1,12 +1,20 @@
-# extole-cli
+# @extole/cli
 
 Developer CLI for the Extole API. Built in Node.js.
 
 ## Install
 
 ```
-npm install -g github:cduskin-cpu/extole-cli
+npm install -g @extole/cli
 ```
+
+## Maintainer release
+
+1. Update the version in `package.json`.
+2. Refresh `package-lock.json`.
+3. Merge the release change to `master`.
+4. Create a GitHub Release with a matching tag, such as `v0.4.0` for package version `0.4.0`.
+5. Publishing happens through npm trusted publishing from the release workflow.
 
 ## Auth
 
