@@ -14,7 +14,11 @@
       in
       {
         devShells.default = pkgs.mkShell {
-          buildInputs = [ nodejs pkgs.git ];
+          buildInputs = [
+            nodejs
+            pkgs.git
+            pkgs.gh
+          ];
           shellHook = ''
             export PATH="$PWD/node_modules/.bin:$PATH"
             if [ ! -d node_modules ]; then
