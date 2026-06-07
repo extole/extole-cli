@@ -7,10 +7,10 @@
   },
   "scripts": {
     "start": "node bin/extole.js",
-    "test": "node --test test/**/*.test.js"
+    "test": "node --test"
   },
   "dependencies": {
-    "commander": "^12.0.0",
+    "commander": "^13.1.0",
     "node-fetch": "^3.3.2"
   },
   "engines": {
