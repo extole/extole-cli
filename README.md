@@ -753,8 +753,7 @@ GET by default. `--method` to override, `--body` for POST/PUT/PATCH, `--auth-bas
 
 ## Releasing
 
-1. Update the version in `package.json`.
-2. Refresh `package-lock.json`.
-3. Merge the release change to `master`.
-4. Create a GitHub Release with a matching `v` tag for the package version.
-5. The release workflow runs tests, verifies the tag matches `package.json`, and publishes through npm trusted publishing.
+1. Update `package.json` and `package-lock.json` for the release version.
+2. Merge the release change to `master`.
+3. Create a GitHub Release for that version.
+4. The release workflow runs tests, verifies the tag matches `package.json`, and publishes through npm trusted publishing.
