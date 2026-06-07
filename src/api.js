@@ -1,4 +1,3 @@
-import fetch from 'node-fetch';
 import { API_BASE } from './config.js';
 import { logRequest } from './utils.js';
 
