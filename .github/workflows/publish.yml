@@ -47,5 +47,29 @@ jobs:
             exit 1
           fi
 
+      - name: Verify release commit
+        run: |
+          git fetch origin +refs/heads/master:refs/remotes/origin/master --depth=1
+
+          release_commit="$(git rev-parse HEAD)"
+          master_commit="$(git rev-parse origin/master)"
+
+          if [ "$release_commit" != "$master_commit" ]; then
+            echo "Release tag must point at current origin/master."
+            echo "Release commit: $release_commit"
+            echo "Master commit: $master_commit"
+            exit 1
+          fi
+
+      - name: Verify package version is unpublished
+        run: |
+          package_name="$(node -p "JSON.parse(require('node:fs').readFileSync('package.json', 'utf8')).name")"
+          package_version="$(node -p "JSON.parse(require('node:fs').readFileSync('package.json', 'utf8')).version")"
+
+          if npm view "$package_name@$package_version" version >/dev/null 2>&1; then
+            echo "$package_name@$package_version is already published."
+            exit 1
+          fi
+
       - name: Publish package
         run: npm publish --access public --provenance
