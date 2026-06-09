@@ -19,6 +19,7 @@ export const DESTRUCTIVE_TOOLS = new Set([
   'events_fire',
   'webhooks_create', 'webhooks_delete', 'webhooks_attach', 'webhooks_trace',
   'components_create', 'components_delete', 'components_deploy', 'components_set',
+  'reward-suppliers_create', 'reward-suppliers_upload-coupons',
   'health_provision-dkim',
   'reports_run',
   'zones_call',

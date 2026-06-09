@@ -89,11 +89,30 @@ extole reward-suppliers --filter manual              # name/type substring match
 extole reward-suppliers get <supplier-id>            # full detail: face_value, limits, expiry, tags
 extole reward-suppliers coupons <supplier-id>        # for MANUAL_COUPON: count + sample preview
 extole reward-suppliers coupons <supplier-id> --list # dump all codes (paged with --limit)
+
+# Create a MANUAL_COUPON supplier
+extole reward-suppliers create --type MANUAL_COUPON --name "Test Coupons" --face-value 25 --face-value-type USD --warn-limit 10 --dry-run
+extole reward-suppliers create --type MANUAL_COUPON --name "Test Coupons" --face-value 25 --face-value-type USD --warn-limit 10
+
+# Create a CUSTOM_REWARD supplier
+extole reward-suppliers create --type CUSTOM_REWARD --name "Statement Credit" --face-value 50 --face-value-type USD --custom-reward-type ACCOUNT_CREDIT
+
+# For TANGO_V2, PAYPAL_PAYOUTS, SALESFORCE_COUPON — use --body for full JSON control
+extole reward-suppliers create --body '{"reward_supplier_type":"TANGO_V2","name":"Gift Card","face_value_type":"USD","face_value":25,"account_id":"...","utid":"..."}'
+
+# Upload coupon codes to a MANUAL_COUPON supplier
+extole reward-suppliers upload-coupons <supplier-id> --codes CODE1,CODE2,CODE3
+extole reward-suppliers upload-coupons <supplier-id> --file ./coupons.txt
+extole reward-suppliers upload-coupons <supplier-id> --file ./coupons.txt --dry-run
 ```
 
 The list uses the `/built` endpoint so component-bundle suppliers (where the name and face value come from buildtime expressions) display their resolved values. The `coupons` command refuses non-MANUAL_COUPON suppliers with a clear message — other supplier types mint codes on demand or use external partner APIs, so an inventory check doesn't apply.
 
 When `coupons` finds the supplier at or below its `coupon_count_warn_limit`, it flags it with `⚠  at or below warn limit` in the output. Useful for capacity planning before a marketing push and for confirming depletion from CLI when a platform alert has already fired.
+
+`create` supports typed flags for `MANUAL_COUPON` and `CUSTOM_REWARD`. Use `--body <json>` for `TANGO_V2`, `PAYPAL_PAYOUTS`, and `SALESFORCE_COUPON` which require integration-specific credentials. Use `--dry-run` to preview the request body before sending.
+
+`upload-coupons` accepts either a flat text file (one code per line, `#` lines ignored) or an inline comma-separated list via `--codes`. Use `--dry-run` to preview what would be uploaded.
 
 ## Programs
 
