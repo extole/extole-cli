@@ -69,17 +69,16 @@ Several commands (`components deploy`, `campaigns quality-rules`, `health provis
 
 ## Quickstart
 
-```bash
-# 1. Install
-npm install -g @extole/cli
+Install using any method from the [Install](#install) section above, then:
 
-# 2. Authenticate
+```bash
+# Authenticate
 extole auth login --token YOUR_TOKEN
 
-# 3. Verify it works
+# Verify it works
 extole whoami
 
-# 4. Try something useful
+# Try something useful
 extole programs
 extole rewards --email customer@example.com
 extole chat "what campaigns are live on this account?"
