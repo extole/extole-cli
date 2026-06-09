@@ -26,7 +26,6 @@ jobs:
           bun build --compile --target bun-darwin-x64    ./bin/extole.js --outfile dist/extole-darwin-x64
           bun build --compile --target bun-linux-x64     ./bin/extole.js --outfile dist/extole-linux-x64
           bun build --compile --target bun-linux-arm64   ./bin/extole.js --outfile dist/extole-linux-arm64
-          bun build --compile --target bun-windows-x64   ./bin/extole.js --outfile dist/extole-windows-x64.exe
 
       - name: Upload to GitHub Release
         uses: softprops/action-gh-release@v2
@@ -36,4 +35,3 @@ jobs:
             dist/extole-darwin-x64
             dist/extole-linux-x64
             dist/extole-linux-arm64
-            dist/extole-windows-x64.exe
