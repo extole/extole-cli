@@ -1,12 +1,51 @@
 # @extole/cli
 
-Developer CLI for the Extole API. Built in Node.js.
+Developer CLI for the Extole API.
+
+## Requirements
+
+- Node.js 18 or higher
+- An Extole account with an API token (see [Getting a token](#getting-a-token))
 
 ## Install
 
 ```
 npm install -g @extole/cli
 ```
+
+Verify: `extole --version`
+
+## Who is this for
+
+This CLI targets **developers and technical operators** working with the Extole API — engineers integrating Extole into their platform, technical support staff diagnosing reward and event issues, and solutions engineers configuring programs.
+
+Several commands (`components deploy`, `campaigns quality-rules`, `health provision-dkim`) require elevated account permissions. Standard API tokens with `CLIENT_ADMIN` scope cover most read operations; write operations and some diagnostics require `CLIENT_SUPERUSER`. If you hit a 403, your token may lack the necessary scope.
+
+## Quickstart
+
+```bash
+# 1. Install
+npm install -g @extole/cli
+
+# 2. Authenticate
+extole auth login --token YOUR_TOKEN
+
+# 3. Verify it works
+extole whoami
+
+# 4. Try something useful
+extole programs
+extole rewards --email customer@example.com
+extole chat "what campaigns are live on this account?"
+```
+
+For help on any command: `extole --help`, `extole <command> --help`
+
+## Getting a token
+
+Log in to [my.extole.com](https://my.extole.com), navigate to **Settings → API Access**, and create or copy an API token. The token needs `CLIENT_ADMIN` scope for most read operations and `CLIENT_SUPERUSER` for write operations and advanced diagnostics.
+
+Contact your Extole account team if you do not have access to API settings.
 
 ## Auth
 
@@ -270,7 +309,7 @@ extole components create \
 
 When the campaign is published, the component resolves the webhook ID from the tag and stores it. The component owns the routing logic — no separate campaign controller needed.
 
-See `~/projects/webhook-component.md` for a full annotated walkthrough including request scripts, payload mapping, and the context object reference per webhook type.
+Contact your Extole solutions engineer or refer to internal Extole documentation for a full annotated walkthrough of request scripts, payload mapping, and the context object reference per webhook type.
 
 ### Attaching webhooks to campaigns (controller model)
 
@@ -296,15 +335,6 @@ extole webhooks attach --webhook <id> --campaign <id> --event purchase    # publ
 `--quality` controls dispatch priority: `HIGH` (normal), `LOW` (best-effort), `ALWAYS` (bypasses campaign targeting rules). Defaults to `HIGH`.
 
 ### Live testing
-
-For local end-to-end testing, use `webhook-listen.js` to spin up a local HTTP server with a public tunnel (requires `cloudflared`):
-
-```
-node ~/projects/webhook-listen.js                                  # start tunnel, print public URL
-node ~/projects/webhook-listen.js --create-webhook --account acme  # also create a temporary webhook
-```
-
-The script prints each inbound request — method, headers, pretty-printed JSON body — and deletes the webhook on Ctrl-C if it created one.
 
 `webhooks trace` temporarily wires a URL to a campaign event and tails dispatch results directly from the API — no external tunnel needed:
 
@@ -601,7 +631,7 @@ extole components create \
 extole components create --name my_integration --campaign <id> --webhook-tag my-events --dry-run
 ```
 
-Each `--webhook-tag` generates a `javascript@buildtime` variable that resolves the webhook ID from the tag when the campaign is published. The component stores the resolved ID — not the tag — so there is no runtime tag lookup overhead. See `~/projects/webhook-component.md` for the full pattern including request scripts and payload mapping.
+Each `--webhook-tag` generates a `javascript@buildtime` variable that resolves the webhook ID from the tag when the campaign is published. The component stores the resolved ID — not the tag — so there is no runtime tag lookup overhead.
 
 ### Deploying integration bundles
 
@@ -655,7 +685,7 @@ extole components delete <component-id> --dry-run   # show what would be deleted
 
 Deleting a root component archives its entire campaign. The CLI shows the component name and type and warns if it's a root before prompting.
 
-For a full walkthrough of the bundle format, sub-component structure, and deployment workflow, see `~/projects/extole-component-developer-guide-cli.md`.
+For a full walkthrough of the bundle format, sub-component structure, and deployment workflow, contact your Extole solutions engineer or refer to internal Extole documentation.
 
 ## Feedback
 
@@ -769,6 +799,14 @@ GET by default. `--method` to override, `--body` for POST/PUT/PATCH, `--auth-bas
   "acme-sandbox": { "token": "..." }
 }
 ```
+
+## Contributing
+
+Bug reports and feature requests are welcome via [GitHub Issues](https://github.com/extole/extole-cli/issues). For bugs, include the CLI version (`extole --version`), the command you ran, and the output.
+
+## License
+
+MIT
 
 ## Releasing
 
