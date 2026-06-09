@@ -4,7 +4,7 @@ Developer CLI for the Extole API.
 
 ## Requirements
 
-- Node.js 18 or higher
+- Node.js 22.12 or higher
 - An Extole account with an API token (see [Getting a token](#getting-a-token))
 
 ## Install
@@ -21,7 +21,7 @@ Installs to `/usr/local/bin/extole`. Override with `EXTOLE_INSTALL=/your/path`.
 brew install extole/tap/extole
 ```
 
-**npm (requires Node 18+):**
+**npm (requires Node 22.12+):**
 ```bash
 npm install -g @extole/cli
 ```
