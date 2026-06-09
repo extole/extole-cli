@@ -1,9 +1,7 @@
 #!/usr/bin/env node
 
-import { readFileSync } from 'fs';
-import { fileURLToPath } from 'url';
-import { dirname, join } from 'path';
 import { Command } from 'commander';
+import pkg from '../package.json' with { type: 'json' };
 import { authCommand } from '../src/commands/auth.js';
 import { chatCommand } from '../src/commands/chat.js';
 import { pingCommand } from '../src/commands/ping.js';
@@ -28,8 +26,7 @@ import { apiCommand } from '../src/commands/api.js';
 import { schemaCommand } from '../src/commands/schema.js';
 import { serveCommand } from '../src/commands/serve.js';
 
-const __dirname = dirname(fileURLToPath(import.meta.url));
-const { version } = JSON.parse(readFileSync(join(__dirname, '../package.json'), 'utf8'));
+const { version } = pkg;
 
 process.on('unhandledRejection', (err) => {
   console.error(`Error: ${err?.message || err}`);

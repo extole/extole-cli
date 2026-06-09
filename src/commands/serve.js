@@ -5,6 +5,7 @@ import { spawn, execSync } from 'child_process';
 import { homedir } from 'os';
 import { Command } from 'commander';
 import { buildTools, toMcpTool, DESTRUCTIVE_TOOLS } from '../schema.js';
+import pkg from '../../package.json' with { type: 'json' };
 
 const MCP_SERVER_NAME = 'extole-cli';
 
@@ -138,7 +139,7 @@ Add to Claude Desktop (~/.claude/claude_desktop_config.json):
 Examples:
   extole serve`)
     .action(async function () {
-      const { version } = JSON.parse(readFileSync(join(__dirname, '../../package.json'), 'utf8'));
+      const { version } = pkg;
 
       const allTools = buildTools(program);
       const serveTools = allTools.filter(t => !t._excluded);

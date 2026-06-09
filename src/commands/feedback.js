@@ -1,13 +1,10 @@
-import { readFileSync } from 'fs';
-import { fileURLToPath } from 'url';
-import { dirname, join } from 'path';
 import { Command } from 'commander';
 import { resolveToken } from '../config.js';
 import { addGlobalOptions } from '../utils.js';
 import { sendToAgent } from './chat.js';
+import pkg from '../../package.json' with { type: 'json' };
 
-const __dirname = dirname(fileURLToPath(import.meta.url));
-const { version } = JSON.parse(readFileSync(join(__dirname, '../../package.json'), 'utf8'));
+const { version } = pkg;
 
 export function feedbackCommand() {
   return addGlobalOptions(
