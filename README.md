@@ -9,7 +9,20 @@ Developer CLI for the Extole API.
 
 ## Install
 
+**Binary (no Node required) — Mac and Linux:**
+```bash
+curl -fsSL https://raw.githubusercontent.com/extole/extole-cli/master/install.sh | sh
 ```
+
+Installs to `/usr/local/bin/extole`. Override with `EXTOLE_INSTALL=/your/path`.
+
+**Homebrew (Mac):**
+```bash
+brew install extole/tap/extole
+```
+
+**npm (requires Node 18+):**
+```bash
 npm install -g @extole/cli
 ```
 
