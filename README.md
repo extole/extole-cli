@@ -49,6 +49,10 @@ curl -fsSL https://raw.githubusercontent.com/extole/extole-cli/master/install.sh
 
 Installs to `/usr/local/bin/extole`. Override with `EXTOLE_INSTALL=/your/path`.
 
+**Binary — Windows:**
+
+Download `extole-windows-x64.exe` from the [latest release](https://github.com/extole/extole-cli/releases/latest), rename it to `extole.exe`, and place it somewhere on your `PATH`.
+
 **Homebrew (Mac):**
 ```bash
 brew install extole/tap/extole
