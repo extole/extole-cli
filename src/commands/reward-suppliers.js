@@ -373,7 +373,7 @@ export function rewardSuppliersCommand() {
 
       const response = await apiFetch(`/v2/reward-suppliers/manual-coupons/${supplierId}/coupons`, token, {
         method: 'POST',
-        body: JSON.stringify({ coupon_codes: codes }),
+        body: JSON.stringify({ coupons: codes }),
         verbose: options.verbose,
         baseUrl: API_BASE,
       });
