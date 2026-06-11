@@ -6,39 +6,38 @@ Developer CLI for the Extole API.
 
 - [Requirements](#requirements)
 - [Install](#install)
-- [Who is this for](#who-is-this-for)
+- [Who Is This For](#who-is-this-for)
 - [Quickstart](#quickstart)
-- [Getting a token](#getting-a-token)
+- [Getting a Token](#getting-a-token)
 - [Auth](#auth)
-- [ping / whoami](#ping--whoami)
+- [Ping / Whoami](#ping--whoami)
+- [Person](#person)
+- [Share Links](#share-links)
 - [Rewards](#rewards)
 - [Reward Suppliers](#reward-suppliers)
 - [Programs](#programs)
-- [Audiences](#audiences)
 - [Campaigns](#campaigns)
-- [Notifications](#notifications)
-- [Health](#health)
-- [Webhooks](#webhooks)
-- [Stream](#stream)
-- [Events](#events)
-- [Person](#person)
-- [Reports](#reports)
+- [Audiences](#audiences)
 - [Components](#components)
-- [Feedback](#feedback)
-- [AI (extole chat)](#ai-extole-chat)
-- [Share Links](#share-links)
 - [Zones](#zones)
-- [MCP server (Claude Desktop / Claude Code)](#mcp-server-claude-desktop--claude-code)
-- [API (escape hatch)](#api-escape-hatch)
-- [Output conventions](#output-conventions)
-- [Config file](#config-file)
+- [Events](#events)
+- [Webhooks](#webhooks)
+- [Notifications](#notifications)
+- [Reports](#reports)
+- [Health](#health)
+- [Chat](#chat)
+- [Feedback](#feedback)
+- [MCP Server (Claude Desktop / Claude Code)](#mcp-server-claude-desktop--claude-code)
+- [API](#api)
+- [Output Conventions](#output-conventions)
+- [Config File](#config-file)
 - [Contributing](#contributing)
 - [License](#license)
 
 ## Requirements
 
 - Node.js 22.12 or higher
-- An Extole account with an API token (see [Getting a token](#getting-a-token))
+- An Extole account with an API token (see [Getting a Token](#getting-a-token))
 
 ## Install
 
@@ -65,7 +64,7 @@ npm install -g @extole/cli
 
 Verify: `extole --version`
 
-## Who is this for
+## Who Is This For
 
 This CLI targets **developers and technical operators** working with the Extole API — engineers integrating Extole into their platform, technical support staff diagnosing reward and event issues, and solutions engineers configuring programs.
 
@@ -90,7 +89,7 @@ extole chat "what campaigns are live on this account?"
 
 For help on any command: `extole --help`, `extole <command> --help`
 
-## Getting a token
+## Getting a Token
 
 Log in to [my.extole.com](https://my.extole.com), navigate to **Settings → API Access**, and create or copy an API token. The token needs `CLIENT_ADMIN` scope for most read operations and `CLIENT_SUPERUSER` for write operations and advanced diagnostics.
 
@@ -99,15 +98,15 @@ Contact your Extole account team if you do not have access to API settings.
 ## Auth
 
 ```
-extole auth login --token TOKEN                                # save token (account name derived from client)
-extole auth login --token TOKEN --account acme --set-default   # save token, set as default
-extole auth login --token TOKEN --account staging              # save additional account
-extole auth default acme                                   # change default account
-extole auth list                                           # show all accounts with default marker
-extole auth status                                         # verify token + connectivity
-extole auth token                                          # print raw token for the default account
-extole auth token --account acme                          # print raw token for a named account
-extole auth logout --account acme                          # remove account
+extole auth login --token TOKEN                               # save token (account name derived from client)
+extole auth login --token TOKEN --account acme --set-default  # save token, set as default
+extole auth login --token TOKEN --account staging             # save additional account
+extole auth default acme                                      # change default account
+extole auth list                                              # show all accounts with default marker
+extole auth status                                            # verify token + connectivity
+extole auth token                                             # print raw token for the default account
+extole auth token --account acme                              # print raw token for a named account
+extole auth logout --account acme                             # remove account
 ```
 
 `auth token` prints the raw token to stdout (credential warning on stderr):
@@ -120,21 +119,63 @@ curl -H "Authorization: Bearer $(extole auth token)" https://api.extole.io/v6/we
 All commands use the default account unless `--account NAME` is specified.
 
 ```bash
-export EXTOLE_TOKEN=your-token-here     # use this token for all commands
-export EXTOLE_ACCOUNT=acme              # use this account for all commands
+export EXTOLE_TOKEN=your-token-here  # use this token for all commands
+export EXTOLE_ACCOUNT=acme           # use this account for all commands
 ```
 
-
-## ping / whoami
+## Ping / Whoami
 
 ```
-extole ping                                # verify connectivity (exit 0 = OK)
-extole whoami                              # verify token and show client identity, scopes, and expiry
-extole whoami --account other-client      # check a non-default account
+extole ping                           # verify connectivity (exit 0 = OK)
+extole whoami                         # verify token and show client identity, scopes, and expiry
+extole whoami --account other-client  # check a non-default account
 extole whoami --json
 ```
 
 `whoami` calls `/v4/tokens` and returns client name, scopes, token type, and days until expiry.
+
+## Person
+
+```
+extole person get --email jane@example.com         # profile data
+
+extole person steps --email jane@example.com       # step history (default 25)
+extole person steps --email jane@example.com --limit 100
+extole person steps --email jane@example.com --listen        # tail live steps (Ctrl+C to stop)
+extole person steps --email jane@example.com --duration 30   # tail and auto-exit after 30s
+extole person steps --email jane@example.com --listen --json
+
+extole person rewards --email jane@example.com              # rewards for this person
+extole person rewards --email jane@example.com --status EARNED
+extole person rewards --email jane@example.com --json
+
+extole person relationships --email jane@example.com        # advocate↔friend referral relationships
+extole person relationships --email jane@example.com --json
+
+extole person stats --email jane@example.com                # personal + referral network stats
+extole person stats --email jane@example.com --json
+
+extole person report --id <person_id>                       # profile events report ALL_TIME (~30-90s)
+extole person report --email jane@example.com               # looks up person ID then runs report
+```
+
+`relationships` shows each referral link — role (ADVOCATE/FRIEND), program, other person's ID, channel, and creation date. `stats` shows two rows: the person's own AOV/LTV/conversions and the same metrics aggregated across their referral network.
+
+## Share Links
+
+Two directions:
+
+```
+extole share-links list --email jane@example.com              # all share links for a person
+extole share-links list --email jane@example.com --label credit-cards
+extole share-links list --email jane@example.com --json
+
+extole share-links lookup chrisbackfillcw214                  # reverse: code → owner
+extole share-links lookup https://demo-data-finserv.extole.io/chrisbackfillcw214
+extole share-links lookup chrisbackfillcw214 --json
+```
+
+`list` returns share links (label, code, URL); use `--label` to filter across programs. `lookup` is the reverse: given a share code or full URL, returns the owning person and program.
 
 ## Rewards
 
@@ -162,10 +203,9 @@ Error messages are unambiguous about whether the person exists:
 
 > `REDEEMED` means "someone told Extole it was used" (via a redemption event or webhook) — not "definitely used at point of sale." Without that integration, a coupon can be used at checkout and the reward stays in `SENT` forever.
 
-
 ## Reward Suppliers
 
-Inspect configured reward suppliers — manual-coupon batches, Tango, PayPal payouts, BHN cards, custom suppliers. Used by reward rules in campaigns to mint the actual reward value.
+Inspect and manage reward suppliers (BHN, coupons, custom, Tango) — used by reward rules in campaigns to mint the actual reward value.
 
 ```
 extole reward-suppliers                              # all configured suppliers with face values
@@ -200,26 +240,6 @@ extole programs --all     # include PAUSED, STOPPED, NOT_LAUNCHED
 extole programs --json
 ```
 
-## Audiences
-
-Inspect audiences, their size, members, and recent push/sync history. Useful when verifying that an async audience operation (SFDC sync, file import, replace, etc.) completed without round-tripping through the my.extole UI.
-
-```
-extole audiences list                                       # audiences on the account (default --limit 100)
-extole audiences list --filter sfdc                         # match name substring
-extole audiences list --limit 500                           # raise cap on big accounts
-extole audiences get <name|id>                              # name, size, recent history summary
-extole audiences members <name|id>                          # person_id + email rows
-extole audiences members <name|id> --email-only             # emails only, one per line
-extole audiences members <name|id> --limit 500 --offset 0   # paginate
-
-extole audiences history <name|id>                          # recent ADD / REMOVE / REPLACE / ACTION runs
-extole audiences history <name|id> --listen                  # tail new runs as they arrive (Ctrl-C to stop)
-extole audiences history <name|id> --listen --interval 3     # custom poll interval (default 5s)
-```
-
-The `<audience>` argument resolves by exact ID, then exact name, then case-insensitive substring. Multiple matches prompt for a more specific input.
-
 ## Campaigns
 
 Inspect per-campaign configuration: which quality rules are turned on, and what the MaxMind fraud-scoring controller-trigger settings are.
@@ -237,7 +257,7 @@ extole campaigns reward-rules <campaign-id>                        # per-role re
 extole campaigns reward-rules <campaign-id> --json                 # raw RewardRuleResponse[]
 ```
 
-### Quality rules
+### Quality Rules
 
 `quality-rules` calls `GET /v2/campaigns/{id}/incentive/quality-rules` and renders the configured legacy quality rules. Each row shows the rule type, whether it is enabled, which action types it applies to (`ANY_CLICK`, `ANY_SHARE`, `ANY_REGISTER`, `ANY_PURCHASE`, `ANY_PROMOTION`), and any rule-specific properties (e.g. `cap_number=10, lookback_interval=7` on `REFERRAL_CAP`).
 
@@ -245,145 +265,179 @@ extole campaigns reward-rules <campaign-id> --json                 # raw RewardR
 
 `maxmind` walks the built campaign (`GET /v2/campaigns/{id}/built`) and surfaces every `trigger_type: MAXMIND` controller-trigger, with its step, phase, `risk_threshold`, `ip_threshold`, `allow_high_risk_email`, and `default_quality_score`. When a trigger has thresholds different from the recommended value of `20` (the legacy default was `5`), an advisory is printed to stderr. The advisory does not appear in `--json` output.
 
-## Notifications
+## Audiences
 
-Show recent platform notifications for this account — webhook failures, integration errors, and other actionable system alerts. Same data as `my.extole.com/notifications`. Useful when debugging "the integration looks wired up but nothing's happening" — the notifications often name the exact campaign and event the platform couldn't process.
-
-```
-extole notifications                          # last 20 most-recent-first
-extole notifications --limit 50               # paginate (default 20)
-extole notifications --level ERROR            # ERROR / WARN / INFO filter
-extole notifications --tag technical          # tag filter (server-side; repeat for multiple)
-extole notifications --listen                  # tail new ones as they arrive (default 10s poll)
-extole notifications --json                   # raw response, suitable for scripting
-```
-
-Each notification shows time, level, name, message, and key data fields (campaign_id, controller_id, person_id, cause_event_id) — most of which feed into other CLI commands.
-
-## Health
-
-Domain and email deliverability checks. The base command is read-only — validates email domains (SPF, DMARC, DKIM, MX, A records) and program domains (CNAME/A resolution) against Extole's validation API. Nothing is created or modified by `extole health` itself; the `provision-dkim` subcommand is the only write operation, and it requires explicit confirmation.
+Inspect audiences, their size, members, and recent push/sync history. Useful when verifying that an async audience operation (SFDC sync, file import, replace, etc.) completed without round-tripping through the my.extole UI.
 
 ```
-extole health                          # check all email domains + program domains
-extole health --domain example.com    # filter to a specific email domain
-extole health --json                  # raw validation results
+extole audiences list                                       # audiences on the account (default --limit 100)
+extole audiences list --filter sfdc                         # match name substring
+extole audiences list --limit 500                           # raise cap on big accounts
+extole audiences get <name|id>                              # name, size, recent history summary
+extole audiences members <name|id>                          # person_id + email rows
+extole audiences members <name|id> --email-only             # emails only, one per line
+extole audiences members <name|id> --limit 500 --offset 0   # paginate
 
-# DKIM provisioning (write operation — interactive prompt by default)
-extole health provision-dkim example.com           # prompts before calling
-extole health provision-dkim example.com --confirm # non-interactive (for scripts/CI)
+extole audiences history <name|id>                          # recent ADD / REMOVE / REPLACE / ACTION runs
+extole audiences history <name|id> --listen                 # tail new runs as they arrive (Ctrl-C to stop)
+extole audiences history <name|id> --listen --interval 3    # custom poll interval (default 5s)
 ```
 
-`provision-dkim` is idempotent — first call mints DKIM keys, subsequent calls return existing records. Output is the CNAME records to add to your DNS provider; re-run `extole health --domain <domain>` to verify.
+The `<audience>` argument resolves by exact ID, then exact name, then case-insensitive substring. Multiple matches prompt for a more specific input.
 
-Exit codes: `0` = all checks pass, `1` = one or more failures, `2` = bad input or auth error. Suitable for CI preflight scripts and readiness probes.
+## Components
 
-## Webhooks
+Extole's configuration is built from **components** — typed, composable building blocks that define programs, rules, rewards, emails, integrations, and more. Understanding the component model is prerequisite to building or modifying offer programs programmatically.
 
-Outbound webhooks send Extole events to external systems via HTTP POST. Four types:
-
-| Type | When it fires | Unique field |
-|---|---|---|
-| `GENERIC` | Person/consumer journey events (referral, share, purchase, custom input events) | — |
-| `CLIENT` | Admin/operational events — config change, report complete, campaign started, webhook failure, etc. | — |
-| `REWARD` | Reward state transitions (EARNED, FULFILLED, FAILED, etc.) | `filters` |
-| `PARTNER` | Manual dispatch only — no automatic trigger | `response_body_handler` (parses HTTP response body) |
+The type system is nominal and open-ended — types form a hierarchy (`reward-supplier-v10.0` is a subtype of `reward-supplier`), and components wire together via named sockets. The reliable way to learn what a type requires is to find a known-good instance and read its config; `extole chat` can also answer type-specific questions.
 
 ```
-extole webhooks                                    # list all webhooks with URL
-extole webhooks --filter-type GENERIC              # filter by type
-extole webhooks --filter "sfdc"                    # filter by name substring
-extole webhooks --json
+extole components                                  # all components, account-wide
+extole components --program <id>                   # scoped to one program
+extole components --filter-type reward-supplier    # filter by type (matches subtypes too)
+extole components --filter "gift card"             # filter by name substring
 
-extole webhooks get <webhook-id>                   # full config: URL, method, tags, retry intervals
-extole webhooks get <webhook-id> --built           # show with inherited defaults applied
-                                                   # (REWARD webhooks also show state/supplier filters)
+extole components get <component-id>               # full config + variables
+extole components get <component-id> --tree        # downstream subtree (recursive)
+extole components get <component-id> --sockets     # socket references to other components
 
-extole webhooks create --name "SFDC Events" --url https://example.com/hook
-extole webhooks create --name "SFDC Events" --url https://example.com/hook --type GENERIC
-extole webhooks create --name "Iterable Events" --url https://api.iterable.com/api/events/track \
-  --type CLIENT --tag iterable-events --request-file request.js
-extole webhooks create --name "Reward Hook" --url https://example.com/hook \
-  --type REWARD --filter-state EARNED --filter-state FULFILLED
-extole webhooks create --name "Test" --url https://example.com/hook --dry-run  # print payload, no POST
-
-extole webhooks delete <webhook-id>                # archive (fails if still wired to a campaign)
+extole components types                            # all concrete types in this account
+extole components types --parent rule              # subtypes of a given parent type
+extole components types --parent rule --tree       # rendered as a hierarchy
 ```
 
-### Webhook types and the `--tag` flag
+`--filter-type` does substring matching against the full type hierarchy (`--filter-type reward` matches `reward-v10.0`, `reward-rule-v10.0`, etc.). `--tree` on `get` shows the full downstream subgraph.
 
-Tags enable the **component-driven integration pattern** — components discover which webhook to call by tag at publish time rather than hardcoding an ID.
+### Creating Integration Components
+
+`components create` attaches a component to a campaign. Primary use case: webhook integrations where the component discovers its webhook(s) by tag at publish time.
 
 ```
-# Create a webhook with a discovery tag
-extole webhooks create \
-  --name "Iterable Events" \
-  --url https://api.iterable.com/api/events/track \
-  --type GENERIC \
-  --tag "iterable-events"
+# Minimal — component with no webhook wiring
+extole components create --name my_integration --campaign <id>
 
-# Create a component on the same campaign that discovers it by tag
+# With webhook discovery — component finds the webhook by tag when campaign is published
 extole components create \
-  --name "iterable_integration" \
+  --name iterable_integration \
+  --display-name "Iterable" \
   --campaign <campaign-id> \
+  --description "Sends referral events to Iterable" \
   --webhook-tag "iterable-events"
-```
 
-When the campaign is published, the component resolves the webhook ID from the tag and stores it — no separate campaign controller needed.
-
-### Attaching webhooks to campaigns (controller model)
-
-`attach` wires a webhook directly to a campaign via a controller — for simpler cases where no component is needed.
-
-```
-extole webhooks attach \
-  --webhook <webhook-id> \
+# Multiple webhooks (auto-named from tag)
+extole components create \
+  --name my_integration \
   --campaign <campaign-id> \
-  --event signed_up
+  --webhook-tag "my-integration-events" \
+  --webhook-tag "my-integration-subscriptions"
 
-extole webhooks attach \
-  --webhook <webhook-id> \
+# Explicit variable name (varName:tag)
+extole components create \
+  --name my_integration \
   --campaign <campaign-id> \
-  --event purchase \
-  --event-type STEP              # STEP = internal processing step; INPUT = integration event (default)
+  --webhook-tag "eventsWebhookId:my-integration-events"
 
-# Attach multiple events to one campaign — defer publish until the last one
-extole webhooks attach --webhook <id> --campaign <id> --event signed_up --skip-publish
-extole webhooks attach --webhook <id> --campaign <id> --event purchase    # publishes once here
+# Print payload without creating (useful for verifying buildtime expressions)
+extole components create --name my_integration --campaign <id> --webhook-tag my-events --dry-run
 ```
 
-`--quality` controls dispatch priority: `HIGH` (normal), `LOW` (best-effort), `ALWAYS` (bypasses campaign targeting rules). Defaults to `HIGH`.
+Each `--webhook-tag` generates a `javascript@buildtime` variable that resolves the webhook ID at publish time; the resolved ID is stored (no runtime tag lookup).
 
-### Live testing
+### Deploying Integration Bundles
 
-`webhooks trace` temporarily wires a URL to a campaign event and tails dispatch results — no external tunnel needed:
-
-```
-extole webhooks trace \
-  --url https://my-server.com/hook \
-  --campaign <campaign-id> \
-  --event signed_up \
-  --yes                          # skip confirmation prompt
-```
-
-### Inspecting dispatch history
+`components deploy` bundles a local directory and uploads it. Use for full integration components (`integration-v10.0`, `extension`, etc.) where component, sub-components, webhooks, and scripts live together as a directory tree.
 
 ```
-extole webhooks dispatches <webhook-id>            # what Extole tried to send (attempt records)
-extole webhooks dispatches <webhook-id> --limit 50
+# Deploy a new bundle (creates its own campaign)
+extole components deploy --source ./my_integration
 
-extole webhooks dispatch-results <webhook-id>      # HTTP outcomes: response codes + bodies
-extole webhooks dispatch-results <webhook-id> --json
+# Deploy and publish immediately
+extole components deploy --source ./my_integration --publish
 
-extole webhooks listen <webhook-id>                 # tail dispatch results in real time (Ctrl-C to stop)
-extole webhooks listen <webhook-id> --interval 5   # custom poll interval (default 3s)
-extole webhooks listen <webhook-id> --show-body    # print full response body per row
-extole webhooks listen <webhook-id> --duration 60  # auto-exit after 60 seconds
+# Update an existing component in place
+extole components deploy --source ./my_integration --component <component-id>
+
+# Update and publish
+extole components deploy --source ./my_integration --component <component-id> --publish
+
+# Print resolved component.json contents (post-%{...}% include expansion) without uploading
+extole components deploy --source ./my_integration --dry-run
+
+# Show full API error details on failure
+extole components deploy --source ./my_integration --verbose
 ```
 
-`dispatches` = one record per attempt. `dispatch-results` = HTTP response side (non-200s, timeouts, error bodies). `listen` is the live-tail version — seeds on first poll so only new attempts appear.
+Running `deploy` without `--component` always creates a new campaign. Pass `--component` with the ID from the first deploy to update in place. Settings values can reference external files using `%{/path/to/file.js}%` — the CLI inlines the file content before uploading.
 
-## Stream
+### Patching Component Settings
+
+Update one or more settings on an already-deployed component without redeploying the bundle:
+
+```
+extole components set <component-id> --setting apiKey=test_key_123
+extole components set <component-id> --setting apiKey=k1 --setting endpoint=https://example.com
+extole components set <component-id> --setting apiKey=k1 --dry-run    # show payload only
+```
+
+Values are sent as strings; the platform validates and rejects mismatches. Changes on LIVE campaigns are staged until you republish (via `components deploy --publish` or my.extole).
+
+### Deleting Components
+
+```
+extole components delete <component-id>             # prompts for confirmation
+extole components delete <component-id> --confirm   # skip prompt (for scripts)
+extole components delete <component-id> --dry-run   # show what would be deleted
+```
+
+Deleting a root component archives its entire campaign; the CLI warns if it's a root before prompting. For a full walkthrough of the bundle format and deployment workflow, contact your Extole solutions engineer.
+
+## Zones
+
+```
+extole zones                                           # list embed zone names for this account
+extole zones --json
+
+extole zones core                                      # print the core.js <script> tag for this account
+extole zones tag <zone_name>                           # print the embed snippet for a zone
+
+extole zones call <zone_name> --email <email>          # POST to a zone (test FRONTEND_CONTROLLER pipelines)
+extole zones call <zone_name> --email <email> --param partner_user_id=abc123
+extole zones call <zone_name> --email <email> --json
+```
+
+`zones call` POSTs to `/v5/zones/<zone_name>` — useful for testing FRONTEND_CONTROLLER + DISPLAY pipelines without a browser.
+
+## Events
+
+### Firing Events
+
+```
+extole events fire <event_name>                               # fire in sandbox mode (default — safe)
+extole events fire <event_name> --live                        # fire against the live production API
+extole events fire <event_name> --sandbox my-sandbox          # fire in a specific named sandbox
+extole events fire lead_created --email jane@example.com
+extole events fire lead_created --email jane@example.com --live
+
+extole events fire <event_name> --param key=value [--param key=value ...] --live
+extole events fire <event_name> --data '{"email":"jane@example.com","amount":"500"}'
+extole events fire <event_name> --dry-run                     # print payload without sending
+
+extole events report <event_id>                               # look up a past event by ID (uses report pipeline, ~30-90s)
+extole events fire <event_name> --live --listen               # fire then tail steps for --email for 15s
+extole events fire <event_name> --live --listen --listen-timeout 30
+
+extole events fire <event_name> --email <email> --live --trace                        # trace which campaigns the event reached
+extole events fire <event_name> --email <email> --live --trace --trace-webhook <id>  # also check that webhook for dispatches caused by this event
+extole events fire <event_name> --email <email> --live --trace --trace-timeout 15    # wait longer for slower processing
+```
+
+Sandbox mode is the default. Use `--live` for production, `--dry-run` to preview. `--sandbox` sets the sandbox name (default: `production-test`).
+
+### Trace (`--trace`)
+
+Use `--trace` after firing to see exactly which campaigns the event reached. Steps are filtered by `cause_event_id` matching the fired event, then grouped by campaign. If no campaign matched, `--trace` checks `/v2/campaigns/built` to determine why — distinguishing between "event isn't wired to any campaign" and "campaigns use the event but targeting filtered this person out." `--trace` automatically discovers webhooks attached to campaigns using this event and probes each for dispatches caused by the fired event. Use `--trace-webhook <id>` to override and check a specific webhook directly.
+
+### Listening to Events
 
 `extole events listen` is the preferred way to tail live events. `extole stream` is the underlying command and accepts the same options.
 
@@ -427,60 +481,125 @@ extole events listen --app-type my_integration               # only events from 
 | `AUDIENCE_MEMBERSHIP_*` | Audience list membership changes |
 | `ACTION` | Legacy action events |
 
-## Events
+## Webhooks
+
+Outbound webhooks send Extole events to external systems via HTTP POST. Four types:
+
+| Type | When it fires | Unique field |
+|---|---|---|
+| `GENERIC` | Person/consumer journey events (referral, share, purchase, custom input events) | — |
+| `CLIENT` | Admin/operational events — config change, report complete, campaign started, webhook failure, etc. | — |
+| `REWARD` | Reward state transitions (EARNED, FULFILLED, FAILED, etc.) | `filters` |
+| `PARTNER` | Manual dispatch only — no automatic trigger | `response_body_handler` (parses HTTP response body) |
 
 ```
-extole events fire <event_name>                               # fire in sandbox mode (default — safe)
-extole events fire <event_name> --live                        # fire against the live production API
-extole events fire <event_name> --sandbox my-sandbox          # fire in a specific named sandbox
-extole events fire lead_created --email jane@example.com
-extole events fire lead_created --email jane@example.com --live
+extole webhooks                                    # list all webhooks with URL
+extole webhooks --filter-type GENERIC              # filter by type
+extole webhooks --filter "sfdc"                    # filter by name substring
+extole webhooks --json
 
-extole events fire <event_name> --param key=value [--param key=value ...] --live
-extole events fire <event_name> --data '{"email":"jane@example.com","amount":"500"}'
-extole events fire <event_name> --dry-run                     # print payload without sending
+extole webhooks get <webhook-id>                   # full config: URL, method, tags, retry intervals
+extole webhooks get <webhook-id> --built           # show with inherited defaults applied
+                                                   # (REWARD webhooks also show state/supplier filters)
 
-extole events report <event_id>                               # look up a past event by ID (uses report pipeline, ~30-90s)
-extole events fire <event_name> --live --listen               # fire then tail steps for --email for 15s
-extole events fire <event_name> --live --listen --listen-timeout 30
+extole webhooks create --name "SFDC Events" --url https://example.com/hook
+extole webhooks create --name "SFDC Events" --url https://example.com/hook --type GENERIC
+extole webhooks create --name "Iterable Events" --url https://api.iterable.com/api/events/track \
+  --type CLIENT --tag iterable-events --request-file request.js
+extole webhooks create --name "Reward Hook" --url https://example.com/hook \
+  --type REWARD --filter-state EARNED --filter-state FULFILLED
+extole webhooks create --name "Test" --url https://example.com/hook --dry-run  # print payload, no POST
 
-extole events fire <event_name> --email <e> --live --trace                          # trace which campaigns the event reached
-extole events fire <event_name> --email <e> --live --trace --trace-webhook <id>    # also check that webhook for dispatches caused by this event
-extole events fire <event_name> --email <e> --live --trace --trace-timeout 15      # wait longer for slower processing
+extole webhooks delete <webhook-id>                # archive (fails if still wired to a campaign)
 ```
 
-Sandbox mode is the default. Use `--live` for production, `--dry-run` to preview. `--sandbox` sets the sandbox name (default: `production-test`).
+### Webhook Types and the `--tag` Flag
 
-### Trace (`--trace`)
-
-Use `--trace` after firing to see exactly which campaigns the event reached. Steps are filtered by `cause_event_id` matching the fired event, then grouped by campaign. If no campaign matched, `--trace` checks `/v2/campaigns/built` to determine why — distinguishing between "event isn't wired to any campaign" and "campaigns use the event but targeting filtered this person out." `--trace` automatically discovers webhooks attached to campaigns using this event and probes each for dispatches caused by the fired event. Use `--trace-webhook <id>` to override and check a specific webhook directly.
-
-## Person
+Tags enable the **component-driven integration pattern** — components discover which webhook to call by tag at publish time rather than hardcoding an ID.
 
 ```
-extole person get --email jane@example.com         # profile data
+# Create a webhook with a discovery tag
+extole webhooks create \
+  --name "Iterable Events" \
+  --url https://api.iterable.com/api/events/track \
+  --type GENERIC \
+  --tag "iterable-events"
 
-extole person steps --email jane@example.com       # step history (default 25)
-extole person steps --email jane@example.com --limit 100
-extole person steps --email jane@example.com --listen        # tail live steps (Ctrl+C to stop)
-extole person steps --email jane@example.com --duration 30   # tail and auto-exit after 30s
-extole person steps --email jane@example.com --listen --json
-
-extole person rewards --email jane@example.com              # rewards for this person
-extole person rewards --email jane@example.com --status EARNED
-extole person rewards --email jane@example.com --json
-
-extole person relationships --email jane@example.com        # advocate↔friend referral relationships
-extole person relationships --email jane@example.com --json
-
-extole person stats --email jane@example.com                # personal + referral network stats
-extole person stats --email jane@example.com --json
-
-extole person report --id <person_id>                       # profile events report ALL_TIME (~30-90s)
-extole person report --email jane@example.com               # looks up person ID then runs report
+# Create a component on the same campaign that discovers it by tag
+extole components create \
+  --name "iterable_integration" \
+  --campaign <campaign-id> \
+  --webhook-tag "iterable-events"
 ```
 
-`relationships` shows each referral link — role (ADVOCATE/FRIEND), program, other person's ID, channel, and creation date. `stats` shows two rows: the person's own AOV/LTV/conversions and the same metrics aggregated across their referral network.
+When the campaign is published, the component resolves the webhook ID from the tag and stores it — no separate campaign controller needed.
+
+### Attaching Webhooks to Campaigns (Controller Model)
+
+`attach` wires a webhook directly to a campaign via a controller — for simpler cases where no component is needed.
+
+```
+extole webhooks attach \
+  --webhook <webhook-id> \
+  --campaign <campaign-id> \
+  --event signed_up
+
+extole webhooks attach \
+  --webhook <webhook-id> \
+  --campaign <campaign-id> \
+  --event purchase \
+  --event-type STEP              # STEP = internal processing step; INPUT = integration event (default)
+
+# Attach multiple events to one campaign — defer publish until the last one
+extole webhooks attach --webhook <id> --campaign <id> --event signed_up --skip-publish
+extole webhooks attach --webhook <id> --campaign <id> --event purchase    # publishes once here
+```
+
+`--quality` controls dispatch priority: `HIGH` (normal), `LOW` (best-effort), `ALWAYS` (bypasses campaign targeting rules). Defaults to `HIGH`.
+
+### Live Testing
+
+`webhooks trace` temporarily wires a URL to a campaign event and tails dispatch results — no external tunnel needed:
+
+```
+extole webhooks trace \
+  --url https://my-server.com/hook \
+  --campaign <campaign-id> \
+  --event signed_up \
+  --yes                          # skip confirmation prompt
+```
+
+### Inspecting Dispatch History
+
+```
+extole webhooks dispatches <webhook-id>            # what Extole tried to send (attempt records)
+extole webhooks dispatches <webhook-id> --limit 50
+
+extole webhooks dispatch-results <webhook-id>      # HTTP outcomes: response codes + bodies
+extole webhooks dispatch-results <webhook-id> --json
+
+extole webhooks listen <webhook-id>                # tail dispatch results in real time (Ctrl-C to stop)
+extole webhooks listen <webhook-id> --interval 5   # custom poll interval (default 3s)
+extole webhooks listen <webhook-id> --show-body    # print full response body per row
+extole webhooks listen <webhook-id> --duration 60  # auto-exit after 60 seconds
+```
+
+`dispatches` = one record per attempt. `dispatch-results` = HTTP response side (non-200s, timeouts, error bodies). `listen` is the live-tail version — seeds on first poll so only new attempts appear.
+
+## Notifications
+
+Show recent platform notifications for this account — webhook failures, integration errors, and other actionable system alerts. Same data as `my.extole.com/notifications`. Useful when debugging "the integration looks wired up but nothing's happening" — the notifications often name the exact campaign and event the platform couldn't process.
+
+```
+extole notifications                   # last 20 most-recent-first
+extole notifications --limit 50        # paginate (default 20)
+extole notifications --level ERROR     # ERROR / WARN / INFO filter
+extole notifications --tag technical   # tag filter (server-side; repeat for multiple)
+extole notifications --listen          # tail new ones as they arrive (default 10s poll)
+extole notifications --json            # raw response, suitable for scripting
+```
+
+Each notification shows time, level, name, message, and key data fields (campaign_id, controller_id, person_id, cause_event_id) — most of which feed into other CLI commands.
 
 ## Reports
 
@@ -538,122 +657,25 @@ extole reports run --type summary --days 30 \
   | jq -c 'select(.program == "referrals")'
 ```
 
-## Components
+## Health
 
-Extole's configuration is built from **components** — typed, composable building blocks that define programs, rules, rewards, emails, integrations, and more. Understanding the component model is prerequisite to building or modifying offer programs programmatically.
-
-The type system is nominal and open-ended — types form a hierarchy (`reward-supplier-v10.0` is a subtype of `reward-supplier`), and components wire together via named sockets. The reliable way to learn what a type requires is to find a known-good instance and read its config; `extole chat` can also answer type-specific questions.
+Domain and email deliverability checks. The base command is read-only — validates email domains (SPF, DMARC, DKIM, MX, A records) and program domains (CNAME/A resolution) against Extole's validation API. Nothing is created or modified by `extole health` itself; the `provision-dkim` subcommand is the only write operation, and it requires explicit confirmation.
 
 ```
-extole components                                  # all components, account-wide
-extole components --program <id>                   # scoped to one program
-extole components --filter-type reward-supplier    # filter by type (matches subtypes too)
-extole components --filter "gift card"             # filter by name substring
+extole health                       # check all email domains + program domains
+extole health --domain example.com  # filter to a specific email domain
+extole health --json                # raw validation results
 
-extole components get <component-id>               # full config + variables
-extole components get <component-id> --tree        # downstream subtree (recursive)
-extole components get <component-id> --sockets     # socket references to other components
-
-extole components types                            # all concrete types in this account
-extole components types --parent rule              # subtypes of a given parent type
-extole components types --parent rule --tree       # rendered as a hierarchy
+# DKIM provisioning (write operation — interactive prompt by default)
+extole health provision-dkim example.com           # prompts before calling
+extole health provision-dkim example.com --confirm # non-interactive (for scripts/CI)
 ```
 
-`--filter-type` does substring matching against the full type hierarchy (`--filter-type reward` matches `reward-v10.0`, `reward-rule-v10.0`, etc.). `--tree` on `get` shows the full downstream subgraph.
+`provision-dkim` is idempotent — first call mints DKIM keys, subsequent calls return existing records. Output is the CNAME records to add to your DNS provider; re-run `extole health --domain <domain>` to verify.
 
-### Creating integration components
+Exit codes: `0` = all checks pass, `1` = one or more failures, `2` = bad input or auth error. Suitable for CI preflight scripts and readiness probes.
 
-`components create` attaches a component to a campaign. Primary use case: webhook integrations where the component discovers its webhook(s) by tag at publish time.
-
-```
-# Minimal — component with no webhook wiring
-extole components create --name my_integration --campaign <id>
-
-# With webhook discovery — component finds the webhook by tag when campaign is published
-extole components create \
-  --name iterable_integration \
-  --display-name "Iterable" \
-  --campaign <campaign-id> \
-  --description "Sends referral events to Iterable" \
-  --webhook-tag "iterable-events"
-
-# Multiple webhooks (auto-named from tag)
-extole components create \
-  --name my_integration \
-  --campaign <campaign-id> \
-  --webhook-tag "my-integration-events" \
-  --webhook-tag "my-integration-subscriptions"
-
-# Explicit variable name (varName:tag)
-extole components create \
-  --name my_integration \
-  --campaign <campaign-id> \
-  --webhook-tag "eventsWebhookId:my-integration-events"
-
-# Print payload without creating (useful for verifying buildtime expressions)
-extole components create --name my_integration --campaign <id> --webhook-tag my-events --dry-run
-```
-
-Each `--webhook-tag` generates a `javascript@buildtime` variable that resolves the webhook ID at publish time; the resolved ID is stored (no runtime tag lookup).
-
-### Deploying integration bundles
-
-`components deploy` bundles a local directory and uploads it. Use for full integration components (`integration-v10.0`, `extension`, etc.) where component, sub-components, webhooks, and scripts live together as a directory tree.
-
-```
-# Deploy a new bundle (creates its own campaign)
-extole components deploy --source ./my_integration
-
-# Deploy and publish immediately
-extole components deploy --source ./my_integration --publish
-
-# Update an existing component in place
-extole components deploy --source ./my_integration --component <component-id>
-
-# Update and publish
-extole components deploy --source ./my_integration --component <component-id> --publish
-
-# Print resolved component.json contents (post-%{...}% include expansion) without uploading
-extole components deploy --source ./my_integration --dry-run
-
-# Show full API error details on failure
-extole components deploy --source ./my_integration --verbose
-```
-
-Running `deploy` without `--component` always creates a new campaign. Pass `--component` with the ID from the first deploy to update in place. Settings values can reference external files using `%{/path/to/file.js}%` — the CLI inlines the file content before uploading.
-
-### Patching component settings
-
-Update one or more settings on an already-deployed component without redeploying the bundle:
-
-```
-extole components set <component-id> --setting apiKey=test_key_123
-extole components set <component-id> --setting apiKey=k1 --setting endpoint=https://example.com
-extole components set <component-id> --setting apiKey=k1 --dry-run    # show payload only
-```
-
-Values are sent as strings; the platform validates and rejects mismatches. Changes on LIVE campaigns are staged until you republish (via `components deploy --publish` or my.extole).
-
-### Deleting components
-
-```
-extole components delete <component-id>             # prompts for confirmation
-extole components delete <component-id> --confirm   # skip prompt (for scripts)
-extole components delete <component-id> --dry-run   # show what would be deleted
-```
-
-Deleting a root component archives its entire campaign; the CLI warns if it's a root before prompting. For a full walkthrough of the bundle format and deployment workflow, contact your Extole solutions engineer.
-
-## Feedback
-
-```
-extole feedback the --filter-state flag should mention it is REWARD-only in the help text
-extole feedback auth login flow was confusing at first, needed to read the README
-```
-
-Creates a Jira ticket via the Extole AI agent. Includes your account name and CLI version automatically.
-
-## AI (extole chat)
+## Chat
 
 `extole chat` gives access to an Extole AI agent with deep knowledge of the API, component model, event semantics, and reward flows. Use it **before** exploring blindly.
 
@@ -673,39 +695,16 @@ extole chat "what's the difference between causeEventIds and rootEventIds on ste
 
 Uses your stored Extole token; no separate login. `chat` and `feedback` are excluded from `extole serve` to avoid circular tool calls.
 
-## Share Links
-
-Two directions:
+## Feedback
 
 ```
-extole share-links list --email jane@example.com              # all share links for a person
-extole share-links list --email jane@example.com --label credit-cards
-extole share-links list --email jane@example.com --json
-
-extole share-links lookup chrisbackfillcw214                  # reverse: code → owner
-extole share-links lookup https://demo-data-finserv.extole.io/chrisbackfillcw214
-extole share-links lookup chrisbackfillcw214 --json
+extole feedback the --filter-state flag should mention it is REWARD-only in the help text
+extole feedback auth login flow was confusing at first, needed to read the README
 ```
 
-`list` returns share links (label, code, URL); use `--label` to filter across programs. `lookup` is the reverse: given a share code or full URL, returns the owning person and program.
+Creates a Jira ticket via the Extole AI agent. Includes your account name and CLI version automatically.
 
-## Zones
-
-```
-extole zones                                           # list embed zone names for this account
-extole zones --json
-
-extole zones core                                      # print the core.js <script> tag for this account
-extole zones tag <zone_name>                           # print the embed snippet for a zone
-
-extole zones call <zone_name> --email <email>          # POST to a zone (test FRONTEND_CONTROLLER pipelines)
-extole zones call <zone_name> --email <email> --param partner_user_id=abc123
-extole zones call <zone_name> --email <email> --json
-```
-
-`zones call` POSTs to `/v5/zones/<zone_name>` — useful for testing FRONTEND_CONTROLLER + DISPLAY pipelines without a browser.
-
-## MCP server (Claude Desktop / Claude Code)
+## MCP Server (Claude Desktop / Claude Code)
 
 `extole serve` runs the CLI as an MCP stdio server — Claude Desktop and Claude Code can spawn it and call any CLI command as a tool.
 
@@ -717,20 +716,35 @@ extole serve          # start the MCP server (Claude Desktop spawns this automat
 
 `serve setup` detects Claude Desktop and Claude Code and writes the MCP server entry to each config. Re-run after updating the CLI to pick up new tools.
 
-## API (escape hatch)
+## API
 
-Direct authenticated access to any Extole endpoint — for cases where no specific subcommand exists yet:
+### Search
+
+Search across all published Extole API endpoints by keyword — useful when you know what you want to do but aren't sure which path or method to use:
+
+```
+extole api search batch                        # find all batch job endpoints
+extole api search person --spec integration    # search integration spec only
+extole api search erasure --detail             # show full description + request fields
+extole api search reward --spec integration    # reward state-transition endpoints
+```
+
+Searches path, summary, description, and tags across the management and integration-server specs. Results update automatically as Extole publishes spec changes — no CLI update required.
+
+### Escape Hatch
+
+Direct authenticated access to any endpoint — for cases where no specific subcommand exists yet:
 
 ```
 extole api /v2/campaigns/123/controllers
 extole api /v6/webhooks/built
 extole api /v2/campaigns/123/publish --method POST --body '{}'
-extole api /v4/tokens --auth-base              # use api.extole.com instead of api.extole.io
+extole api /v4/tokens --auth-base  # use api.extole.com instead of api.extole.io
 ```
 
 GET by default. `--method` to override, `--body` for POST/PUT/PATCH, `--auth-base` for the auth API. Output is JSON-formatted and supports `--compact`.
 
-## Output conventions
+## Output Conventions
 
 - Human-readable by default; `--json` on all commands
 - `--compact` strips nulls and empty fields (useful for piping to agents)
@@ -738,7 +752,7 @@ GET by default. `--method` to override, `--body` for POST/PUT/PATCH, `--auth-bas
 - Exit 0 = success, 1 = API error, 2 = bad input/config, 130 = Ctrl+C, 143 = SIGTERM
 - Data goes to stdout, status/progress goes to stderr (pipeable)
 
-## Config file
+## Config File
 
 `~/.extole/config`:
 ```json

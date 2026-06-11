@@ -42,30 +42,37 @@ program
   .enablePositionalOptions()
 ;
 
-program.addCommand(authCommand());
-program.addCommand(pingCommand());
-program.addCommand(whoamiCommand());
-program.addCommand(streamCommand());
-program.addCommand(eventsCommand());
-program.addCommand(personCommand());
-program.addCommand(rewardsCommand());
-program.addCommand(rewardSuppliersCommand());
-program.addCommand(programsCommand());
-program.addCommand(campaignsCommand());
-program.addCommand(audiencesCommand());
-program.addCommand(notificationsCommand());
-program.addCommand(componentsCommand());
-program.addCommand(webhooksCommand());
-program.addCommand(healthCommand());
-program.addCommand(reportsCommand());
-program.addCommand(chatCommand());
-program.addCommand(feedbackCommand());
-program.addCommand(zonesCommand());
-program.addCommand(shareLinksCommand());
-program.addCommand(apiCommand());
+program.addCommand(authCommand().helpGroup('Account:'));
+program.addCommand(pingCommand().helpGroup('Account:'));
+program.addCommand(whoamiCommand().helpGroup('Account:'));
+
+program.addCommand(personCommand().helpGroup('People:'));
+program.addCommand(shareLinksCommand().helpGroup('People:'));
+
+program.addCommand(rewardsCommand().helpGroup('Rewards:'));
+program.addCommand(rewardSuppliersCommand().helpGroup('Rewards:'));
+
+program.addCommand(programsCommand().helpGroup('Programs & Campaigns:'));
+program.addCommand(campaignsCommand().helpGroup('Programs & Campaigns:'));
+program.addCommand(audiencesCommand().helpGroup('Programs & Campaigns:'));
+program.addCommand(componentsCommand().helpGroup('Programs & Campaigns:'));
+program.addCommand(zonesCommand().helpGroup('Programs & Campaigns:'));
+
+program.addCommand(eventsCommand().helpGroup('Events & Integrations:'));
+program.addCommand(streamCommand().helpGroup('Events & Integrations:'));
+program.addCommand(webhooksCommand().helpGroup('Events & Integrations:'));
+program.addCommand(notificationsCommand().helpGroup('Events & Integrations:'));
+
+program.addCommand(reportsCommand().helpGroup('Reports & Health:'));
+program.addCommand(healthCommand().helpGroup('Reports & Health:'));
+
+program.addCommand(chatCommand().helpGroup('AI Assistant:'));
+program.addCommand(feedbackCommand().helpGroup('AI Assistant:'));
+
+program.addCommand(apiCommand().helpGroup('Developer Tools:'));
 
 // schema and serve introspect program, so registered after all other commands
-program.addCommand(schemaCommand(program));
-program.addCommand(serveCommand(program));
+program.addCommand(schemaCommand(program).helpGroup('Developer Tools:'));
+program.addCommand(serveCommand(program).helpGroup('Developer Tools:'));
 
 program.parse();

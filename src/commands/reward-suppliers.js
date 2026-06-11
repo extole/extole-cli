@@ -36,7 +36,7 @@ function formatFaceValue(s) {
 
 export function rewardSuppliersCommand() {
   const cmd = new Command('reward-suppliers')
-    .description('Inspect configured reward suppliers — manual-coupon batches, Tango, PayPal payouts, BHN, custom suppliers. Use it to see what reward types exist on the account, their face values, and (for manual-coupon suppliers) how many codes are left.')
+    .description('Inspect and manage reward suppliers (BHN, coupons, custom, Tango) including face values')
     .allowExcessArguments(false)
     .option('--filter <substr>', 'Case-insensitive substring match on supplier name or type')
     .action(async function () {
