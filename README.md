@@ -27,7 +27,6 @@ Developer CLI for the Extole API.
 - [Health](#health)
 - [Chat](#chat)
 - [Feedback](#feedback)
-- [MCP Server (Claude Desktop / Claude Code)](#mcp-server-claude-desktop--claude-code)
 - [API](#api)
 - [Output Conventions](#output-conventions)
 - [Config File](#config-file)
@@ -703,18 +702,6 @@ extole feedback auth login flow was confusing at first, needed to read the READM
 ```
 
 Creates a Jira ticket via the Extole AI agent. Includes your account name and CLI version automatically.
-
-## MCP Server (Claude Desktop / Claude Code)
-
-`extole serve` runs the CLI as an MCP stdio server — Claude Desktop and Claude Code can spawn it and call any CLI command as a tool.
-
-```
-extole serve setup    # auto-configure Claude Desktop and Claude Code; restart the client to activate
-extole serve remove   # remove the MCP server registration from all detected clients
-extole serve          # start the MCP server (Claude Desktop spawns this automatically after setup)
-```
-
-`serve setup` detects Claude Desktop and Claude Code and writes the MCP server entry to each config. Re-run after updating the CLI to pick up new tools.
 
 ## API
 

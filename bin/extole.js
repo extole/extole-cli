@@ -24,7 +24,6 @@ import { notificationsCommand } from '../src/commands/notifications.js';
 import { rewardSuppliersCommand } from '../src/commands/reward-suppliers.js';
 import { apiCommand } from '../src/commands/api.js';
 import { schemaCommand } from '../src/commands/schema.js';
-import { serveCommand } from '../src/commands/serve.js';
 
 const { version } = pkg;
 
@@ -71,8 +70,7 @@ program.addCommand(feedbackCommand().helpGroup('AI Assistant:'));
 
 program.addCommand(apiCommand().helpGroup('Developer Tools:'));
 
-// schema and serve introspect program, so registered after all other commands
+// schema introspects program, so registered after all other commands
 program.addCommand(schemaCommand(program).helpGroup('Developer Tools:'));
-program.addCommand(serveCommand(program).helpGroup('Developer Tools:'));
 
 program.parse();
