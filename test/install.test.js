@@ -1,13 +1,23 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
+import { accessSync, constants, existsSync, mkdtempSync, rmSync } from 'node:fs';
 import { spawnSync } from 'node:child_process';
-import { existsSync, mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 const repoRoot = join(dirname(fileURLToPath(import.meta.url)), '..');
 const installSh = join(repoRoot, 'install.sh');
+
+function usrLocalBinWritable() {
+  if (!existsSync('/usr/local/bin')) return false;
+  try {
+    accessSync('/usr/local/bin', constants.W_OK);
+    return true;
+  } catch {
+    return false;
+  }
+}
 
 test('install.sh installs binary to EXTOLE_INSTALL directory', () => {
   const installDir = mkdtempSync(join(tmpdir(), 'extole-install-'));
@@ -29,7 +39,11 @@ test('install.sh installs binary to EXTOLE_INSTALL directory', () => {
   }
 });
 
-test('install.sh falls back when /usr/local/bin is not writable', () => {
+test('install.sh falls back when /usr/local/bin is not writable', (t) => {
+  if (usrLocalBinWritable()) {
+    t.skip('/usr/local/bin is writable on this runner');
+  }
+
   const home = mkdtempSync(join(tmpdir(), 'extole-home-'));
   const installDir = join(home, '.local', 'bin');
   try {
@@ -38,31 +52,10 @@ test('install.sh falls back when /usr/local/bin is not writable', () => {
       env: {
         ...process.env,
         HOME: home,
-        EXTOLE_INSTALL: '',
         PATH: process.env.PATH,
       },
       encoding: 'utf8',
     });
-
-    if (existsSync('/usr/local/bin') && process.env.CI !== 'true') {
-      try {
-        process.accessSync('/usr/local/bin', process.constants.W_OK);
-        return;
-      } catch {
-        // not writable — expect fallback
-      }
-    }
-
-    if (process.env.CI === 'true' && existsSync('/usr/local/bin')) {
-      try {
-        process.accessSync('/usr/local/bin', process.constants.W_OK);
-        assert.equal(result.status, 0);
-        assert.equal(existsSync('/usr/local/bin/extole') || existsSync(join(installDir, 'extole')), true);
-        return;
-      } catch {
-        // fall through to fallback assertion
-      }
-    }
 
     assert.equal(result.status, 0, result.stderr || result.stdout);
     assert.equal(existsSync(join(installDir, 'extole')), true);
