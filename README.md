@@ -35,8 +35,8 @@ Developer CLI for the Extole API.
 
 ## Requirements
 
-- Node.js 22.12 or higher
 - An Extole account with an API token (see [Getting a Token](#getting-a-token))
+- Node.js 22.12 or higher (only required for the from-source install method)
 
 ## Install
 
@@ -56,9 +56,12 @@ Download `extole-windows-x64.exe` from the [latest release](https://github.com/e
 brew install extole/tap/extole
 ```
 
-**npm (requires Node 22.12+):**
+**From source (requires Node 22.12+):**
 ```bash
-npm install -g @extole/cli
+git clone https://github.com/extole/extole-cli.git
+cd extole-cli
+npm install
+npm link
 ```
 
 Verify: `extole --version`
@@ -389,6 +392,17 @@ extole components delete <component-id> --dry-run   # show what would be deleted
 ```
 
 Deleting a root component archives its entire campaign; the CLI warns if it's a root before prompting. For a full walkthrough of the bundle format and deployment workflow, contact your Extole solutions engineer.
+
+### Downloading a Campaign Bundle
+
+Download the live campaign bundle from the platform and unpack it locally — useful for inspecting what's deployed or diffing against a local source tree.
+
+```
+extole components download <campaign-id>                      # unpack to ./campaign-name/
+extole components download <campaign-id> --output ./my-local  # specify output directory
+```
+
+The download reconstructs a readable directory structure: `campaign.json` at the root, assets with the extra platform directory level removed, and creative ZIPs renamed from numeric IDs to their logical names (derived from the step/trigger names in `campaign.json`). The output is not directly deployable via `components deploy` — `component.json` is not reconstructed — but it is suitable for inspection and diffing.
 
 ## Zones
 

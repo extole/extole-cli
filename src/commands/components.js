@@ -611,9 +611,132 @@ export function componentsCommand() {
   typesCmd._mcpDescription = 'List all registered component type families (e.g. integration-v1, extension, business-event-v10). Use to discover valid --type values for components_create. Registered types enforce a settings schema; omit --type in components_create for custom/untyped components.';
   deployCmd._mcpDescription = 'Bundle a local component directory (containing component.json) and upload it to the platform. Use --component to update an existing component, omit to create new. Use --dry-run to preview the resolved component.json after include expansion without uploading. Use --publish to publish the parent campaign immediately after upload.';
 
+  // ── download ───────────────────────────────────────────────────────────────
+
+  const downloadCmd = new Command('download')
+    .description('Download a campaign bundle and unpack it locally')
+    .argument('<campaign-id>', 'Campaign ID to download')
+    .option('--output <dir>', 'Output directory (default: sanitized campaign name)')
+    .action(async function (campaignId) {
+      const opts = this.optsWithGlobals();
+      const token = resolveToken(opts);
+
+      process.stderr.write('Downloading campaign bundle...\n');
+      const res = await apiFetch(`/v2/campaigns/${campaignId}.zip`, token, { verbose: opts.verbose, baseUrl: API_BASE });
+      if (!res.ok) {
+        const text = await res.text();
+        console.error(`Error ${res.status}: ${text}`);
+        process.exit(1);
+      }
+
+      const tmpDir = mkdtempSync(join(tmpdir(), 'extole-download-'));
+      try {
+        const zipPath = join(tmpDir, 'campaign.zip');
+        const arrayBuffer = await res.arrayBuffer();
+        writeFileSync(zipPath, Buffer.from(arrayBuffer));
+
+        execSync(`unzip -q "${zipPath}" -d "${tmpDir}"`, { stdio: 'pipe' });
+
+        const entries = readdirSync(tmpDir).filter(entry => entry !== 'campaign.zip');
+        if (entries.length !== 1) {
+          console.error('Unexpected bundle structure: expected single root directory');
+          process.exit(1);
+        }
+        const bundleRoot = join(tmpDir, entries[0]);
+
+        const campaignData = JSON.parse(readFileSync(join(bundleRoot, 'campaign.json'), 'utf8'));
+        const creativeIdToName = buildCreativeNameMap(campaignData);
+
+        const outputDir = opts.output || sanitizeDirName(campaignData.name || campaignId);
+        if (existsSync(outputDir)) {
+          console.error(`Error: output directory already exists: ${outputDir}`);
+          process.exit(1);
+        }
+        mkdirSync(outputDir, { recursive: true });
+
+        writeFileSync(join(outputDir, 'campaign.json'), JSON.stringify(campaignData, null, 2));
+
+        const bundleComponentsDir = join(bundleRoot, 'components');
+        if (existsSync(bundleComponentsDir)) {
+          for (const compName of readdirSync(bundleComponentsDir)) {
+            const srcCompDir = join(bundleComponentsDir, compName);
+            const destCompDir = join(outputDir, 'components', compName);
+            mkdirSync(destCompDir, { recursive: true });
+
+            const srcAssetsDir = join(srcCompDir, 'assets');
+            if (existsSync(srcAssetsDir)) {
+              const destAssetsDir = join(destCompDir, 'assets');
+              mkdirSync(destAssetsDir, { recursive: true });
+              for (const assetName of readdirSync(srcAssetsDir)) {
+                const assetSubDir = join(srcAssetsDir, assetName);
+                if (statSync(assetSubDir).isDirectory()) {
+                  const files = readdirSync(assetSubDir);
+                  if (files.length === 1) {
+                    copyFileSync(join(assetSubDir, files[0]), join(destAssetsDir, files[0]));
+                  }
+                } else {
+                  copyFileSync(assetSubDir, join(destAssetsDir, assetName));
+                }
+              }
+            }
+          }
+        }
+
+        const bundleCreativesDir = join(bundleRoot, 'creatives');
+        if (existsSync(bundleCreativesDir)) {
+          const nonRootComponent = (campaignData.components || []).find(comp => comp.name !== 'root');
+          const destCreativesDir = nonRootComponent
+            ? join(outputDir, 'components', nonRootComponent.name, 'creatives')
+            : join(outputDir, 'creatives');
+          mkdirSync(destCreativesDir, { recursive: true });
+
+          for (const creativeFile of readdirSync(bundleCreativesDir)) {
+            const numericId = creativeFile.replace('.zip', '');
+            const logicalName = creativeIdToName[numericId] || numericId;
+            copyFileSync(join(bundleCreativesDir, creativeFile), join(destCreativesDir, `${logicalName}.zip`));
+          }
+        }
+
+        console.log(`Downloaded to: ${outputDir}`);
+        console.log(`Campaign: ${campaignData.name} (${campaignData.state})`);
+        const creativeCount = Object.keys(creativeIdToName).length;
+        if (creativeCount > 0) console.log(`Creatives: ${creativeCount} renamed from numeric IDs`);
+        console.log('\nNote: campaign.json preserved as-is. Use for inspection/diffing — not directly deployable via components deploy.');
+      } finally {
+        rmSync(tmpDir, { recursive: true, force: true });
+      }
+    });
+
+  addGlobalOptions(downloadCmd, {
+    examples: [
+      'extole components download <campaign-id>',
+      'extole components download <campaign-id> --output ./my-campaign',
+    ],
+  });
+
   components.addCommand(setCmd);
+  components.addCommand(downloadCmd);
 
   return components;
+}
+
+function buildCreativeNameMap(campaignData) {
+  const creativeIdToName = {};
+  for (const step of campaignData.steps || []) {
+    const triggerNames = (step.triggers || []).flatMap(trigger => trigger.event_names || []);
+    const primaryName = triggerNames[0];
+    if (!primaryName) continue;
+    for (const action of step.actions || []) {
+      if (action.creative_archive_id) {
+        creativeIdToName[String(action.creative_archive_id)] = primaryName.replace(/_/g, '-');
+      }
+    }
+  }
+  return creativeIdToName;
+}
+
+function sanitizeDirName(name) {
+  return name.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');
 }
 
 function processDir(srcDir, destDir, bundleRoot) {
