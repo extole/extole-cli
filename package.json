@@ -16,7 +16,7 @@
     "node": ">=22.12"
   },
   "type": "module",
-  "license": "UNLICENSED",
+  "license": "MIT",
   "repository": {
     "type": "git",
     "url": "git+https://github.com/extole/extole-cli.git"

@@ -1,0 +1,89 @@
+name: Update Homebrew tap
+
+on:
+  release:
+    types:
+      - published
+
+permissions:
+  contents: read
+
+jobs:
+  update-formula:
+    name: Bump extole/homebrew-tap formula
+    runs-on: ubuntu-latest
+    steps:
+      - name: Resolve release version
+        id: version
+        run: |
+          version="${GITHUB_REF_NAME#v}"
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+
+      - name: Download darwin release assets
+        run: |
+          version="${{ steps.version.outputs.version }}"
+          base="https://github.com/extole/extole-cli/releases/download/v${version}"
+          curl -fsSL -o extole-darwin-arm64 "${base}/extole-darwin-arm64"
+          curl -fsSL -o extole-darwin-x64 "${base}/extole-darwin-x64"
+          echo "sha256_arm64=$(sha256sum extole-darwin-arm64 | awk '{print $1}')" >> "$GITHUB_ENV"
+          echo "sha256_x64=$(sha256sum extole-darwin-x64 | awk '{print $1}')" >> "$GITHUB_ENV"
+
+      - name: Check out homebrew-tap
+        uses: actions/checkout@v4
+        with:
+          repository: extole/homebrew-tap
+          token: ${{ secrets.HOMEBREW_TAP_TOKEN }}
+          path: homebrew-tap
+
+      - name: Update Formula/extole.rb
+        working-directory: homebrew-tap
+        env:
+          VERSION: ${{ steps.version.outputs.version }}
+          SHA256_ARM64: ${{ env.sha256_arm64 }}
+          SHA256_X64: ${{ env.sha256_x64 }}
+        run: |
+          python3 <<PY
+          import os
+          version = os.environ["VERSION"]
+          arm = os.environ["SHA256_ARM64"]
+          x64 = os.environ["SHA256_X64"]
+          formula = """class Extole < Formula
+            desc "Extole developer CLI"
+            homepage "https://github.com/extole/extole-cli"
+            version "%(version)s"
+            license "MIT"
+
+            on_macos do
+              on_arm do
+                url "https://github.com/extole/extole-cli/releases/download/v#{version}/extole-darwin-arm64"
+                sha256 "%(arm)s"
+              end
+
+              on_intel do
+                url "https://github.com/extole/extole-cli/releases/download/v#{version}/extole-darwin-x64"
+                sha256 "%(x64)s"
+              end
+            end
+
+            def install
+              bin.install Dir["extole-darwin-*"].first => "extole"
+            end
+
+            test do
+              assert_match version.to_s, shell_output("#{bin}/extole --version")
+            end
+          end
+          """ % {"version": version, "arm": arm, "x64": x64}
+          with open("Formula/extole.rb", "w", encoding="utf-8") as f:
+              f.write(formula)
+          PY
+
+      - name: Commit and push formula bump
+        working-directory: homebrew-tap
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add Formula/extole.rb
+          git diff --staged --quiet && exit 0
+          git commit -m "extole: bump to v${{ steps.version.outputs.version }}"
+          git push origin HEAD:master
