@@ -3,13 +3,13 @@ set -e
 
 REPO="https://github.com/extole/extole-cli"
 
+# Choose install directory: explicit override, then a writable system dir, then a user dir.
 if [ -n "$EXTOLE_INSTALL" ]; then
   BIN_DIR="$EXTOLE_INSTALL"
 elif [ -d /usr/local/bin ] && [ -w /usr/local/bin ]; then
   BIN_DIR="/usr/local/bin"
 else
-  BIN_DIR="${HOME}/.local/bin"
-  FALLBACK_INSTALL=1
+  BIN_DIR="$HOME/.local/bin"
 fi
 
 mkdir -p "$BIN_DIR"
@@ -17,10 +17,10 @@ mkdir -p "$BIN_DIR"
 # Detect OS and architecture
 platform=$(uname -ms)
 case "$platform" in
-  'Darwin arm64')               target=darwin-arm64 ;;
-  'Darwin x86_64')              target=darwin-x64 ;;
+  'Darwin arm64')                target=darwin-arm64 ;;
+  'Darwin x86_64')               target=darwin-x64 ;;
   'Linux aarch64'|'Linux arm64') target=linux-arm64 ;;
-  'Linux x86_64'|*)             target=linux-x64 ;;
+  'Linux x86_64'|*)              target=linux-x64 ;;
 esac
 
 if [ -z "$target" ]; then
@@ -54,11 +54,50 @@ chmod +x "$exe"
 
 echo ""
 echo "extole installed to $exe"
-if [ -n "$FALLBACK_INSTALL" ]; then
+
+# Ensure the install directory is on PATH for future shells.
+case ":$PATH:" in
+  *":$BIN_DIR:"*)
+    on_path=1 ;;
+  *)
+    on_path=0 ;;
+esac
+
+if [ "$on_path" -eq 0 ]; then
+  path_line="export PATH=\"$BIN_DIR:\$PATH\""
+
+  shell_name=$(basename "${SHELL:-sh}")
+  case "$shell_name" in
+    zsh)
+      profile="$HOME/.zshrc" ;;
+    bash)
+      if [ -f "$HOME/.bash_profile" ]; then
+        profile="$HOME/.bash_profile"
+      else
+        profile="$HOME/.bashrc"
+      fi ;;
+    *)
+      profile="$HOME/.profile" ;;
+  esac
+
+  if grep -Fq "$BIN_DIR" "$profile" 2>/dev/null; then
+    profile_has_path=1
+  else
+    printf '\n# Added by extole-cli installer\n%s\n' "$path_line" >> "$profile"
+    profile_has_path=0
+  fi
+
   echo ""
-  echo "/usr/local/bin is not writable — using $BIN_DIR instead."
-  echo "Add to your shell profile: export PATH=\"$BIN_DIR:\$PATH\""
+  if [ "$profile_has_path" -eq 0 ]; then
+    echo "Added $BIN_DIR to your PATH in $profile."
+  else
+    echo "$BIN_DIR is referenced in $profile but not on the current PATH."
+  fi
+  echo "Open a new terminal, or run this in the current one:"
+  echo "  $path_line"
 fi
+
+echo ""
 echo "Run 'extole --help' to get started."
 echo ""
 echo "To authenticate: extole auth login --token YOUR_TOKEN"
