@@ -39,11 +39,9 @@ test('install.sh installs binary to EXTOLE_INSTALL directory', () => {
   }
 });
 
-test('install.sh falls back when /usr/local/bin is not writable', (t) => {
-  if (usrLocalBinWritable()) {
-    t.skip('/usr/local/bin is writable on this runner');
-  }
-
+test('install.sh falls back when /usr/local/bin is not writable', {
+  skip: usrLocalBinWritable() ? '/usr/local/bin is writable on this runner' : false,
+}, () => {
   const home = mkdtempSync(join(tmpdir(), 'extole-home-'));
   const installDir = join(home, '.local', 'bin');
   try {
