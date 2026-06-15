@@ -45,7 +45,7 @@ Developer CLI for the Extole API.
 curl -fsSL https://raw.githubusercontent.com/extole/extole-cli/master/install.sh | sh
 ```
 
-Installs to `/usr/local/bin/extole` when that directory is writable; otherwise `~/.local/bin/extole` (the script prints the PATH line to add). Override with `EXTOLE_INSTALL=/your/path`.
+Installs to `/usr/local/bin/extole` when that directory is writable. Otherwise (the common case on macOS, where `/usr/local/bin` is root-owned) it installs to `~/.local/bin/extole` and adds that directory to your shell profile's `PATH`. Open a new terminal afterward, or run the `export PATH=...` line the installer prints. Override the location with `EXTOLE_INSTALL=/your/path`.
 
 **Binary — Windows:**
 
