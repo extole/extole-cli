@@ -56,6 +56,11 @@ Download `extole-windows-x64.exe` from the [latest release](https://github.com/e
 brew install extole/tap/extole
 ```
 
+**npm (requires Node 22.12+):**
+```bash
+npm install -g @extole/cli
+```
+
 **From source (requires Node 22.12+):**
 ```bash
 git clone https://github.com/extole/extole-cli.git
