@@ -2,7 +2,17 @@
 set -e
 
 REPO="https://github.com/extole/extole-cli"
-BIN_DIR="${EXTOLE_INSTALL:-/usr/local/bin}"
+
+if [ -n "$EXTOLE_INSTALL" ]; then
+  BIN_DIR="$EXTOLE_INSTALL"
+elif [ -d /usr/local/bin ] && [ -w /usr/local/bin ]; then
+  BIN_DIR="/usr/local/bin"
+else
+  BIN_DIR="${HOME}/.local/bin"
+  FALLBACK_INSTALL=1
+fi
+
+mkdir -p "$BIN_DIR"
 
 # Detect OS and architecture
 platform=$(uname -ms)
@@ -44,6 +54,11 @@ chmod +x "$exe"
 
 echo ""
 echo "extole installed to $exe"
+if [ -n "$FALLBACK_INSTALL" ]; then
+  echo ""
+  echo "/usr/local/bin is not writable — using $BIN_DIR instead."
+  echo "Add to your shell profile: export PATH=\"$BIN_DIR:\$PATH\""
+fi
 echo "Run 'extole --help' to get started."
 echo ""
 echo "To authenticate: extole auth login --token YOUR_TOKEN"
