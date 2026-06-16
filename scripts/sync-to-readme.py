@@ -1,48 +1,35 @@
 #!/usr/bin/env python3
 """
-Syncs the extole-cli README.md to the Extole CLI page in ReadMe.com.
+Syncs docs/extole-cli.md to the Extole CLI page in ReadMe.com.
 
-Triggered by GitHub Actions on any push to master that touches README.md.
+Triggered by GitHub Actions on any push to main that touches docs/extole-cli.md.
+The source file is the curated user-facing overview; the full README.md is the
+developer reference and is NOT synced automatically.
+
+To update the docs page, edit docs/extole-cli.md and push to main.
+
 Requires:
-  README_API_KEY  — ReadMe API key (store as a GitHub Actions secret)
-  README_BRANCH   — ReadMe branch/version slug (e.g. 4.0.0_extole-ai-docs or stable)
-  README_SLUG     — ReadMe page slug (extole-cli)
+  README_API_KEY  -- ReadMe API key (store as a GitHub Actions secret)
+  README_BRANCH   -- ReadMe branch/version slug (e.g. stable or 4.0.0)
+  README_SLUG     -- ReadMe page slug (extole-cli)
+  SOURCE_FILE     -- Path to the markdown source file (docs/extole-cli.md)
 """
 
 import os
-import re
 import sys
 import requests
 
 README_API_KEY = os.environ["README_API_KEY"]
 BRANCH = os.environ.get("README_BRANCH", "stable")
 SLUG = os.environ.get("README_SLUG", "extole-cli")
+SOURCE_FILE = os.environ.get("SOURCE_FILE", "docs/extole-cli.md")
 
 PATCH_URL = f"https://api.readme.com/v2/branches/{BRANCH}/guides/{SLUG}"
 
 
-def load_readme(path="README.md") -> str:
+def load_source(path: str) -> str:
     with open(path, "r", encoding="utf-8") as f:
-        return f.read()
-
-
-def transform(content: str) -> str:
-    # Drop the top-level H1 — ReadMe uses the page title field for that
-    content = re.sub(r"^#\s+.+\n\n?", "", content, count=1)
-
-    # Drop the Table of Contents section (everything from the ToC heading
-    # up to — but not including — the next ## heading)
-    content = re.sub(
-        r"(?m)^##\s+Table of Contents\s*\n.*?(?=\n##\s)",
-        "",
-        content,
-        flags=re.DOTALL,
-    )
-
-    # Replace em-dashes (—) with double-hyphens to avoid ReadMe API 500s
-    content = content.replace("—", "--")
-
-    return content.strip()
+        return f.read().strip()
 
 
 def patch_readme(body: str) -> None:
@@ -65,8 +52,7 @@ def patch_readme(body: str) -> None:
 
 
 def main():
-    raw = load_readme()
-    body = transform(raw)
+    body = load_source(SOURCE_FILE)
     patch_readme(body)
 
 
