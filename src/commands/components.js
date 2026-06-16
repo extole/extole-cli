@@ -692,15 +692,16 @@ export function componentsCommand() {
 
           for (const creativeFile of readdirSync(bundleCreativesDir)) {
             const numericId = creativeFile.replace('.zip', '');
-            const logicalName = creativeIdToName[numericId] || numericId;
-            copyFileSync(join(bundleCreativesDir, creativeFile), join(destCreativesDir, `${logicalName}.zip`));
+            const logicalName = creativeIdToName[numericId];
+            const outputName = logicalName ? `${logicalName}-${numericId}` : numericId;
+            copyFileSync(join(bundleCreativesDir, creativeFile), join(destCreativesDir, `${outputName}.zip`));
           }
         }
 
         console.log(`Downloaded to: ${outputDir}`);
         console.log(`Campaign: ${campaignData.name} (${campaignData.state})`);
         const creativeCount = Object.keys(creativeIdToName).length;
-        if (creativeCount > 0) console.log(`Creatives: ${creativeCount} renamed from numeric IDs`);
+        if (creativeCount > 0) console.log(`Creatives: ${creativeCount} (named <component>-<archive-id>.zip — IDs are stable unless the campaign is redeployed fresh)`);
         console.log('\nNote: campaign.json preserved as-is. Use for inspection/diffing — not directly deployable via components deploy.');
       } finally {
         rmSync(tmpDir, { recursive: true, force: true });
@@ -723,12 +724,12 @@ export function componentsCommand() {
 function buildCreativeNameMap(campaignData) {
   const creativeIdToName = {};
   for (const step of campaignData.steps || []) {
-    const triggerNames = (step.triggers || []).flatMap(trigger => trigger.event_names || []);
-    const primaryName = triggerNames[0];
-    if (!primaryName) continue;
     for (const action of step.actions || []) {
-      if (action.creative_archive_id) {
-        creativeIdToName[String(action.creative_archive_id)] = primaryName.replace(/_/g, '-');
+      if (!action.creative_archive_id) continue;
+      const absoluteName = (action.component_references || [])[0]?.absolute_name;
+      if (absoluteName) {
+        const logicalName = absoluteName.replace(/^\//, '').replace(/\//g, '-').replace(/_/g, '-');
+        creativeIdToName[String(action.creative_archive_id)] = logicalName;
       }
     }
   }

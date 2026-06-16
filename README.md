@@ -75,7 +75,7 @@ Verify: `extole --version`
 
 This CLI targets **developers and technical operators** working with the Extole API — engineers integrating Extole into their platform, technical support staff diagnosing reward and event issues, and solutions engineers configuring programs.
 
-Several commands (`components deploy`, `campaigns quality-rules`, `health provision-dkim`) require elevated account permissions. Standard API tokens with `CLIENT_ADMIN` scope cover most read operations; write operations and some diagnostics require `CLIENT_SUPERUSER`. If you hit a 403, your token may lack the necessary scope.
+All CLI commands require a token with `CLIENT_ADMIN` scope. If you hit a 403, your token may lack the necessary scope — see [Getting a Token](#getting-a-token).
 
 ## Quickstart
 
@@ -98,7 +98,7 @@ For help on any command: `extole --help`, `extole <command> --help`
 
 ## Getting a Token
 
-Log in to [my.extole.com](https://my.extole.com), navigate to **Settings → API Access**, and create or copy an API token. The token needs `CLIENT_ADMIN` scope for most read operations and `CLIENT_SUPERUSER` for write operations and advanced diagnostics.
+Log in to [my.extole.com](https://my.extole.com), navigate to **Settings → API Access**, and create or copy an API token. The token needs `CLIENT_ADMIN` scope.
 
 Contact your Extole account team if you do not have access to API settings.
 
@@ -177,9 +177,9 @@ extole share-links list --email jane@example.com              # all share links 
 extole share-links list --email jane@example.com --label credit-cards
 extole share-links list --email jane@example.com --json
 
-extole share-links lookup chrisbackfillcw214                  # reverse: code → owner
-extole share-links lookup https://demo-data-finserv.extole.io/chrisbackfillcw214
-extole share-links lookup chrisbackfillcw214 --json
+extole share-links lookup <share-code>                         # reverse: code → owner
+extole share-links lookup https://refer.example.com/<share-code>
+extole share-links lookup <share-code> --json
 ```
 
 `list` returns share links (label, code, URL); use `--label` to filter across programs. `lookup` is the reverse: given a share code or full URL, returns the owning person and program.
@@ -214,24 +214,37 @@ Error messages are unambiguous about whether the person exists:
 
 Inspect and manage reward suppliers (BHN, coupons, custom, Tango) — used by reward rules in campaigns to mint the actual reward value.
 
+**Inspect:**
 ```
-extole reward-suppliers                              # all configured suppliers with face values
-extole reward-suppliers --filter manual              # name/type substring match
-extole reward-suppliers get <supplier-id>            # full detail: face_value, limits, expiry, tags
-extole reward-suppliers coupons <supplier-id>        # for MANUAL_COUPON: count + sample preview
-extole reward-suppliers coupons <supplier-id> --list # dump all codes (paged with --limit)
+extole reward-suppliers
+extole reward-suppliers --filter manual
+extole reward-suppliers get <supplier-id>
+extole reward-suppliers coupons <supplier-id>
+extole reward-suppliers coupons <supplier-id> --list
+```
 
-# Create a MANUAL_COUPON supplier
-extole reward-suppliers create --type MANUAL_COUPON --name "Test Coupons" --face-value 25 --face-value-type USD --warn-limit 10 --dry-run
-extole reward-suppliers create --type MANUAL_COUPON --name "Test Coupons" --face-value 25 --face-value-type USD --warn-limit 10
+**Create a MANUAL_COUPON supplier:**
+```
+extole reward-suppliers create --type MANUAL_COUPON --name "Test Coupons" \
+  --face-value 25 --face-value-type USD --warn-limit 10 --dry-run
+extole reward-suppliers create --type MANUAL_COUPON --name "Test Coupons" \
+  --face-value 25 --face-value-type USD --warn-limit 10
+```
 
-# Create a CUSTOM_REWARD supplier
-extole reward-suppliers create --type CUSTOM_REWARD --name "Statement Credit" --face-value 50 --face-value-type USD --custom-reward-type ACCOUNT_CREDIT
+**Create a CUSTOM_REWARD supplier:**
+```
+extole reward-suppliers create --type CUSTOM_REWARD --name "Statement Credit" \
+  --face-value 50 --face-value-type USD --custom-reward-type ACCOUNT_CREDIT
+```
 
-# For TANGO_V2, PAYPAL_PAYOUTS, SALESFORCE_COUPON — use --body for full JSON control
-extole reward-suppliers create --body '{"reward_supplier_type":"TANGO_V2","name":"Gift Card","face_value_type":"USD","face_value":25,"account_id":"...","utid":"..."}'
+**Create a TANGO_V2, SALESFORCE_COUPON, or other supplier (full JSON):**
+```
+extole reward-suppliers create --body \
+  '{"reward_supplier_type":"TANGO_V2","name":"Gift Card","face_value_type":"USD","face_value":25,"account_id":"...","utid":"..."}'
+```
 
-# Upload coupon codes to a MANUAL_COUPON supplier
+**Upload coupon codes:**
+```
 extole reward-suppliers upload-coupons <supplier-id> --codes CODE1,CODE2,CODE3
 extole reward-suppliers upload-coupons <supplier-id> --file ./coupons.txt
 extole reward-suppliers upload-coupons <supplier-id> --file ./coupons.txt --dry-run
@@ -378,12 +391,12 @@ Running `deploy` without `--component` always creates a new campaign. Pass `--co
 
 ### Patching Component Settings
 
-Update one or more settings on an already-deployed component without redeploying the bundle:
+Update one or more settings on an already-deployed component without redeploying the bundle. Settings are integration-specific — the names and valid values depend on the component type (e.g. a webhook integration might have `webhookUrl` and `authHeader`; a CRM connector might have `instanceUrl` and `objectType`).
 
 ```
-extole components set <component-id> --setting apiKey=test_key_123
-extole components set <component-id> --setting apiKey=k1 --setting endpoint=https://example.com
-extole components set <component-id> --setting apiKey=k1 --dry-run    # show payload only
+extole components set <component-id> --setting webhookUrl=https://example.com/hook
+extole components set <component-id> --setting webhookUrl=https://example.com/hook --setting objectType=Lead
+extole components set <component-id> --setting webhookUrl=https://example.com/hook --dry-run
 ```
 
 Values are sent as strings; the platform validates and rejects mismatches. Changes on LIVE campaigns are staged until you republish (via `components deploy --publish` or my.extole).
@@ -412,13 +425,11 @@ The download reconstructs a readable directory structure: `campaign.json` at the
 ## Zones
 
 ```
-extole zones                                           # list embed zone names for this account
+extole zones
 extole zones --json
-
-extole zones core                                      # print the core.js <script> tag for this account
-extole zones tag <zone_name>                           # print the embed snippet for a zone
-
-extole zones call <zone_name> --email <email>          # POST to a zone (test FRONTEND_CONTROLLER pipelines)
+extole zones core
+extole zones tag <zone_name>
+extole zones call <zone_name> --email <email>
 extole zones call <zone_name> --email <email> --param partner_user_id=abc123
 extole zones call <zone_name> --email <email> --json
 ```
@@ -430,23 +441,23 @@ extole zones call <zone_name> --email <email> --json
 ### Firing Events
 
 ```
-extole events fire <event_name>                               # fire in sandbox mode (default — safe)
-extole events fire <event_name> --live                        # fire against the live production API
-extole events fire <event_name> --sandbox my-sandbox          # fire in a specific named sandbox
+extole events fire <event_name>
+extole events fire <event_name> --live
+extole events fire <event_name> --sandbox my-sandbox
 extole events fire lead_created --email jane@example.com
 extole events fire lead_created --email jane@example.com --live
-
 extole events fire <event_name> --param key=value [--param key=value ...] --live
 extole events fire <event_name> --data '{"email":"jane@example.com","amount":"500"}'
-extole events fire <event_name> --dry-run                     # print payload without sending
+extole events fire <event_name> --dry-run
 
-extole events report <event_id>                               # look up a past event by ID (uses report pipeline, ~30-90s)
-extole events fire <event_name> --live --listen               # fire then tail steps for --email for 15s
+extole events report <event_id>
+
+extole events fire <event_name> --live --listen
 extole events fire <event_name> --live --listen --listen-timeout 30
 
-extole events fire <event_name> --email <email> --live --trace                        # trace which campaigns the event reached
-extole events fire <event_name> --email <email> --live --trace --trace-webhook <id>  # also check that webhook for dispatches caused by this event
-extole events fire <event_name> --email <email> --live --trace --trace-timeout 15    # wait longer for slower processing
+extole events fire <event_name> --email <email> --live --trace
+extole events fire <event_name> --email <email> --live --trace --trace-webhook <id>
+extole events fire <event_name> --email <email> --live --trace --trace-timeout 15
 ```
 
 Sandbox mode is the default. Use `--live` for production, `--dry-run` to preview. `--sandbox` sets the sandbox name (default: `production-test`).
@@ -511,24 +522,24 @@ Outbound webhooks send Extole events to external systems via HTTP POST. Four typ
 | `PARTNER` | Manual dispatch only — no automatic trigger | `response_body_handler` (parses HTTP response body) |
 
 ```
-extole webhooks                                    # list all webhooks with URL
-extole webhooks --filter-type GENERIC              # filter by type
-extole webhooks --filter "sfdc"                    # filter by name substring
+extole webhooks
+extole webhooks --filter-type GENERIC
+extole webhooks --filter "sfdc"
 extole webhooks --json
 
-extole webhooks get <webhook-id>                   # full config: URL, method, tags, retry intervals
-extole webhooks get <webhook-id> --built           # show with inherited defaults applied
-                                                   # (REWARD webhooks also show state/supplier filters)
+extole webhooks get <webhook-id>
+extole webhooks get <webhook-id> --built
 
 extole webhooks create --name "SFDC Events" --url https://example.com/hook
 extole webhooks create --name "SFDC Events" --url https://example.com/hook --type GENERIC
-extole webhooks create --name "Iterable Events" --url https://api.iterable.com/api/events/track \
+extole webhooks create --name "Iterable Events" \
+  --url https://api.iterable.com/api/events/track \
   --type CLIENT --tag iterable-events --request-file request.js
 extole webhooks create --name "Reward Hook" --url https://example.com/hook \
   --type REWARD --filter-state EARNED --filter-state FULFILLED
-extole webhooks create --name "Test" --url https://example.com/hook --dry-run  # print payload, no POST
+extole webhooks create --name "Test" --url https://example.com/hook --dry-run
 
-extole webhooks delete <webhook-id>                # archive (fails if still wired to a campaign)
+extole webhooks delete <webhook-id>
 ```
 
 ### Webhook Types and the `--tag` Flag
@@ -737,18 +748,18 @@ extole api search reward --spec integration    # reward state-transition endpoin
 
 Searches path, summary, description, and tags across the management and integration-server specs. Results update automatically as Extole publishes spec changes — no CLI update required.
 
-### Escape Hatch
+### Direct API Access
 
-Direct authenticated access to any endpoint — for cases where no specific subcommand exists yet:
+For endpoints not yet covered by a specific subcommand:
 
 ```
 extole api /v2/campaigns/123/controllers
 extole api /v6/webhooks/built
 extole api /v2/campaigns/123/publish --method POST --body '{}'
-extole api /v4/tokens --auth-base  # use api.extole.com instead of api.extole.io
+extole api /v4/tokens --auth-base
 ```
 
-GET by default. `--method` to override, `--body` for POST/PUT/PATCH, `--auth-base` for the auth API. Output is JSON-formatted and supports `--compact`.
+GET by default. `--method` to override, `--body` for POST/PUT/PATCH, `--auth-base` for the auth API (`api.extole.com`). Output is JSON-formatted and supports `--compact`.
 
 ## Output Conventions
 
