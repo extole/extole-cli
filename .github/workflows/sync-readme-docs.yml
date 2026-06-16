@@ -1,10 +1,10 @@
-name: Sync README to ReadMe Docs
+name: Sync docs to ReadMe
 
 on:
   push:
-    branches: [master]
+    branches: [main]
     paths:
-      - README.md
+      - docs/extole-cli.md
 
 jobs:
   sync:
@@ -23,6 +23,7 @@ jobs:
       - name: Sync to ReadMe
         env:
           README_API_KEY: ${{ secrets.README_API_KEY }}
-          README_BRANCH: 4.0.0_extole-ai-docs
+          README_BRANCH: stable
           README_SLUG: extole-cli
+          SOURCE_FILE: docs/extole-cli.md
         run: python scripts/sync-to-readme.py
