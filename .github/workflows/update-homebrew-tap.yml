@@ -29,7 +29,7 @@ jobs:
           echo "sha256_x64=$(sha256sum extole-darwin-x64 | awk '{print $1}')" >> "$GITHUB_ENV"
 
       - name: Check out homebrew-tap
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
         with:
           repository: extole/homebrew-tap
           token: ${{ secrets.HOMEBREW_TAP_TOKEN }}
