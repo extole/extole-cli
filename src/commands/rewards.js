@@ -1,7 +1,7 @@
 import { Command } from 'commander';
 import { resolveToken, API_BASE } from '../config.js';
 
-export const VALID_REWARD_STATES = new Set(['EARNED', 'FULFILLED', 'SENT', 'REDEEMED', 'CANCELED', 'FAILED', 'REVOKED', 'EXPIRED']);
+export const VALID_REWARD_STATES = new Set(['EARNED', 'FULFILLED', 'SENT', 'REDEEMED', 'CANCELED', 'FAILED', 'REVOKED']);
 const VALID_REWARD_TYPES = new Set(['MANUAL_COUPON', 'SALESFORCE_COUPON', 'TANGO_V2', 'CUSTOM_REWARD', 'PAYPAL_PAYOUTS']);
 const COUPON_SUPPLIER_TYPES = new Set(['MANUAL_COUPON', 'SALESFORCE_COUPON']);
 import { apiJson } from '../api.js';

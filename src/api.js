@@ -1,8 +1,15 @@
 import { API_BASE } from './config.js';
 import { logRequest } from './utils.js';
 
-const REQUEST_TIMEOUT_MS = 30_000;
+let REQUEST_TIMEOUT_MS = 30_000;
 const APP_TYPE = 'extole-cli';
+
+// Overridden globally by the --timeout flag (see bin/extole.js's preAction hook).
+// Some endpoints (e.g. /v2/rewards filtered by certain --state values) can legitimately
+// take longer than 30s to respond; this lets callers wait longer without a code change.
+export function setRequestTimeoutMs(ms) {
+  REQUEST_TIMEOUT_MS = ms;
+}
 
 /**
  * Format a server error response body for display. Falls back to raw text
@@ -33,19 +40,19 @@ export async function apiFetch(path, token, options = {}, fetchFn = fetch) {
   const baseUrl = options.baseUrl || API_BASE;
   const sep = path.includes('?') ? '&' : '?';
   const url = `${baseUrl}${path}${sep}app_type=${APP_TYPE}`;
+  const isFormData = typeof FormData !== 'undefined' && options.body instanceof FormData;
+  const hasBody = options.body != null;
   logRequest(options.verbose, options.method || 'GET', url, {
     headers: {
       'Authorization': `Bearer ${token}`,
-      ...(options.body ? { 'Content-Type': 'application/json' } : {}),
+      ...(hasBody && !isFormData ? { 'Content-Type': 'application/json' } : {}),
       ...(options.headers || {}),
     },
-    body: options.body || null,
+    body: isFormData ? '(multipart form data)' : (options.body || null),
   });
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS);
   try {
-    const isFormData = typeof FormData !== 'undefined' && options.body instanceof FormData;
-    const hasBody = options.body != null;
     const response = await fetchFn(url, {
       ...options,
       signal: controller.signal,
@@ -59,7 +66,7 @@ export async function apiFetch(path, token, options = {}, fetchFn = fetch) {
     });
     return response;
   } catch (error) {
-    if (error.name === 'AbortError') throw new Error(`Request timed out after ${REQUEST_TIMEOUT_MS / 1000}s`);
+    if (error.name === 'AbortError') throw new Error(`Request timed out after ${REQUEST_TIMEOUT_MS / 1000}s — retry with --timeout <seconds> to wait longer`);
     throw error;
   } finally {
     clearTimeout(timer);

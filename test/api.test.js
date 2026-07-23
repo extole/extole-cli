@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { apiFetch, apiJson, formatApiErrorBody } from '../src/api.js';
+import { apiFetch, apiJson, formatApiErrorBody, setRequestTimeoutMs } from '../src/api.js';
 
 function makeFetch({ status = 200, ok = true, body = '' }) {
   return async () => ({
@@ -60,7 +60,17 @@ test('apiJson throws on non-JSON response body', async () => {
 
 test('apiFetch throws on AbortError (timeout simulation)', async () => {
   const fetchFn = async () => { const e = new Error('aborted'); e.name = 'AbortError'; throw e; };
-  await assert.rejects(() => apiFetch('/test', 'tok', {}, fetchFn), /timed out/);
+  await assert.rejects(() => apiFetch('/test', 'tok', {}, fetchFn), /timed out after 30s/);
+});
+
+test('setRequestTimeoutMs changes the reported timeout on AbortError', async () => {
+  const fetchFn = async () => { const e = new Error('aborted'); e.name = 'AbortError'; throw e; };
+  setRequestTimeoutMs(60_000);
+  try {
+    await assert.rejects(() => apiFetch('/test', 'tok', {}, fetchFn), /timed out after 60s/);
+  } finally {
+    setRequestTimeoutMs(30_000); // restore default so later tests aren't affected
+  }
 });
 
 test('formatApiErrorBody returns empty string for empty input', () => {
@@ -95,6 +105,24 @@ test('formatApiErrorBody pretty-prints structured errors', () => {
   // Full parameters payload preserved (not truncated mid-string)
   assert.match(out, /controller_id/);
   assert.match(out, /campaign_id/);
+});
+
+test('apiFetch --verbose logging reflects FormData bodies accurately', async () => {
+  const fetchFn = async () => ({ ok: true, status: 200, text: async () => '' });
+  const formData = new FormData();
+  formData.append('file', new Blob(['x'], { type: 'application/zip' }), 'bundle.zip');
+
+  let logged = '';
+  const originalWrite = process.stderr.write;
+  process.stderr.write = (chunk) => { logged += chunk; return true; };
+  try {
+    await apiFetch('/v1/components/abc', 'tok', { method: 'PUT', body: formData, verbose: true }, fetchFn);
+  } finally {
+    process.stderr.write = originalWrite;
+  }
+
+  assert.doesNotMatch(logged, /Content-Type: application\/json/);
+  assert.doesNotMatch(logged, /\[object FormData\]/);
 });
 
 test('formatApiErrorBody falls back to raw text when parameters absent', () => {

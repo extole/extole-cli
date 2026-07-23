@@ -290,9 +290,9 @@ export function componentsCommand() {
       const payload = {
         name: opts.name,
         display_name: opts.displayName || opts.name,
-        description: opts.description || null,
         campaign_id: opts.campaign,
       };
+      if (opts.description) payload.description = opts.description;
       if (opts.type) payload.types = [opts.type];
       if (opts.tag?.length) payload.tags = opts.tag;
       if (settings.length) payload.settings = settings;

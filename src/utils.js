@@ -83,6 +83,7 @@ export function addGlobalOptions(cmd, { output = false, examples = [], exitCodes
     );
 
   cmd.addOption(new Option('--verbose', 'Log each HTTP request to stderr').hideHelp());
+  cmd.addOption(new Option('--timeout <seconds>', 'Override request timeout in seconds (default: 30)').hideHelp());
 
   if (output) {
     cmd
@@ -107,7 +108,8 @@ export function addGlobalOptions(cmd, { output = false, examples = [], exitCodes
     '\nGlobal Options:\n' +
     '  --token <token>      Override token (or set EXTOLE_TOKEN)\n' +
     `  --account <name>     ${accountDesc}\n` +
-    '  --verbose            Log each HTTP request to stderr'
+    '  --verbose            Log each HTTP request to stderr\n' +
+    '  --timeout <seconds>  Override request timeout in seconds (default: 30)'
   );
 
   if (exitCodes) {

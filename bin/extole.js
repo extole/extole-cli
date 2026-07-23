@@ -24,6 +24,7 @@ import { notificationsCommand } from '../src/commands/notifications.js';
 import { rewardSuppliersCommand } from '../src/commands/reward-suppliers.js';
 import { apiCommand } from '../src/commands/api.js';
 import { schemaCommand } from '../src/commands/schema.js';
+import { setRequestTimeoutMs } from '../src/api.js';
 
 const { version } = pkg;
 
@@ -40,6 +41,17 @@ program
   .version(version)
   .enablePositionalOptions()
 ;
+
+program.hook('preAction', (_thisCommand, actionCommand) => {
+  const timeout = actionCommand.optsWithGlobals().timeout;
+  if (timeout === undefined) return;
+  const seconds = Number(timeout);
+  if (!Number.isFinite(seconds) || seconds <= 0) {
+    console.error('Error: --timeout must be a positive number of seconds');
+    process.exit(2);
+  }
+  setRequestTimeoutMs(seconds * 1000);
+});
 
 program.addCommand(authCommand().helpGroup('Account:'));
 program.addCommand(pingCommand().helpGroup('Account:'));

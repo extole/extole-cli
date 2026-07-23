@@ -81,7 +81,10 @@ export function eventsCommand() {
       }
 
       let firedEventId = null;
-      try { firedEventId = JSON.parse(text)?.id || null; } catch { /* ignore */ }
+      try {
+        const fired = JSON.parse(text);
+        firedEventId = fired?.event_id || fired?.id || null;
+      } catch { /* ignore */ }
 
       if (opts.trace) {
         if (opts.listen) {
