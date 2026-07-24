@@ -4,6 +4,11 @@ on:
   push:
     tags:
       - 'v*'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  actions: write
 
 jobs:
   build:
@@ -31,9 +36,15 @@ jobs:
       - name: Upload to GitHub Release
         uses: softprops/action-gh-release@v3
         with:
+          tag_name: ${{ github.ref_name }}
           files: |
             dist/extole-darwin-arm64
             dist/extole-darwin-x64
             dist/extole-linux-x64
             dist/extole-linux-arm64
             dist/extole-windows-x64.exe
+
+      - name: Trigger Homebrew tap update
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh workflow run update-homebrew-tap.yml --ref "${{ github.ref_name }}"

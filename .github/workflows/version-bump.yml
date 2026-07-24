@@ -4,9 +4,15 @@ on:
   push:
     branches:
       - master
+    paths-ignore:
+      - '.github/**'
+      - 'docs/**'
+      - '**/*.md'
+  workflow_dispatch:
 
 permissions:
   contents: write
+  actions: write
 
 jobs:
   bump:
@@ -30,12 +36,12 @@ jobs:
       - name: Run tests
         run: npm test
 
-      - name: Bump minor version
+      - name: Bump patch version
         id: bump
         run: |
           current_version="$(node -p "JSON.parse(require('node:fs').readFileSync('package.json', 'utf8')).version")"
           IFS='.' read -r major minor patch <<< "$current_version"
-          new_version="${major}.$((minor + 1)).0"
+          new_version="${major}.${minor}.$((patch + 1))"
 
           node -e "
             const fs = require('node:fs');
@@ -55,3 +61,11 @@ jobs:
           git tag "v${{ steps.bump.outputs.new_version }}"
           git push origin HEAD:master
           git push origin "v${{ steps.bump.outputs.new_version }}"
+
+      - name: Trigger release and npm publish
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          tag="v${{ steps.bump.outputs.new_version }}"
+          gh workflow run release.yml --ref "$tag"
+          gh workflow run publish.yml --ref "$tag"

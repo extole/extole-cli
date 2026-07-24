@@ -4,6 +4,11 @@ on:
   release:
     types:
       - published
+  workflow_dispatch:
+    inputs:
+      version:
+        description: Version to publish (with or without leading v)
+        required: false
 
 permissions:
   contents: read
@@ -13,13 +18,29 @@ jobs:
     name: Bump extole/homebrew-tap formula
     runs-on: ubuntu-latest
     steps:
+      - name: Check Homebrew tap token
+        id: guard
+        env:
+          HOMEBREW_TAP_TOKEN: ${{ secrets.HOMEBREW_TAP_TOKEN }}
+        run: |
+          if [ -z "$HOMEBREW_TAP_TOKEN" ]; then
+            echo "HOMEBREW_TAP_TOKEN is not configured; skipping tap update."
+            echo "skip=true" >> "$GITHUB_OUTPUT"
+          fi
+
       - name: Resolve release version
+        if: steps.guard.outputs.skip != 'true'
         id: version
         run: |
-          version="${GITHUB_REF_NAME#v}"
+          version="${{ github.event.inputs.version }}"
+          if [ -z "$version" ]; then
+            version="${GITHUB_REF_NAME}"
+          fi
+          version="${version#v}"
           echo "version=$version" >> "$GITHUB_OUTPUT"
 
       - name: Download darwin release assets
+        if: steps.guard.outputs.skip != 'true'
         run: |
           version="${{ steps.version.outputs.version }}"
           base="https://github.com/extole/extole-cli/releases/download/v${version}"
@@ -29,6 +50,7 @@ jobs:
           echo "sha256_x64=$(sha256sum extole-darwin-x64 | awk '{print $1}')" >> "$GITHUB_ENV"
 
       - name: Check out homebrew-tap
+        if: steps.guard.outputs.skip != 'true'
         uses: actions/checkout@v7
         with:
           repository: extole/homebrew-tap
@@ -36,6 +58,7 @@ jobs:
           path: homebrew-tap
 
       - name: Update Formula/extole.rb
+        if: steps.guard.outputs.skip != 'true'
         working-directory: homebrew-tap
         env:
           VERSION: ${{ steps.version.outputs.version }}
@@ -79,6 +102,7 @@ jobs:
           PY
 
       - name: Commit and push formula bump
+        if: steps.guard.outputs.skip != 'true'
         working-directory: homebrew-tap
         run: |
           git config user.name "github-actions[bot]"
@@ -86,4 +110,4 @@ jobs:
           git add Formula/extole.rb
           git diff --staged --quiet && exit 0
           git commit -m "extole: bump to v${{ steps.version.outputs.version }}"
-          git push origin HEAD:master
+          git push origin HEAD:main
