@@ -1,5 +1,8 @@
 # @extole/cli
 
+[![CI](https://github.com/extole/extole-cli/actions/workflows/continuous-integration.yml/badge.svg)](https://github.com/extole/extole-cli/actions/workflows/continuous-integration.yml)
+[![GitHub release](https://img.shields.io/github/v/release/extole/extole-cli)](https://github.com/extole/extole-cli/releases/latest)
+
 Developer CLI for the Extole API.
 
 ## Table of Contents
