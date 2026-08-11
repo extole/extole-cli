@@ -33,6 +33,19 @@ function filterByName(list, substr) {
   );
 }
 
+function buildDeployRequest(opts) {
+  const isUpdate = !!opts.component;
+  const path = isUpdate ? `/v1/components/${opts.component}/upload-bundle` : '/v1/components/upload-bundle';
+  const method = isUpdate ? 'PUT' : 'POST';
+  return { path, method };
+}
+
+function buildProgramParams(opts) {
+  const params = {};
+  if (opts.program) params.campaign_ids = opts.program;
+  return params;
+}
+
 function buildTypeMap(components) {
   const map = new Map();
   for (const c of components) {
@@ -43,6 +56,32 @@ function buildTypeMap(components) {
   }
   return map;
 }
+
+// ── buildDeployRequest ───────────────────────────────────────────────────────
+
+test('buildDeployRequest: create posts multipart to /v1/components/upload-bundle', () => {
+  const { path, method } = buildDeployRequest({});
+  assert.equal(path, '/v1/components/upload-bundle');
+  assert.equal(method, 'POST');
+});
+
+test('buildDeployRequest: update puts multipart to /v1/components/{id}/upload-bundle', () => {
+  const { path, method } = buildDeployRequest({ component: '123' });
+  assert.equal(path, '/v1/components/123/upload-bundle');
+  assert.equal(method, 'PUT');
+});
+
+// ── buildProgramParams ───────────────────────────────────────────────────────
+
+test('buildProgramParams: --program maps to plural campaign_ids query param', () => {
+  const params = buildProgramParams({ program: '7667297017222816023' });
+  assert.equal(params.campaign_ids, '7667297017222816023');
+  assert.equal(params.campaign_id, undefined);
+});
+
+test('buildProgramParams: no --program produces no filter params', () => {
+  assert.deepEqual(buildProgramParams({}), {});
+});
 
 // ── matchesType ───────────────────────────────────────────────────────────────
 

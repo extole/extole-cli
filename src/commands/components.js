@@ -62,7 +62,7 @@ export function componentsCommand() {
     .action(async (opts) => {
       const token = resolveToken(opts);
       const params = {};
-      if (opts.program) params.campaign_id = opts.program;
+      if (opts.program) params.campaign_ids = opts.program;
 
       let list = await fetchAllComponents(token, params, opts.verbose);
 
@@ -454,7 +454,7 @@ export function componentsCommand() {
         formData.append('file', new Blob([zipBuffer], { type: 'application/zip' }), 'bundle.zip');
 
         const isUpdate = !!opts.component;
-        const path = isUpdate ? `/v1/components/${opts.component}` : '/v1/components';
+        const path = isUpdate ? `/v1/components/${opts.component}/upload-bundle` : '/v1/components/upload-bundle';
         const method = isUpdate ? 'PUT' : 'POST';
 
         process.stderr.write(`${isUpdate ? 'Updating' : 'Uploading'} bundle...\n`);
