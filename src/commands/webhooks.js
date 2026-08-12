@@ -314,7 +314,6 @@ export function webhooksCommand() {
     .option('--dry-run', 'Show the diff without sending the update')
     .action(async function (webhookId) {
       const opts = this.optsWithGlobals();
-      const token = resolveToken(opts);
 
       let newValue;
       try {
@@ -324,6 +323,7 @@ export function webhooksCommand() {
         process.exit(2);
       }
 
+      const token = resolveToken(opts);
       const current = await fetchWebhook(webhookId, token, false, opts.verbose);
       const currentValue = current[opts.field];
       if (currentValue !== undefined && currentValue !== null && typeof currentValue !== 'string') {
