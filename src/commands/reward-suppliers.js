@@ -39,6 +39,7 @@ export function rewardSuppliersCommand() {
     .description('Inspect and manage reward suppliers (BHN, coupons, custom, Tango) including face values')
     .allowExcessArguments(false)
     .option('--filter <substr>', 'Case-insensitive substring match on supplier name or type')
+    .enablePositionalOptions()
     .action(async function () {
       const opts = this.optsWithGlobals();
       const token = resolveToken(opts);

@@ -28,6 +28,7 @@ export function rewardsCommand() {
     .option('--email <email>', 'Email address to look up')
     .option('--status <state>', 'Filter by state (EARNED, FULFILLED, SENT, REDEEMED, CANCELED, FAILED, EXPIRED)')
     .option('--limit <n>', 'Max rewards to return', '25')
+    .enablePositionalOptions()
     .action(async (opts) => {
       if (!opts.email) {
         console.error('Error: --email <email> is required.');
@@ -613,6 +614,7 @@ export function rewardsCommand() {
     .description('List reward suppliers configured on this account.')
     .allowExcessArguments(false)
     .option('--include-archived', 'Include archived suppliers')
+    .enablePositionalOptions()
     .action(async function () {
       const opts = this.optsWithGlobals();
       const token = resolveToken(opts);

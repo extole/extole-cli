@@ -1,5 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
+import { componentsCommand } from '../src/commands/components.js';
 
 // ── helpers ──────────────────────────────────────────────────────────────────
 
@@ -56,6 +57,23 @@ function buildTypeMap(components) {
   }
   return map;
 }
+
+// ── subcommand option isolation ─────────────────────────────────────────────
+
+function applyExitOverride(command) {
+  command.exitOverride();
+  command.configureOutput({ writeErr: () => {} });
+  command.commands.forEach(applyExitOverride);
+}
+
+test('components types rejects an option only defined on the parent command', async () => {
+  const cmd = componentsCommand();
+  applyExitOverride(cmd);
+  await assert.rejects(
+    () => cmd.parseAsync(['types', '--filter', 'stripe-promotion'], { from: 'user' }),
+    /unknown option '--filter'/
+  );
+});
 
 // ── buildDeployRequest ───────────────────────────────────────────────────────
 
