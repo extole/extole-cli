@@ -247,3 +247,12 @@ test('components set reports the file read error when --setting-file points at a
   assert.equal(exitCode, 2);
   assert.match(errors.join('\n'), /Error reading --setting-file path for "title"/);
 });
+
+function formatInlineEditsNotice(inlineEdits) {
+  return `Also included from --setting (no diff shown): ${inlineEdits.map(({ key, rawValue }) => `${key}=${rawValue}`).join(', ')}`;
+}
+
+test('components set: mixing --setting with --setting-file surfaces the inline edits alongside the diff', () => {
+  const notice = formatInlineEditsNotice([{ key: 'order', rawValue: '2' }, { key: 'enabled', rawValue: 'true' }]);
+  assert.equal(notice, 'Also included from --setting (no diff shown): order=2, enabled=true');
+});

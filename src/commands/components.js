@@ -556,6 +556,7 @@ export function componentsCommand() {
       }
 
       const settings = {};
+      const inlineEdits = [];
       for (const kv of opts.setting || []) {
         const idx = kv.indexOf('=');
         if (idx < 0) {
@@ -572,6 +573,7 @@ export function componentsCommand() {
         // Type-aware coercion (INTEGER, BOOLEAN) is a follow-up — for now the API rejects type
         // mismatches with a clear error.
         settings[key] = { values: { default: rawValue } };
+        inlineEdits.push({ key, rawValue });
       }
 
       const fileEdits = [];
@@ -609,6 +611,9 @@ export function componentsCommand() {
           console.log(`setting: ${key}\n`);
           printDiff(String(currentValue), newValue);
           console.log();
+        }
+        if (inlineEdits.length > 0) {
+          console.log(`Also included from --setting (no diff shown): ${inlineEdits.map(({ key, rawValue }) => `${key}=${rawValue}`).join(', ')}\n`);
         }
       }
 

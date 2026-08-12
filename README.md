@@ -411,6 +411,8 @@ extole components set <component-id> --setting-file requestScript=request.js
 extole components set <component-id> --setting-file requestScript=request.js --yes
 ```
 
+Mixing `--setting` and `--setting-file` in one call sends both in the same PUT, but only the `--setting-file` entries get a diff — the confirmation prompt lists any inline `--setting` values alongside it so it's clear they're included too.
+
 ### Deleting Components
 
 ```
