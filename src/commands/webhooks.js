@@ -48,6 +48,7 @@ export function webhooksCommand() {
     .option('--filter <substr>', 'Filter by name substring (case-insensitive)')
     .option('--limit <n>', 'Max results', '50')
     .option('--offset <n>', 'Offset for pagination', '0')
+    .enablePositionalOptions()
     .action(async (options) => {
       const token = resolveToken(options);
       const params = { limit: options.limit, offset: options.offset, include_archived: 'false' };

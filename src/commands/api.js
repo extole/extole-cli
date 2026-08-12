@@ -163,6 +163,7 @@ export function apiCommand() {
     .option('--method <method>', 'HTTP method', 'GET')
     .option('--body <json>', 'Request body as JSON string (for POST/PUT/PATCH)')
     .option('--auth-base', 'Use auth base URL (api.extole.com) instead of api.extole.io')
+    .enablePositionalOptions()
     .action(async function (path) {
       const opts = this.optsWithGlobals();
       const token = resolveToken(opts);

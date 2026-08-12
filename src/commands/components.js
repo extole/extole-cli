@@ -59,6 +59,7 @@ export function componentsCommand() {
     .option('--program <id>', 'Filter by program (campaign) ID')
     .option('--filter-type <type>', 'Filter by component type (matches parent types and subtypes)')
     .option('--filter <substr>', 'Filter by name substring (case-insensitive)')
+    .enablePositionalOptions()
     .action(async (opts) => {
       const token = resolveToken(opts);
       const params = {};

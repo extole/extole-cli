@@ -81,6 +81,7 @@ export function healthCommand() {
   const healthCmd = new Command('health')
     .description('Check domain and email deliverability health for the account. Validates email domains (SPF, DMARC, DKIM, MX, A) and program domains (CNAME/A). All checks are read-only — nothing is created.')
     .option('--domain <domain>', 'Filter to a specific email domain (substring match)')
+    .enablePositionalOptions()
     .action(async (opts) => {
       const token = resolveToken(opts);
       const results = { email_domains: [], program_domains: [] };
