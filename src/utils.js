@@ -22,6 +22,40 @@ export function collect(val, prev) {
   return prev.concat([val]);
 }
 
+// Line-based LCS diff — old/new text is expected to be a script or config blob
+// (tens to low hundreds of lines), not arbitrary large files.
+export function diffLines(oldText, newText) {
+  const oldLines = oldText.split('\n');
+  const newLines = newText.split('\n');
+  const n = oldLines.length, m = newLines.length;
+  const lengths = Array.from({ length: n + 1 }, () => new Array(m + 1).fill(0));
+  for (let i = n - 1; i >= 0; i--) {
+    for (let j = m - 1; j >= 0; j--) {
+      lengths[i][j] = oldLines[i] === newLines[j]
+        ? lengths[i + 1][j + 1] + 1
+        : Math.max(lengths[i + 1][j], lengths[i][j + 1]);
+    }
+  }
+  const hunks = [];
+  let i = 0, j = 0;
+  while (i < n && j < m) {
+    if (oldLines[i] === newLines[j]) { hunks.push({ type: 'same', line: oldLines[i] }); i++; j++; }
+    else if (lengths[i + 1][j] >= lengths[i][j + 1]) { hunks.push({ type: 'del', line: oldLines[i] }); i++; }
+    else { hunks.push({ type: 'add', line: newLines[j] }); j++; }
+  }
+  while (i < n) { hunks.push({ type: 'del', line: oldLines[i] }); i++; }
+  while (j < m) { hunks.push({ type: 'add', line: newLines[j] }); j++; }
+  return hunks;
+}
+
+export function printDiff(oldText, newText) {
+  for (const { type, line } of diffLines(oldText, newText)) {
+    if (type === 'same') console.log(`  ${line}`);
+    else if (type === 'del') console.log(`- ${line}`);
+    else console.log(`+ ${line}`);
+  }
+}
+
 export function sleep(milliseconds) {
   return new Promise(resolve => setTimeout(resolve, milliseconds));
 }

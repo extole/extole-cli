@@ -8,7 +8,14 @@ import { Command } from 'commander';
 import { resolveToken, API_BASE } from '../config.js';
 import { apiJson, apiFetch, formatApiErrorBody } from '../api.js';
 import { printJson } from '../output.js';
-import { addGlobalOptions } from '../utils.js';
+import { addGlobalOptions, printDiff } from '../utils.js';
+
+function confirm(question) {
+  return new Promise((resolve) => {
+    const rl = createInterface({ input: process.stdin, output: process.stdout });
+    rl.question(question, (answer) => { rl.close(); resolve(answer.trim().toLowerCase() === 'y'); });
+  });
+}
 
 async function fetchAllComponents(token, params, verbose) {
   const qs = new URLSearchParams({ limit: '500', ...params });
@@ -535,19 +542,22 @@ export function componentsCommand() {
   // ── set ────────────────────────────────────────────────────────────────────
 
   const setCmd = new Command('set')
-    .description('Patch one or more settings on an existing component without redeploying the bundle. Useful for testing/iteration where you want to tweak a setting and re-fire events.')
+    .description('Patch one or more settings on an existing component without redeploying the bundle. Useful for testing/iteration where you want to tweak a setting and re-fire events. Use --setting-file for multi-line/script-shaped settings — it shows a diff against the current value and asks for confirmation before sending.')
     .argument('<component-id>', 'Component ID to update')
     .option('--setting <kv>', 'Setting in key=value form (repeatable)', (v, prev) => prev.concat([v]), [])
+    .option('--setting-file <kv>', 'Setting in key=path form — reads the new value from a file (repeatable). Best for multi-line/script-shaped settings.', (v, prev) => prev.concat([v]), [])
+    .option('-y, --yes', 'Skip confirmation prompt (only relevant with --setting-file)')
     .option('--dry-run', 'Print the payload that would be sent without making the API call')
     .action(async function (componentId) {
       const opts = this.optsWithGlobals();
-      if (!opts.setting || opts.setting.length === 0) {
-        console.error('Error: at least one --setting key=value is required.');
+      if ((!opts.setting || opts.setting.length === 0) && (!opts.settingFile || opts.settingFile.length === 0)) {
+        console.error('Error: at least one --setting key=value or --setting-file key=path is required.');
         process.exit(2);
       }
 
       const settings = {};
-      for (const kv of opts.setting) {
+      const inlineEdits = [];
+      for (const kv of opts.setting || []) {
         const idx = kv.indexOf('=');
         if (idx < 0) {
           console.error(`Error: invalid --setting (expected key=value): ${kv}`);
@@ -563,9 +573,49 @@ export function componentsCommand() {
         // Type-aware coercion (INTEGER, BOOLEAN) is a follow-up — for now the API rejects type
         // mismatches with a clear error.
         settings[key] = { values: { default: rawValue } };
+        inlineEdits.push({ key, rawValue });
+      }
+
+      const fileEdits = [];
+      for (const kv of opts.settingFile || []) {
+        const idx = kv.indexOf('=');
+        if (idx < 0) {
+          console.error(`Error: invalid --setting-file (expected key=path): ${kv}`);
+          process.exit(2);
+        }
+        const key = kv.slice(0, idx).trim();
+        const filePath = kv.slice(idx + 1);
+        if (!key) {
+          console.error(`Error: --setting-file key cannot be empty: ${kv}`);
+          process.exit(2);
+        }
+        let newValue;
+        try {
+          newValue = readFileSync(filePath, 'utf8').trim();
+        } catch (error) {
+          console.error(`Error reading --setting-file path for "${key}": ${error.message}`);
+          process.exit(2);
+        }
+        settings[key] = { values: { default: newValue } };
+        fileEdits.push({ key, newValue });
       }
 
       const payload = { settings };
+      const token = resolveToken(opts);
+
+      if (fileEdits.length > 0) {
+        const component = await fetchComponent(componentId, token, opts.verbose);
+        for (const { key, newValue } of fileEdits) {
+          const variable = (component.variables || []).find(v => v.name === key);
+          const currentValue = variable?.values?.default ?? '';
+          console.log(`setting: ${key}\n`);
+          printDiff(String(currentValue), newValue);
+          console.log();
+        }
+        if (inlineEdits.length > 0) {
+          console.log(`Also included from --setting (no diff shown): ${inlineEdits.map(({ key, rawValue }) => `${key}=${rawValue}`).join(', ')}\n`);
+        }
+      }
 
       if (opts.dryRun) {
         console.log(`PUT /v1/components/${componentId}/settings`);
@@ -573,7 +623,11 @@ export function componentsCommand() {
         return;
       }
 
-      const token = resolveToken(opts);
+      if (fileEdits.length > 0 && !opts.yes) {
+        const ok = await confirm(`Apply ${fileEdits.length === 1 ? 'this change' : 'these changes'} to live component ${componentId}? (y/N) `);
+        if (!ok) { console.log('Aborted.'); process.exit(0); }
+      }
+
       const res = await apiFetch(`/v1/components/${componentId}/settings`, token, {
         method: 'PUT',
         body: JSON.stringify(payload),
@@ -602,6 +656,8 @@ export function componentsCommand() {
       'extole components set <component-id> --setting apiKey=test_key_123',
       'extole components set <component-id> --setting apiKey=k1 --setting endpoint=https://example.com',
       'extole components set <component-id> --setting apiKey=k1 --dry-run',
+      'extole components set <component-id> --setting-file requestScript=request.js',
+      'extole components set <component-id> --setting-file requestScript=request.js --yes',
     ],
   });
 
