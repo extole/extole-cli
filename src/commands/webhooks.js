@@ -4,7 +4,7 @@ import { createInterface } from 'readline';
 import { resolveToken, API_BASE } from '../config.js';
 import { apiJson, apiFetch, formatApiErrorBody } from '../api.js';
 import { printJson } from '../output.js';
-import { addGlobalOptions } from '../utils.js';
+import { addGlobalOptions, printDiff } from '../utils.js';
 
 function confirm(question) {
   return new Promise((resolve) => {
@@ -300,6 +300,68 @@ export function webhooksCommand() {
     output: true,
     examples: [
       'extole webhooks delete <webhook-id>',
+    ],
+  });
+
+  // ── edit ──────────────────────────────────────────────────────────────────
+
+  const editCmd = new Command('edit')
+    .description('Update a single field on an existing webhook via a partial PUT — e.g. edit the request/response_body_handler script without touching anything else on the webhook. Shows a diff and requires confirmation before sending, since this changes live dispatch/fulfillment logic.')
+    .argument('<webhook-id>', 'Webhook ID')
+    .requiredOption('--field <name>', 'Field to update, e.g. request, response_body_handler, url, description')
+    .requiredOption('--file <path>', 'Path to a file containing the new value for --field')
+    .option('-y, --yes', 'Skip confirmation prompt')
+    .option('--dry-run', 'Show the diff without sending the update')
+    .action(async function (webhookId) {
+      const opts = this.optsWithGlobals();
+      const token = resolveToken(opts);
+
+      let newValue;
+      try {
+        newValue = readFileSync(opts.file, 'utf8').trim();
+      } catch (error) {
+        console.error(`error reading --file: ${error.message}`);
+        process.exit(2);
+      }
+
+      const current = await fetchWebhook(webhookId, token, false, opts.verbose);
+      const currentValue = current[opts.field];
+      if (currentValue !== undefined && currentValue !== null && typeof currentValue !== 'string') {
+        console.error(`error: field "${opts.field}" is not a plain text field (got ${typeof currentValue}) — edit only supports string fields.`);
+        process.exit(2);
+      }
+
+      console.log(`field: ${opts.field}\n`);
+      printDiff(currentValue || '', newValue);
+
+      if (opts.dryRun) { console.log('\nDry run — nothing sent.'); return; }
+
+      if (!opts.yes) {
+        const ok = await confirm(`\nApply this change to live webhook ${webhookId}? (y/N) `);
+        if (!ok) { console.log('Aborted.'); process.exit(0); }
+      }
+
+      const res = await apiFetch(`/v6/webhooks/${webhookId}`, token, {
+        method: 'PUT',
+        body: JSON.stringify({ [opts.field]: newValue }),
+        verbose: opts.verbose,
+        baseUrl: API_BASE,
+      });
+      const text = await res.text();
+      if (!res.ok) {
+        console.error(`Error ${res.status}: ${formatApiErrorBody(text)}`);
+        process.exit(1);
+      }
+      if (opts.json) { console.log(text); return; }
+      console.log(`\nupdated: ${webhookId}  field=${opts.field}`);
+    });
+
+  addGlobalOptions(editCmd, {
+    output: true,
+    examples: [
+      'extole webhooks edit <webhook-id> --field request --file request.js',
+      'extole webhooks edit <webhook-id> --field response_body_handler --file handler.js --yes',
+      'extole webhooks edit <webhook-id> --field request --file request.js --dry-run',
     ],
   });
 
@@ -725,6 +787,7 @@ export function webhooksCommand() {
   getCmd._mcpDescription = 'Get full configuration for a webhook by webhook_id. Returns URL, HTTP method, tags, retry intervals, and for REWARD webhooks also the state/supplier filters. Use --built to see inherited defaults applied. Tags reveal which component integrations use this webhook.';
   createCmd._mcpDescription = 'Create an outbound webhook. GENERIC fires for person/journey events; CLIENT fires for admin/operational events (config changes, report completions); REWARD fires on reward state transitions; PARTNER is manual-dispatch only. Returns webhook_id.';
   deleteCmd._mcpDescription = 'Archive a webhook by webhook_id. Fails with a helpful error listing the controller actions still wired to it if it\'s still attached to campaigns — detach those first with webhooks_attach or by deleting the controller.';
+  editCmd._mcpDescription = 'Update a single field on an existing webhook (e.g. request or response_body_handler script) via a partial PUT, without touching any other field. Write the new value to a file and pass it with --file. Shows a diff before sending; pass --yes to skip the confirmation prompt for non-interactive use.';
   attachCmd._mcpDescription = 'Wire a webhook to a campaign so that matching events trigger a dispatch. Creates a controller with an event trigger and webhook action, then publishes the campaign. Use --event for the event name and --skip-publish when attaching multiple events to publish once at the end.';
   dispatchesCmd._mcpDescription = 'Show recent dispatch attempts for a webhook — the outbound HTTP request records. Use to confirm Extole tried to send (attempt records). Pair with webhooks_dispatch-results for the HTTP response side. Returns event_id, timestamp, and cause_event_id.';
   dispatchResultsCmd._mcpDescription = 'Show recent dispatch results for a webhook — HTTP response codes, response bodies, and request bodies. Use to debug integration failures: non-200 status codes, error messages, timeouts. The definitive answer for "did Extole send this and what did the endpoint say back?"';
@@ -734,6 +797,7 @@ export function webhooksCommand() {
   webhooks.addCommand(getCmd);
   webhooks.addCommand(createCmd);
   webhooks.addCommand(deleteCmd);
+  webhooks.addCommand(editCmd);
   webhooks.addCommand(dispatchesCmd);
   webhooks.addCommand(dispatchResultsCmd);
   webhooks.addCommand(listenCmd);

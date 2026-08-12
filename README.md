@@ -404,6 +404,13 @@ extole components set <component-id> --setting webhookUrl=https://example.com/ho
 
 Values are sent as strings; the platform validates and rejects mismatches. Changes on LIVE campaigns are staged until you republish (via `components deploy --publish` or my.extole).
 
+For multi-line/script-shaped settings, use `--setting-file <name>=<path>` instead of typing the value inline — it reads the new value from a file, shows a diff against the current value, and asks for confirmation before sending (skip the prompt with `-y`/`--yes` for non-interactive/agent use):
+
+```
+extole components set <component-id> --setting-file requestScript=request.js
+extole components set <component-id> --setting-file requestScript=request.js --yes
+```
+
 ### Deleting Components
 
 ```
@@ -543,6 +550,16 @@ extole webhooks create --name "Reward Hook" --url https://example.com/hook \
 extole webhooks create --name "Test" --url https://example.com/hook --dry-run
 
 extole webhooks delete <webhook-id>
+```
+
+### Editing an Existing Webhook
+
+Update a single field on an existing webhook via a partial PUT — e.g. tweak the `request` or `response_body_handler` script without touching anything else (name, URL, tags, etc. stay untouched). Shows a diff against the current value and asks for confirmation before sending, since this changes live dispatch/fulfillment logic. Skip the prompt with `-y`/`--yes` for non-interactive/agent use.
+
+```
+extole webhooks edit <webhook-id> --field request --file request.js
+extole webhooks edit <webhook-id> --field request --file request.js --dry-run
+extole webhooks edit <webhook-id> --field response_body_handler --file handler.js --yes
 ```
 
 ### Webhook Types and the `--tag` Flag

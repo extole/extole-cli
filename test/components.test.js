@@ -2,6 +2,30 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { componentsCommand } from '../src/commands/components.js';
 
+// ── fake process.exit for testing action-level validation without killing the test runner ──
+
+class FakeExit extends Error {
+  constructor(code) { super(`exit ${code}`); this.code = code; }
+}
+
+async function runWithFakeExit(fn) {
+  const originalExit = process.exit;
+  const originalError = console.error;
+  const errors = [];
+  process.exit = (code) => { throw new FakeExit(code); };
+  console.error = (msg) => { errors.push(msg); };
+  try {
+    await fn();
+    return { errors, exitCode: null };
+  } catch (error) {
+    if (error instanceof FakeExit) return { errors, exitCode: error.code };
+    throw error;
+  } finally {
+    process.exit = originalExit;
+    console.error = originalError;
+  }
+}
+
 // ── helpers ──────────────────────────────────────────────────────────────────
 
 function makeComponent(overrides = {}) {
@@ -196,4 +220,30 @@ test('buildTypeMap: skips components with empty types array', () => {
   const components = [makeComponent({ types: [] })];
   const map = buildTypeMap(components);
   assert.equal(map.size, 0);
+});
+
+// ── components set validation ─────────────────────────────────────────────────
+
+test('components set requires --setting or --setting-file', async () => {
+  const { exitCode, errors } = await runWithFakeExit(() =>
+    componentsCommand().parseAsync(['set', 'cmp-1'], { from: 'user' })
+  );
+  assert.equal(exitCode, 2);
+  assert.match(errors.join('\n'), /at least one --setting key=value or --setting-file key=path/);
+});
+
+test('components set rejects --setting-file without an "=" separator', async () => {
+  const { exitCode, errors } = await runWithFakeExit(() =>
+    componentsCommand().parseAsync(['set', 'cmp-1', '--setting-file', 'no-equals-sign'], { from: 'user' })
+  );
+  assert.equal(exitCode, 2);
+  assert.match(errors.join('\n'), /invalid --setting-file \(expected key=path\)/);
+});
+
+test('components set reports the file read error when --setting-file points at a missing path', async () => {
+  const { exitCode, errors } = await runWithFakeExit(() =>
+    componentsCommand().parseAsync(['set', 'cmp-1', '--setting-file', 'title=/no/such/path.txt'], { from: 'user' })
+  );
+  assert.equal(exitCode, 2);
+  assert.match(errors.join('\n'), /Error reading --setting-file path for "title"/);
 });
