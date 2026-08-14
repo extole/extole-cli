@@ -222,9 +222,9 @@ export function rewardSuppliersCommand() {
   // ── create ─────────────────────────────────────────────────────────────
 
   const createCmd = new Command('create')
-    .description('Create a reward supplier. Supports typed flags for MANUAL_COUPON and CUSTOM_REWARD; use --body for TANGO_V2, PAYPAL_PAYOUTS, or SALESFORCE_COUPON.')
+    .description('Create a reward supplier. Supports typed flags for MANUAL_COUPON and CUSTOM_REWARD; use --body for TANGO_V2 or SALESFORCE_COUPON.')
     .allowExcessArguments(false)
-    .option('--type <type>', 'Supplier type: MANUAL_COUPON, CUSTOM_REWARD, TANGO_V2, PAYPAL_PAYOUTS, SALESFORCE_COUPON')
+    .option('--type <type>', 'Supplier type: MANUAL_COUPON, CUSTOM_REWARD, TANGO_V2, SALESFORCE_COUPON')
     .option('--name <name>', 'Supplier name')
     .option('--face-value <amount>', 'Face value amount (e.g. 25, 10.50)')
     .option('--face-value-type <type>', `Face value currency/unit: ${VALID_FACE_VALUE_TYPES.join(', ')}`)
@@ -234,7 +234,7 @@ export function rewardSuppliersCommand() {
     .option('--warn-limit <n>', 'For MANUAL_COUPON: warn when inventory falls to this count')
     .option('--tag <tag>', 'Tag (repeatable)', collect, [])
     .option('--description <text>', 'Optional description')
-    .option('--body <json>', 'Full request body as JSON — overrides all typed flags (use for TANGO_V2, PAYPAL_PAYOUTS, SALESFORCE_COUPON)')
+    .option('--body <json>', 'Full request body as JSON — overrides all typed flags (use for TANGO_V2, SALESFORCE_COUPON)')
     .option('--dry-run', 'Print request body without creating')
     .action(async function () {
       const options = this.optsWithGlobals();
@@ -250,7 +250,7 @@ export function rewardSuppliersCommand() {
         }
       } else {
         if (!options.type) {
-          console.error('Error: --type is required. Use MANUAL_COUPON, CUSTOM_REWARD, TANGO_V2, PAYPAL_PAYOUTS, or SALESFORCE_COUPON. For Tango/PayPal/Salesforce use --body for full control.');
+          console.error('Error: --type is required. Use MANUAL_COUPON, CUSTOM_REWARD, TANGO_V2, or SALESFORCE_COUPON. For Tango/Salesforce use --body for full control.');
           process.exit(2);
         }
         if (!options.name) { console.error('Error: --name is required.'); process.exit(2); }
@@ -399,11 +399,11 @@ export function rewardSuppliersCommand() {
     ],
   });
 
-  cmd._mcpDescription = 'START HERE for reward supplier investigations. Lists all reward suppliers — manual coupon batches, Tango/BHN gift cards, PayPal payouts, custom suppliers. Returns supplier_id, type, name, face value, and enabled status. Next steps: reward-suppliers_get for full config of one supplier, reward-suppliers_coupons to check coupon inventory. Note: rewards_suppliers and rewards_suppliers_get are aliases excluded from MCP — always use the reward-suppliers namespace.';
-  getCmd._mcpDescription = 'Get full configuration for a reward supplier by supplier_id. Returns face value, auto-fulfillment settings, expiry, tags, limits, and type-specific config (Tango UTID, PayPal account, etc.). Use when you need to understand how a supplier is configured or to verify it is set up correctly.';
+  cmd._mcpDescription = 'START HERE for reward supplier investigations. Lists all reward suppliers — manual coupon batches, Tango/BHN gift cards, Salesforce coupons, custom suppliers. Returns supplier_id, type, name, face value, and enabled status. Next steps: reward-suppliers_get for full config of one supplier, reward-suppliers_coupons to check coupon inventory. Note: rewards_suppliers and rewards_suppliers_get are aliases excluded from MCP — always use the reward-suppliers namespace.';
+  getCmd._mcpDescription = 'Get full configuration for a reward supplier by supplier_id. Returns face value, auto-fulfillment settings, expiry, tags, limits, and type-specific config (Tango UTID, Salesforce coupon settings, etc.). Use when you need to understand how a supplier is configured or to verify it is set up correctly.';
   couponsCmd._mcpDescription = 'For MANUAL_COUPON suppliers: show inventory count and a sample of available codes. Use to check if a supplier is running low before a campaign launch. Use --list to dump all codes (paged). Returns count, warn_limit, and sample codes. Refuses non-MANUAL_COUPON suppliers with a clear error.';
 
-  createCmd._mcpDescription = 'Create a reward supplier. Use typed flags for MANUAL_COUPON (--name, --face-value, --face-value-type, --warn-limit) and CUSTOM_REWARD (--custom-reward-type ACCOUNT_CREDIT|LOYALTY_POINTS). Use --body <json> for TANGO_V2, PAYPAL_PAYOUTS, or SALESFORCE_COUPON which require integration credentials. Use --dry-run to preview the request body. Returns supplier_id on success — feed into reward-suppliers_upload-coupons for MANUAL_COUPON.';
+  createCmd._mcpDescription = 'Create a reward supplier. Use typed flags for MANUAL_COUPON (--name, --face-value, --face-value-type, --warn-limit) and CUSTOM_REWARD (--custom-reward-type ACCOUNT_CREDIT|LOYALTY_POINTS). Use --body <json> for TANGO_V2 or SALESFORCE_COUPON which require integration credentials. Use --dry-run to preview the request body. Returns supplier_id on success — feed into reward-suppliers_upload-coupons for MANUAL_COUPON.';
   uploadCouponsCmd._mcpDescription = 'Upload coupon codes to a MANUAL_COUPON reward supplier. Use --file for a text file with one code per line, or --codes for a comma-separated list of test codes. Use --dry-run to preview what would be uploaded. Call reward-suppliers_coupons after uploading to verify inventory.';
 
   cmd.addCommand(createCmd);

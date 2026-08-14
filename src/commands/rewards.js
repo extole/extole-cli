@@ -1,13 +1,21 @@
 import { Command } from 'commander';
+import { createInterface } from 'readline';
 import { resolveToken, API_BASE } from '../config.js';
 
-export const VALID_REWARD_STATES = new Set(['EARNED', 'FULFILLED', 'SENT', 'REDEEMED', 'CANCELED', 'FAILED', 'REVOKED']);
-const VALID_REWARD_TYPES = new Set(['MANUAL_COUPON', 'SALESFORCE_COUPON', 'TANGO_V2', 'CUSTOM_REWARD', 'PAYPAL_PAYOUTS']);
+export const VALID_REWARD_STATES = new Set(['EARNED', 'FULFILLED', 'SENT', 'REDEEMED', 'CANCELED', 'FAILED', 'REVOKED', 'EXPIRED']);
+const VALID_REWARD_TYPES = new Set(['MANUAL_COUPON', 'SALESFORCE_COUPON', 'TANGO_V2', 'CUSTOM_REWARD']);
 const COUPON_SUPPLIER_TYPES = new Set(['MANUAL_COUPON', 'SALESFORCE_COUPON']);
-import { apiJson } from '../api.js';
+import { apiJson, apiFetch, formatApiErrorBody } from '../api.js';
 import { printJson } from '../output.js';
 import { addGlobalOptions, isValidEmail, formatEventDate } from '../utils.js';
 import { findPerson, getPersonSteps } from '../person-api.js';
+
+function confirm(question) {
+  return new Promise((resolve) => {
+    const rl = createInterface({ input: process.stdin, output: process.stdout });
+    rl.question(question, (answer) => { rl.close(); resolve(answer.trim().toLowerCase() === 'y'); });
+  });
+}
 
 export function formatReward(r) {
   const state    = (r.state || '').padEnd(12);
@@ -26,7 +34,7 @@ export function rewardsCommand() {
     .description('Look up, search, and inspect rewards')
     .allowExcessArguments(false)
     .option('--email <email>', 'Email address to look up')
-    .option('--status <state>', 'Filter by state (EARNED, FULFILLED, SENT, REDEEMED, CANCELED, FAILED, EXPIRED)')
+    .option('--status <state>', 'Filter by state (EARNED, FULFILLED, SENT, REDEEMED, CANCELED, FAILED, REVOKED, EXPIRED)')
     .option('--limit <n>', 'Max rewards to return', '25')
     .enablePositionalOptions()
     .action(async (opts) => {
@@ -164,6 +172,69 @@ export function rewardsCommand() {
 
   cmd.addCommand(getCmd);
 
+  // ── expire ─────────────────────────────────────────────────────────────
+
+  const expireCmd = new Command('expire')
+    .argument('<reward_id>', 'Reward ID to expire')
+    .description('Mark a reward as expired. Changes a live reward\'s state — shows the reward and asks for confirmation before acting.')
+    .allowExcessArguments(false)
+    .option('--message <text>', 'Optional reason for the expiration, stored for audit purposes')
+    .option('-y, --yes', 'Skip confirmation prompt')
+    .option('--dry-run', 'Show the reward without expiring it')
+    .action(async function (rewardId) {
+      const opts = this.optsWithGlobals();
+      const token = resolveToken(opts);
+
+      const reward = await apiJson(`/v2/rewards/${rewardId}`, token, { verbose: opts.verbose, baseUrl: API_BASE });
+
+      console.log(`reward_id:  ${reward.id || reward.reward_id || rewardId}`);
+      console.log(`state:      ${reward.state || ''}`);
+      if (reward.face_value != null) console.log(`face_value: ${reward.face_value} ${reward.face_value_type || ''}`.trim());
+      if (opts.message) console.log(`message:    ${opts.message}`);
+
+      if (opts.dryRun) {
+        console.log('\nDry run — nothing expired.');
+        return;
+      }
+
+      if (!opts.yes) {
+        const ok = await confirm(`\nExpire this reward? (y/N) `);
+        if (!ok) { console.log('Aborted.'); process.exit(0); }
+      }
+
+      const body = opts.message ? { message: opts.message } : {};
+      const res = await apiFetch(`/v2/rewards/${rewardId}/expire`, token, {
+        method: 'POST',
+        body: JSON.stringify(body),
+        verbose: opts.verbose,
+        baseUrl: API_BASE,
+      });
+      const text = await res.text();
+      if (!res.ok) {
+        console.error(`Error ${res.status}: ${formatApiErrorBody(text)}`);
+        process.exit(1);
+      }
+      let updated;
+      try { updated = JSON.parse(text); } catch { updated = null; }
+
+      if (opts.json) { printJson(updated || { expired: rewardId }, opts); return; }
+      console.log(`\nexpired: ${rewardId}${updated?.state ? `  state=${updated.state}` : ''}`);
+    });
+
+  addGlobalOptions(expireCmd, {
+    output: true,
+    examples: [
+      'extole rewards expire efda6f32db286845ac9f6272',
+      'extole rewards expire efda6f32db286845ac9f6272 --message "manual cleanup"',
+      'extole rewards expire efda6f32db286845ac9f6272 --yes --json',
+      'extole rewards expire efda6f32db286845ac9f6272 --dry-run',
+    ],
+  });
+
+  expireCmd._mcpDescription = 'Mark a reward as expired by reward_id. Mutates a live reward\'s state — use only when the user has explicitly requested it and confirmed the target reward_id. Pass --message to record a reason for audit purposes. Prompts for confirmation before acting — do not pass --yes unless the user has explicitly approved.';
+
+  cmd.addCommand(expireCmd);
+
   // ── history ────────────────────────────────────────────────────────────
 
   const historyCmd = new Command('history')
@@ -217,7 +288,7 @@ export function rewardsCommand() {
   // ── state-summary ──────────────────────────────────────────────────────
 
   const stateSummaryCmd = new Command('state-summary')
-    .description('Account-wide reward counts bucketed by state (EARNED / FULFILLED / SENT / REDEEMED / CANCELED / FAILED / REVOKED) over time. Useful for ops questions like "how many EARNED rewards are sitting un-fulfilled?"')
+    .description('Account-wide reward counts bucketed by state (EARNED / FULFILLED / SENT / REDEEMED / CANCELED / FAILED / REVOKED / EXPIRED) over time. Useful for ops questions like "how many EARNED rewards are sitting un-fulfilled?"')
     .allowExcessArguments(false)
     .action(async function () {
       const opts = this.optsWithGlobals();
@@ -237,14 +308,14 @@ export function rewardsCommand() {
 
       // Aggregate totals across the whole window
       const totals = rows.reduce((acc, r) => {
-        for (const k of ['earned', 'fulfilled', 'sent', 'redeemed', 'canceled', 'failed', 'revoked']) {
+        for (const k of ['earned', 'fulfilled', 'sent', 'redeemed', 'canceled', 'failed', 'revoked', 'expired']) {
           acc[k] = (acc[k] || 0) + (r[k] || 0);
         }
         return acc;
       }, {});
 
       console.log('Reward state totals (across all buckets):');
-      const stateNames = ['earned', 'fulfilled', 'sent', 'redeemed', 'canceled', 'failed', 'revoked'];
+      const stateNames = ['earned', 'fulfilled', 'sent', 'redeemed', 'canceled', 'failed', 'revoked', 'expired'];
       const labelW = Math.max(...stateNames.map(s => s.length));
       for (const k of stateNames) {
         console.log(`  ${k.padEnd(labelW)}  ${totals[k] || 0}`);
@@ -252,13 +323,13 @@ export function rewardsCommand() {
 
       console.log();
       console.log(`By date bucket (${rows.length} bucket${rows.length === 1 ? '' : 's'}):`);
-      console.log(`${'from'.padEnd(12)}  ${'to'.padEnd(12)}  earn  fulf  sent  redm  canc  fail  revo`);
-      console.log(`${'─'.repeat(12)}  ${'─'.repeat(12)}  ${'────  '.repeat(7).trim()}`);
+      console.log(`${'from'.padEnd(12)}  ${'to'.padEnd(12)}  earn  fulf  sent  redm  canc  fail  revo  expr`);
+      console.log(`${'─'.repeat(12)}  ${'─'.repeat(12)}  ${'────  '.repeat(8).trim()}`);
       for (const r of rows) {
         const from = (r.date_from || '').slice(0, 10).padEnd(12);
         const to = (r.date_to || '').slice(0, 10).padEnd(12);
         const fmt = (n) => String(n || 0).padStart(4);
-        console.log(`${from}  ${to}  ${fmt(r.earned)}  ${fmt(r.fulfilled)}  ${fmt(r.sent)}  ${fmt(r.redeemed)}  ${fmt(r.canceled)}  ${fmt(r.failed)}  ${fmt(r.revoked)}`);
+        console.log(`${from}  ${to}  ${fmt(r.earned)}  ${fmt(r.fulfilled)}  ${fmt(r.sent)}  ${fmt(r.redeemed)}  ${fmt(r.canceled)}  ${fmt(r.failed)}  ${fmt(r.revoked)}  ${fmt(r.expired)}`);
       }
     });
 
@@ -347,9 +418,9 @@ export function rewardsCommand() {
   const listCmd = new Command('list')
     .description('Search rewards account-wide by state, supplier, or type. No email required — use this for ops queries like "show all FAILED rewards today".')
     .allowExcessArguments(false)
-    .option('--state <state>', 'Filter by state (EARNED, FULFILLED, SENT, REDEEMED, CANCELED, FAILED, REVOKED)')
+    .option('--state <state>', 'Filter by state (EARNED, FULFILLED, SENT, REDEEMED, CANCELED, FAILED, REVOKED, EXPIRED)')
     .option('--supplier <id>', 'Filter by reward supplier ID')
-    .option('--reward-type <type>', 'Filter by supplier type (MANUAL_COUPON, SALESFORCE_COUPON, TANGO_V2, CUSTOM_REWARD, PAYPAL_PAYOUTS)')
+    .option('--reward-type <type>', 'Filter by supplier type (MANUAL_COUPON, SALESFORCE_COUPON, TANGO_V2, CUSTOM_REWARD)')
     .option('--all', 'Include non-successful rewards (disables success_only filter)')
     .option('--limit <n>', 'Max rewards to return', '25')
     .action(async function () {
@@ -738,7 +809,7 @@ export function rewardsCommand() {
   cmd._mcpDescription = 'List rewards for a person by email. Returns reward_id, state, face value, and journey. Use this when the investigation starts from an email and rewards are the primary focus. Prefer person_rewards when you already have a person_id in hand from a prior person_get call. Use --status to filter by state. For account-wide reward queries (no email), use rewards_list instead.';
   getCmd._mcpDescription = 'Get full detail for a single reward by reward_id. Returns coupon code (partner_reward_id), reward supplier, campaign, face value, all state metadata, and optionally the recipient\'s step history (--steps). Use when a customer asks "what coupon code did I get?" or to confirm fulfillment details.';
   historyCmd._mcpDescription = 'Show the state-transition timeline for a reward — EARNED → FULFILLED → SENT → REDEEMED. Each row shows when the state changed and whether it succeeded. The definitive answer for "why is this reward stuck?" — the failure reason appears on the failed transition row.';
-  stateSummaryCmd._mcpDescription = 'Account-wide reward counts bucketed by state (EARNED, FULFILLED, SENT, REDEEMED, CANCELED, FAILED) over a time window. Use for ops health checks — a spike in FAILED rewards indicates a fulfillment problem. Use rewards_list with --state for individual reward records.';
+  stateSummaryCmd._mcpDescription = 'Account-wide reward counts bucketed by state (EARNED, FULFILLED, SENT, REDEEMED, CANCELED, FAILED, REVOKED, EXPIRED) over a time window. Use for ops health checks — a spike in FAILED rewards indicates a fulfillment problem. Use rewards_list with --state for individual reward records.';
   findCouponCmd._mcpDescription = 'Reverse lookup by coupon code: returns who received it, what state it\'s in, and whether Extole has been told it was redeemed. Use when you have a code and need to know if it was issued and to whom.';
 
   suppliersCmd.addCommand(suppliersGetCmd);

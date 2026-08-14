@@ -198,12 +198,16 @@ extole rewards get <reward_id>              # full detail including coupon code
 extole rewards get <reward_id> --steps      # also show recipient step history
 extole rewards get <reward_id> --json
 
+extole rewards expire <reward_id>                            # mark a reward as expired (asks for confirmation)
+extole rewards expire <reward_id> --message "manual cleanup" # optional reason, stored for audit purposes
+extole rewards expire <reward_id> --yes                      # skip confirmation prompt
+
 extole rewards history <reward_id>          # state-transition timeline (EARNED → SENT → FULFILLED → ...)
 extole rewards state-summary                # account-wide reward counts by state, bucketed over time
 extole rewards find-coupon <code>           # reverse lookup: who got this coupon and was it used?
 ```
 
-Reward states: `EARNED`, `FULFILLED`, `SENT`, `REDEEMED`, `CANCELED`, `FAILED`, `EXPIRED`
+Reward states: `EARNED`, `FULFILLED`, `SENT`, `REDEEMED`, `CANCELED`, `FAILED`, `REVOKED`, `EXPIRED`
 
 Error messages are unambiguous about whether the person exists:
 - `No person found for jane@example.com` — email not in Extole
@@ -253,7 +257,7 @@ extole reward-suppliers upload-coupons <supplier-id> --file ./coupons.txt
 extole reward-suppliers upload-coupons <supplier-id> --file ./coupons.txt --dry-run
 ```
 
-The list uses the `/built` endpoint so component-bundle suppliers display their resolved values. `coupons` refuses non-MANUAL_COUPON suppliers — other types mint codes on demand. `create` supports typed flags for `MANUAL_COUPON` and `CUSTOM_REWARD`; use `--body <json>` for `TANGO_V2`, `PAYPAL_PAYOUTS`, and `SALESFORCE_COUPON`. `upload-coupons` accepts a flat text file (one code per line) or `--codes` for inline lists; use `--dry-run` to preview.
+The list uses the `/built` endpoint so component-bundle suppliers display their resolved values. `coupons` refuses non-MANUAL_COUPON suppliers — other types mint codes on demand. `create` supports typed flags for `MANUAL_COUPON` and `CUSTOM_REWARD`; use `--body <json>` for `TANGO_V2` and `SALESFORCE_COUPON`. `upload-coupons` accepts a flat text file (one code per line) or `--codes` for inline lists; use `--dry-run` to preview.
 
 ## Programs
 
