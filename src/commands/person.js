@@ -252,7 +252,7 @@ export function personCommand() {
     .description('Show rewards for a person')
     .allowExcessArguments(false)
     .requiredOption('--email <email>', 'Email address to look up')
-    .option('--status <state>', 'Filter by state (EARNED, FULFILLED, SENT, REDEEMED, CANCELED, FAILED, EXPIRED)')
+    .option('--status <state>', 'Filter by state (EARNED, FULFILLED, SENT, REDEEMED, CANCELED, FAILED, REVOKED, EXPIRED)')
     .option('--limit <n>', 'Max rewards to return', '25')
     .action(async function () {
       const options = this.optsWithGlobals();
