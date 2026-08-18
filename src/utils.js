@@ -111,7 +111,6 @@ export function addGlobalOptions(cmd, { output = false, examples = [], exitCodes
     )
     .addOption(
       new Option('--account <name>', 'Saved account name')
-        .default(_defaultAccount)
         .env('EXTOLE_ACCOUNT')
         .hideHelp()
     );
