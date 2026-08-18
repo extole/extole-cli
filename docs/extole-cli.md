@@ -1,4 +1,4 @@
-The Extole CLI is a command-line tool for developers and technical operators working with the Extole API. It runs from the terminal, integrates into scripts and automation pipelines, and includes a built-in MCP server so Claude Desktop and Claude Code can call any CLI command as a tool.
+The Extole CLI is a command-line tool for developers and technical operators working with the Extole API. It runs from the terminal and integrates into scripts and automation pipelines.
 
 > For complete per-command documentation, flags, and examples, see the [GitHub README](https://github.com/extole/extole-cli).
 
@@ -99,14 +99,7 @@ Run `extole --help` or `extole <command> --help` for full options on any command
 
 ## AI integration
 
-The CLI includes a built-in MCP server that connects Claude Desktop and Claude Code without manual config file editing:
-
-```bash
-extole serve setup   # auto-configure Claude Desktop and Claude Code
-extole serve remove  # remove the registration
-```
-
-The CLI also exposes an AI assistant with deep knowledge of the Extole API:
+The CLI exposes an AI assistant with deep knowledge of the Extole API:
 
 ```bash
 extole chat "why would a purchase event not trigger a reward?"

@@ -156,9 +156,6 @@ export function shareLinksCommand() {
     ],
   });
 
-  listCmd._mcpDescription = 'List share links for a person by email. Returns each share link\'s label, code, and full URL. Use --label to filter when a person has links across multiple programs. Use share-links_lookup with a code to go the other direction — from a code to its owner.';
-  lookupCmd._mcpDescription = 'Reverse lookup: given a share code or full share URL, return the owning person\'s email, person_id, and program. Use when you have a code from analytics, a webhook payload, or a customer report and need to identify who it belongs to. Accepts the full URL or just the code fragment.';
-
   cmd.addCommand(listCmd);
   cmd.addCommand(lookupCmd);
   return addGlobalOptions(cmd, { output: true });

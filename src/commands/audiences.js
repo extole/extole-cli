@@ -332,11 +332,6 @@ export function audiencesCommand() {
     ],
   });
 
-  listCmd._mcpDescription = 'List all audiences on the account. Audiences are named segments used for campaign targeting and suppression. Returns audience_id, name, enabled status, tags, and current size. Use audiences_get for detail on one audience, audiences_members to inspect membership.';
-  getCmd._mcpDescription = 'Show full detail for a single audience: name, enabled status, tags, current size, and recent operation summary. Use when investigating why a person is or isn\'t receiving a campaign. Next steps: audiences_members to see current membership, audiences_history for the full operation log.';
-  membersCmd._mcpDescription = 'List the current members of an audience by audience_id. Returns person identifiers (email, person_id) for each member. Use to verify a specific person is in or out of a targeting or suppression audience. Use person_get with a returned person_id for full profile detail.';
-  historyCmd._mcpDescription = 'Show the operation history for an audience — ADD (members added), REMOVE (members removed), REPLACE (full membership swap), and ACTION (custom triggers). Use when diagnosing stale membership or suppression that should have been lifted. Each run shows timestamp, operation type, record count, and status.';
-
   audiences.addCommand(listCmd);
   audiences.addCommand(getCmd);
   audiences.addCommand(membersCmd);

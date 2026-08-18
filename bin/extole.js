@@ -23,7 +23,6 @@ import { audiencesCommand } from '../src/commands/audiences.js';
 import { notificationsCommand } from '../src/commands/notifications.js';
 import { rewardSuppliersCommand } from '../src/commands/reward-suppliers.js';
 import { apiCommand } from '../src/commands/api.js';
-import { schemaCommand } from '../src/commands/schema.js';
 import { setRequestTimeoutMs } from '../src/api.js';
 
 const { version } = pkg;
@@ -81,8 +80,5 @@ program.addCommand(chatCommand().helpGroup('AI Assistant:'));
 program.addCommand(feedbackCommand().helpGroup('AI Assistant:'));
 
 program.addCommand(apiCommand().helpGroup('Developer Tools:'));
-
-// schema introspects program, so registered after all other commands
-program.addCommand(schemaCommand(program).helpGroup('Developer Tools:'));
 
 program.parse();

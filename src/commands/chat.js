@@ -47,8 +47,6 @@ export function chatCommand() {
       }
     });
 
-  command._mcpDescription = 'Ask the Extole AI agent a question about this account or the Extole platform. The agent has live access to Extole API tools and returns structured responses with IDs you can use in follow-up CLI calls. Use for open-ended questions, summarizing account state, or when you need the agent to chain multiple lookups together. Excluded from serve mode to avoid circular agent loops.';
-
   addGlobalOptions(command, {
     examples: [
       "extole chat why aren't events firing for customer@example.com",

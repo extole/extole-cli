@@ -6,7 +6,6 @@ import { addGlobalOptions } from '../utils.js';
 export function pingCommand() {
   const cmd = new Command('ping')
     .description('Verify credentials and connectivity');
-  cmd._mcpDescription = 'Lightweight connectivity check — makes a single GET request and returns exit code 0 (OK) or 1 (fail) with latency. Use this to confirm the token and network are working before a batch of calls. Returns only "OK Nms" — use whoami instead if you need identity details, scopes, or client_id.';
   return addGlobalOptions(
     cmd
       .allowExcessArguments(false)

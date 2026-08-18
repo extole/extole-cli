@@ -7,7 +7,6 @@ import { findPerson, getPersonSteps } from '../person-api.js';
 import { pollUntilDone } from './reports.js';
 import { buildStreamCommand } from './stream.js';
 
-
 export function eventsCommand() {
   const events = new Command('events').description('Fire events and listen to downstream steps');
 
@@ -745,9 +744,6 @@ Usage patterns:
       'extole events report <event_id> --verbose',
     ],
   });
-
-  reportCmd._mcpDescription = 'SLOW (~30-90 seconds): Look up a single event by ID. Warn the user before calling. Returns the full ConsumerEvent — event name, type, person_id, email, campaign_id, step, cause_event_id, root_event_id, parameters, labels, score_status, and log_messages. Use when you have an event_id and need to understand what happened and why.';
-  fireCmd._mcpDescription = 'Fire a named consumer event for testing. Defaults to sandbox mode — safe to call freely. Do not pass --live unless the user has explicitly requested a production fire; --live fires against real person records and cannot be undone. Use --trace to see which campaigns the event reached. Returns event_id which feeds into events_report.';
 
   events.addCommand(reportCmd);
   events.addCommand(fireCmd);
