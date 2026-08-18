@@ -291,13 +291,10 @@ export function campaignsCommand() {
     .description('Inspect per-campaign configuration (quality rules, MaxMind settings, reward rules)');
 
   const qualityRules = qualityRulesCommand();
-  qualityRules._mcpDescription = 'List quality rules configured for a campaign. Quality rules control whether events are processed at HIGH or LOW quality, affecting reward eligibility and fraud scoring. Returns each rule with its condition, resulting quality score, and enabled status. Use alongside campaigns_maxmind for the full fraud and quality picture.';
 
   const maxmind = maxmindCommand();
-  maxmind._mcpDescription = 'Show MaxMind fraud-scoring controller triggers for a campaign. Returns risk_threshold, ip_threshold, allow_high_risk_email, and default_quality_score per trigger. Use to investigate fraud-scoring blocks or to verify MaxMind is configured correctly for a campaign.';
 
   const rewardRules = rewardRulesCommand();
-  rewardRules._mcpDescription = 'Show reward rules for a campaign by campaign_id. Returns each rule with the rewardee role (ADVOCATE/FRIEND), reward trigger action, reward supplier (supplier_id), face value, and any constraints (limits, eligibility). Use to understand what rewards a campaign issues and to whom, and to get supplier_id for reward-suppliers_get.';
 
   cmd.addCommand(qualityRules);
   cmd.addCommand(maxmind);

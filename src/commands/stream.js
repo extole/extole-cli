@@ -193,8 +193,6 @@ Notes:
     --duration <s>   exit after N seconds — use as a fallback timeout
     Combine both:    --tail 10 --duration 30`);
 
-  cmd._mcpDescription = 'Tail live Extole events in real time using an ephemeral event stream. With no filters captures ALL events (very noisy on production — always add at least one filter). Use --filter for specific event names, --email for one person, --event-type INPUT for business events only, --app-type for a specific integration. Use --tail <n> or --duration <s> to bound the result — required for non-interactive/agent use to avoid hanging indefinitely.';
-
   const prefix = name === 'listen' ? 'extole events listen' : 'extole stream';
   return addGlobalOptions(cmd, {
     output: true,

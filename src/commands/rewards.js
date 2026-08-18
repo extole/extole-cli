@@ -231,8 +231,6 @@ export function rewardsCommand() {
     ],
   });
 
-  expireCmd._mcpDescription = 'Mark a reward as expired by reward_id. Mutates a live reward\'s state — use only when the user has explicitly requested it and confirmed the target reward_id. Pass --message to record a reason for audit purposes. Prompts for confirmation before acting — do not pass --yes unless the user has explicitly approved.';
-
   cmd.addCommand(expireCmd);
 
   // ── history ────────────────────────────────────────────────────────────
@@ -805,12 +803,6 @@ export function rewardsCommand() {
       'extole rewards suppliers get abc123def456 --json',
     ],
   });
-
-  cmd._mcpDescription = 'List rewards for a person by email. Returns reward_id, state, face value, and journey. Use this when the investigation starts from an email and rewards are the primary focus. Prefer person_rewards when you already have a person_id in hand from a prior person_get call. Use --status to filter by state. For account-wide reward queries (no email), use rewards_list instead.';
-  getCmd._mcpDescription = 'Get full detail for a single reward by reward_id. Returns coupon code (partner_reward_id), reward supplier, campaign, face value, all state metadata, and optionally the recipient\'s step history (--steps). Use when a customer asks "what coupon code did I get?" or to confirm fulfillment details.';
-  historyCmd._mcpDescription = 'Show the state-transition timeline for a reward — EARNED → FULFILLED → SENT → REDEEMED. Each row shows when the state changed and whether it succeeded. The definitive answer for "why is this reward stuck?" — the failure reason appears on the failed transition row.';
-  stateSummaryCmd._mcpDescription = 'Account-wide reward counts bucketed by state (EARNED, FULFILLED, SENT, REDEEMED, CANCELED, FAILED, REVOKED, EXPIRED) over a time window. Use for ops health checks — a spike in FAILED rewards indicates a fulfillment problem. Use rewards_list with --state for individual reward records.';
-  findCouponCmd._mcpDescription = 'Reverse lookup by coupon code: returns who received it, what state it\'s in, and whether Extole has been told it was redeemed. Use when you have a code and need to know if it was issued and to whom.';
 
   suppliersCmd.addCommand(suppliersGetCmd);
   cmd.addCommand(suppliersCmd);

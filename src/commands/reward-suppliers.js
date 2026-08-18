@@ -399,13 +399,6 @@ export function rewardSuppliersCommand() {
     ],
   });
 
-  cmd._mcpDescription = 'START HERE for reward supplier investigations. Lists all reward suppliers — manual coupon batches, Tango/BHN gift cards, Salesforce coupons, custom suppliers. Returns supplier_id, type, name, face value, and enabled status. Next steps: reward-suppliers_get for full config of one supplier, reward-suppliers_coupons to check coupon inventory. Note: rewards_suppliers and rewards_suppliers_get are aliases excluded from MCP — always use the reward-suppliers namespace.';
-  getCmd._mcpDescription = 'Get full configuration for a reward supplier by supplier_id. Returns face value, auto-fulfillment settings, expiry, tags, limits, and type-specific config (Tango UTID, Salesforce coupon settings, etc.). Use when you need to understand how a supplier is configured or to verify it is set up correctly.';
-  couponsCmd._mcpDescription = 'For MANUAL_COUPON suppliers: show inventory count and a sample of available codes. Use to check if a supplier is running low before a campaign launch. Use --list to dump all codes (paged). Returns count, warn_limit, and sample codes. Refuses non-MANUAL_COUPON suppliers with a clear error.';
-
-  createCmd._mcpDescription = 'Create a reward supplier. Use typed flags for MANUAL_COUPON (--name, --face-value, --face-value-type, --warn-limit) and CUSTOM_REWARD (--custom-reward-type ACCOUNT_CREDIT|LOYALTY_POINTS). Use --body <json> for TANGO_V2 or SALESFORCE_COUPON which require integration credentials. Use --dry-run to preview the request body. Returns supplier_id on success — feed into reward-suppliers_upload-coupons for MANUAL_COUPON.';
-  uploadCouponsCmd._mcpDescription = 'Upload coupon codes to a MANUAL_COUPON reward supplier. Use --file for a text file with one code per line, or --codes for a comma-separated list of test codes. Use --dry-run to preview what would be uploaded. Call reward-suppliers_coupons after uploading to verify inventory.';
-
   cmd.addCommand(createCmd);
   cmd.addCommand(uploadCouponsCmd);
   cmd.addCommand(couponsCmd);

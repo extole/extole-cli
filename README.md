@@ -748,7 +748,7 @@ extole chat "explain the reward supplier types available"
 extole chat "what's the difference between causeEventIds and rootEventIds on steps?"
 ```
 
-Uses your stored Extole token; no separate login. `chat` and `feedback` are excluded from `extole serve` to avoid circular tool calls.
+Uses your stored Extole token; no separate login.
 
 ## Feedback
 

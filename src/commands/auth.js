@@ -194,19 +194,5 @@ Examples:
       }
     });
 
-  const loginCmd = auth.commands.find(c => c.name() === 'login');
-  const logoutCmd = auth.commands.find(c => c.name() === 'logout');
-  const listCmd = auth.commands.find(c => c.name() === 'list');
-  const statusCmd = auth.commands.find(c => c.name() === 'status');
-  const defaultCmd = auth.commands.find(c => c.name() === 'default');
-  const tokenCmd = auth.commands.find(c => c.name() === 'token');
-
-  if (loginCmd) loginCmd._mcpDescription = 'Save an Extole API token for an account. Call this when the user provides a new token or when a tool returns a 401/403 error indicating the current token is invalid or expired. Use --account to name it and --set-default to make it the active account.';
-  if (logoutCmd) logoutCmd._mcpDescription = 'Remove a saved account token from local storage. After logout, tool calls targeting that account will fail with a 401 until a new token is saved via auth_login. Does not invalidate the token on the Extole server — only removes the local copy. Use auth_list first to confirm which accounts are configured.';
-  if (listCmd) listCmd._mcpDescription = 'List all saved Extole accounts with masked tokens and the default marker. Call this when the user asks which accounts are configured, or when you need to know what account names are available before switching. Use whoami to verify the active token is working.';
-  if (statusCmd) statusCmd._mcpDescription = 'Verify a saved token is valid and measure API latency. Call this when troubleshooting authentication issues or confirming a newly saved token works before using it. Returns account name, masked token, and ping latency.';
-  if (defaultCmd) defaultCmd._mcpDescription = 'Set the default account used when no --account flag is passed — affects all subsequent tool calls. Call this only when the user explicitly says "switch to account X" or "make X my default". For one-off calls against a different account, use --account per-command instead to avoid silently changing the active account. Use auth_list to confirm the current default before switching.';
-  if (tokenCmd) tokenCmd._mcpDescription = 'Print the raw bearer token for a saved account. SECURITY SENSITIVE — call this only when the user explicitly requests the raw token value, or when constructing a command (e.g. curl) that requires a Bearer token directly. Do not call proactively or as a convenience. Do not call to validate a token — use whoami for that.';
-
   return auth;
 }

@@ -164,11 +164,6 @@ export function zonesCommand() {
     ],
   });
 
-  cmd._mcpDescription = 'List embed zones for the account. Zones are named integration points placed on client web pages — each zone loads specific Extole program behavior (share widget, friend landing page, etc.). Returns zone name and label. Use zones_tag for a single zone\'s snippet, zones_core for the base core.js loader tag.';
-  coreCmd._mcpDescription = 'Print the core.js base loader script tag for the account. This tag must be placed on every page that uses Extole zones — it bootstraps the Extole runtime before any zone-specific tags fire. Use zones_tag for individual zone snippets.';
-  tagCmd._mcpDescription = 'Print the HTML script tag for a specific embed zone. Use when a developer needs the snippet to place on a web page for a specific program touchpoint (e.g. share button, confirmation page). zones_core must load before any zone tag. Use zones to list all available zone names.';
-  callCmd._mcpDescription = 'POST to a zone endpoint and return the response. Simulates what the Extole JS runtime sends when a zone fires on a page — use to test or debug FRONTEND_CONTROLLER zones without a browser. Useful for verifying controller logic and diagnosing zone errors. Not for firing share or reward actions — use events_fire for those.';
-
   cmd.addCommand(coreCmd);
   cmd.addCommand(tagCmd);
   cmd.addCommand(callCmd);
