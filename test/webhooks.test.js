@@ -55,3 +55,33 @@ test('webhooks edit reports the file read error when --file points at a missing 
   assert.equal(exitCode, 2);
   assert.match(errors.join('\n'), /error reading --file/);
 });
+
+// ── get --field ──────────────────────────────────────────────────────────────
+// Re-implements the pure validation logic under test (no I/O, no fetch).
+
+function extractWebhookField(webhook, fieldName) {
+  const value = webhook[fieldName];
+  if (value === undefined) return { error: `field "${fieldName}" is not present on this webhook.` };
+  if (value !== null && typeof value !== 'string') return { error: `field "${fieldName}" is not a plain text field (got ${typeof value}).` };
+  return { value: value ?? '' };
+}
+
+test('extractWebhookField returns the raw string value for a present string field', () => {
+  const result = extractWebhookField({ request: 'javascript@runtime:...' }, 'request');
+  assert.deepEqual(result, { value: 'javascript@runtime:...' });
+});
+
+test('extractWebhookField errors when the field is absent', () => {
+  const result = extractWebhookField({ request: 'x' }, 'nonexistent');
+  assert.match(result.error, /is not present on this webhook/);
+});
+
+test('extractWebhookField errors when the field is not a string', () => {
+  const result = extractWebhookField({ enabled: true }, 'enabled');
+  assert.match(result.error, /is not a plain text field \(got boolean\)/);
+});
+
+test('extractWebhookField treats a null field as an empty string, not an error', () => {
+  const result = extractWebhookField({ response_handler: null }, 'response_handler');
+  assert.deepEqual(result, { value: '' });
+});

@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { componentsCommand } from '../src/commands/components.js';
+import { componentsCommand, renderTreeNode } from '../src/commands/components.js';
 
 // ── fake process.exit for testing action-level validation without killing the test runner ──
 
@@ -97,6 +97,42 @@ test('components types rejects an option only defined on the parent command', as
     () => cmd.parseAsync(['types', '--filter', 'stripe-promotion'], { from: 'user' }),
     /unknown option '--filter'/
   );
+});
+
+test('components duplicate requires a component-id argument', async () => {
+  const cmd = componentsCommand();
+  applyExitOverride(cmd);
+  await assert.rejects(
+    () => cmd.parseAsync(['duplicate'], { from: 'user' }),
+    /missing required argument 'component-id'/
+  );
+});
+
+// ── buildDuplicateRequest ────────────────────────────────────────────────────
+
+function buildDuplicateRequest(opts) {
+  const payload = {};
+  if (opts.targetCampaign) payload.target_campaign_id = opts.targetCampaign;
+  if (opts.targetSocket) payload.target_setting_name = opts.targetSocket;
+  if (opts.displayName) payload.component_display_name = opts.displayName;
+  if (opts.description) payload.description = opts.description;
+  if (opts.tag?.length) payload.tags = opts.tag;
+  return payload;
+}
+
+test('buildDuplicateRequest: no --target-campaign omits target_campaign_id (duplicates the whole owning campaign)', () => {
+  const payload = buildDuplicateRequest({ displayName: 'Copy' });
+  assert.deepEqual(payload, { component_display_name: 'Copy' });
+});
+
+test('buildDuplicateRequest: --target-campaign duplicates just the one component into that campaign', () => {
+  const payload = buildDuplicateRequest({ targetCampaign: 'camp-1', displayName: 'Copy' });
+  assert.deepEqual(payload, { target_campaign_id: 'camp-1', component_display_name: 'Copy' });
+});
+
+test('buildDuplicateRequest: --target-socket only applies alongside --target-campaign', () => {
+  const payload = buildDuplicateRequest({ targetCampaign: 'camp-1', targetSocket: 'rewardSuppliers' });
+  assert.deepEqual(payload, { target_campaign_id: 'camp-1', target_setting_name: 'rewardSuppliers' });
 });
 
 // ── buildDeployRequest ───────────────────────────────────────────────────────
@@ -255,4 +291,61 @@ function formatInlineEditsNotice(inlineEdits) {
 test('components set: mixing --setting with --setting-file surfaces the inline edits alongside the diff', () => {
   const notice = formatInlineEditsNotice([{ key: 'order', rawValue: '2' }, { key: 'enabled', rawValue: 'true' }]);
   assert.equal(notice, 'Also included from --setting (no diff shown): order=2, enabled=true');
+});
+
+// ── renderTreeNode ───────────────────────────────────────────────────────────
+
+function captureConsoleLog(fn) {
+  const lines = [];
+  const originalLog = console.log;
+  console.log = (line) => lines.push(line);
+  try {
+    fn();
+  } finally {
+    console.log = originalLog;
+  }
+  return lines;
+}
+
+function stripAnsi(line) {
+  // eslint-disable-next-line no-control-regex
+  return line.replace(/\x1b\[[0-9]*m/g, '');
+}
+
+test('renderTreeNode uses box-drawing connectors and marks the last child at each level', () => {
+  const tree = {
+    first: { '.': { name: 'first' } },
+    second: { '.': { name: 'second' } },
+  };
+  const lines = captureConsoleLog(() => renderTreeNode(tree, '')).map(stripAnsi);
+  assert.equal(lines[0], '├── first  (?)');
+  assert.equal(lines[1], '└── second  (?)');
+});
+
+test('renderTreeNode nests grandchildren under a continuation prefix that matches the parent\'s position', () => {
+  const tree = {
+    onlyChild: {
+      '.': { name: 'onlyChild' },
+      grandchild: { '.': { name: 'grandchild' } },
+    },
+  };
+  const lines = captureConsoleLog(() => renderTreeNode(tree, '')).map(stripAnsi);
+  assert.equal(lines[0], '└── onlyChild  (?)');
+  assert.equal(lines[1], '    └── grandchild  (?)');
+});
+
+test('renderTreeNode labels a child with the socket it is installed into', () => {
+  const tree = {
+    child: { '.': { name: 'child', installed_into_socket: 'rewardSuppliers' } },
+  };
+  const lines = captureConsoleLog(() => renderTreeNode(tree, '')).map(stripAnsi);
+  assert.equal(lines[0], '└── child  (?)  [rewardSuppliers]');
+});
+
+test('renderTreeNode prefers the singular type field over an empty types array', () => {
+  const tree = {
+    child: { '.': { name: 'child', type: 'integration-v10.0', types: [] } },
+  };
+  const lines = captureConsoleLog(() => renderTreeNode(tree, '')).map(stripAnsi);
+  assert.equal(lines[0], '└── child  (integration-v10.0)');
 });

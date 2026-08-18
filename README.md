@@ -333,7 +333,7 @@ extole components types --parent rule              # subtypes of a given parent 
 extole components types --parent rule --tree       # rendered as a hierarchy
 ```
 
-`--filter-type` does substring matching against the full type hierarchy (`--filter-type reward` matches `reward-v10.0`, `reward-rule-v10.0`, etc.). `--tree` on `get` shows the full downstream subgraph.
+`--filter-type` does substring matching against the full type hierarchy (`--filter-type reward` matches `reward-v10.0`, `reward-rule-v10.0`, etc.). `--tree` on `get` renders the full downstream subgraph like `tree`/`npm ls` — box-drawing connectors, each node's type, and the socket it's installed into (e.g. `[rewardRules]`), which is often the fastest way to understand how a campaign is actually wired together.
 
 ### Creating Integration Components
 
@@ -416,6 +416,19 @@ extole components set <component-id> --setting-file requestScript=request.js --y
 ```
 
 Mixing `--setting` and `--setting-file` in one call sends both in the same PUT, but only the `--setting-file` entries get a diff — the confirmation prompt lists any inline `--setting` values alongside it so it's clear they're included too.
+
+### Duplicating Components
+
+Duplicate an existing component instead of authoring one from scratch. This one endpoint does two different things depending on `--target-campaign`:
+
+```
+extole components duplicate <component-id> --target-campaign <campaign-id>                      # copy just this component into an existing campaign
+extole components duplicate <component-id> --target-campaign <campaign-id> --target-socket <name> # ...into a specific socket
+extole components duplicate <component-id> --display-name "My Integration Copy"                  # no --target-campaign: duplicates the ENTIRE owning campaign as a new one
+extole components duplicate <component-id> --dry-run
+```
+
+Passing `--target-campaign` duplicates just the one component and installs the copy into that existing campaign — the pattern for adding a copy of a field, rule, or action alongside what's already there. **Omitting `--target-campaign` duplicates the source component's entire owning campaign as a brand-new campaign** (`NOT_LAUNCHED`), not just the one component — this is the pattern for installing a reusable library integration as a fresh campaign. The CLI shows which of the two will happen and asks for confirmation before acting (skip with `-y`/`--yes`).
 
 ### Deleting Components
 
@@ -566,6 +579,13 @@ Update a single field on an existing webhook via a partial PUT — e.g. tweak th
 extole webhooks edit <webhook-id> --field request --file request.js
 extole webhooks edit <webhook-id> --field request --file request.js --dry-run
 extole webhooks edit <webhook-id> --field response_body_handler --file handler.js --yes
+```
+
+Use `webhooks get --field <name>` to pull a field's raw value out of an existing webhook — combined with `edit`, this copies a proven `request`/`response_handler` script from one webhook onto another instead of writing it from scratch:
+
+```
+extole webhooks get <source-webhook-id> --field request > request.js
+extole webhooks edit <target-webhook-id> --field request --file request.js
 ```
 
 ### Webhook Types and the `--tag` Flag
