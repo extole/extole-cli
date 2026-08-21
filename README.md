@@ -406,7 +406,7 @@ extole components set <component-id> --setting webhookUrl=https://example.com/ho
 extole components set <component-id> --setting webhookUrl=https://example.com/hook --dry-run
 ```
 
-Values are sent as strings; the platform validates and rejects mismatches. Changes on LIVE campaigns are staged until you republish (via `components deploy --publish` or my.extole).
+Values are coerced to the setting's declared type before sending — check a setting's type via `components get <component-id>` (each entry in `variables` has a `type`). `BOOLEAN` accepts `true`/`false`; `INTEGER` accepts a whole number; list/object-typed settings (`STRING_LIST`, `STRING_MAP`, `JSON`, etc.) require a valid JSON value, e.g. `--setting tags='["a","b"]'`. Anything else is sent as a plain string, unchanged. A value that doesn't match its type's contract errors immediately, before any network call — no silent guessing. Structural settings (`MULTI_SOCKET`, `SOCKET`, etc.) aren't settable this way at all; those are wired via `components create`/`duplicate`/`deploy`. Changes on LIVE campaigns are staged until you republish (via `components deploy --publish` or my.extole).
 
 For multi-line/script-shaped settings, use `--setting-file <name>=<path>` instead of typing the value inline — it reads the new value from a file, shows a diff against the current value, and asks for confirmation before sending (skip the prompt with `-y`/`--yes` for non-interactive/agent use):
 

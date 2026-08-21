@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { componentsCommand, renderTreeNode } from '../src/commands/components.js';
+import { componentsCommand, renderTreeNode, coerceSettingValue } from '../src/commands/components.js';
 
 // ── fake process.exit for testing action-level validation without killing the test runner ──
 
@@ -348,4 +348,52 @@ test('renderTreeNode prefers the singular type field over an empty types array',
   };
   const lines = captureConsoleLog(() => renderTreeNode(tree, '')).map(stripAnsi);
   assert.equal(lines[0], '└── child  (integration-v10.0)');
+});
+
+// ── coerceSettingValue ───────────────────────────────────────────────────────
+
+test('coerceSettingValue passes plain string types through unchanged', () => {
+  assert.deepEqual(coerceSettingValue('title', 'Configuration', { type: 'STRING' }), { value: 'Configuration' });
+  assert.deepEqual(coerceSettingValue('color', '#fff', { type: 'COLOR' }), { value: '#fff' });
+});
+
+test('coerceSettingValue falls back to a plain string when the setting has no known variable', () => {
+  assert.deepEqual(coerceSettingValue('unknown', 'x', undefined), { value: 'x' });
+});
+
+test('coerceSettingValue coerces BOOLEAN true/false case-insensitively', () => {
+  assert.deepEqual(coerceSettingValue('enabled', 'true', { type: 'BOOLEAN' }), { value: true });
+  assert.deepEqual(coerceSettingValue('enabled', 'False', { type: 'BOOLEAN' }), { value: false });
+});
+
+test('coerceSettingValue rejects a BOOLEAN value that is not true/false', () => {
+  const result = coerceSettingValue('enabled', 'yes', { type: 'BOOLEAN' });
+  assert.match(result.error, /type BOOLEAN requires true or false/);
+});
+
+test('coerceSettingValue coerces INTEGER to a native number', () => {
+  assert.deepEqual(coerceSettingValue('order', '2', { type: 'INTEGER' }), { value: 2 });
+});
+
+test('coerceSettingValue rejects a non-integer INTEGER value', () => {
+  const result = coerceSettingValue('order', '1.5', { type: 'INTEGER' });
+  assert.match(result.error, /type INTEGER requires a whole number/);
+});
+
+test('coerceSettingValue parses a JSON-typed setting value', () => {
+  assert.deepEqual(
+    coerceSettingValue('settingsToDisplay', '["a","b"]', { type: 'STRING_LIST' }),
+    { value: ['a', 'b'] }
+  );
+});
+
+test('coerceSettingValue rejects a JSON-typed setting value that is not valid JSON', () => {
+  const result = coerceSettingValue('settingsToDisplay', 'a,b', { type: 'STRING_LIST' });
+  assert.match(result.error, /type STRING_LIST requires valid JSON/);
+  assert.match(result.error, /--setting settingsToDisplay='\["a","b"\]'/);
+});
+
+test('coerceSettingValue rejects a structural setting type with an explanatory error', () => {
+  const result = coerceSettingValue('views', 'x', { type: 'MULTI_SOCKET' });
+  assert.match(result.error, /type MULTI_SOCKET — not settable via components set/);
 });
