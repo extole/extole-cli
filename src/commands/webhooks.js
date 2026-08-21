@@ -92,10 +92,26 @@ export function webhooksCommand() {
     .description('Show full configuration for a webhook, including URL, method, tags, and retry intervals.')
     .argument('<webhook-id>', 'Webhook ID')
     .option('--built', 'Show resolved representation with inherited defaults applied')
+    .option('--field <name>', 'Print only this field\'s raw value — no formatting, suitable for redirecting to a file and reusing with `webhooks edit --field <name> --file <path>`. Valid string fields: request, response_handler (response_body_handler on PARTNER webhooks), url, default_method, description.')
     .action(async function (webhookId) {
       const options = this.optsWithGlobals();
       const token = resolveToken(options);
       const webhook = await fetchWebhook(webhookId, token, options.built, options.verbose);
+
+      if (options.field) {
+        const value = webhook[options.field];
+        if (value === undefined) {
+          console.error(`error: field "${options.field}" is not present on this webhook.`);
+          process.exit(2);
+        }
+        if (value !== null && typeof value !== 'string') {
+          console.error(`error: field "${options.field}" is not a plain text field (got ${typeof value}).`);
+          process.exit(2);
+        }
+        console.log(value ?? '');
+        return;
+      }
+
       let rewardFilters = null;
       if ((webhook.type || '').toUpperCase() === 'REWARD') {
         try {
@@ -147,6 +163,7 @@ export function webhooksCommand() {
       'extole webhooks get <webhook-id>',
       'extole webhooks get <webhook-id> --built',
       'extole webhooks get <webhook-id> --json',
+      'extole webhooks get <webhook-id> --field request > request.js',
     ],
   });
 

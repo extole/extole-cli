@@ -61,7 +61,7 @@ export EXTOLE_ACCOUNT=acme
 | **Rewards** | `extole rewards` | Look up rewards by person, get full details, history, fulfillments, sends, redeems, and cancels |
 | | `extole rewards state-summary` | Account-wide reward counts by state, bucketed over time |
 | | `extole rewards find-coupon` | Reverse-lookup: given a coupon code, find who received it and its current state |
-| **Reward Suppliers** | `extole reward-suppliers` | List configured suppliers (Tango, PayPal, manual coupon batches, etc.) with face values |
+| **Reward Suppliers** | `extole reward-suppliers` | List configured suppliers (Tango, Salesforce coupons, manual coupon batches, etc.) with face values |
 | | `extole reward-suppliers get` | Full supplier detail, including limits, expiry, and tags |
 | | `extole reward-suppliers coupons` | For manual-coupon suppliers: count, inventory preview, and depletion warnings |
 | | `extole reward-suppliers create` | Create a new reward supplier (MANUAL_COUPON, CUSTOM_REWARD, etc.) *(write)* |

@@ -45,19 +45,22 @@ function formatRow(c) {
   console.log(`${id}  ${type}  ${name}`);
 }
 
-function renderTreeNode(node, prefix) {
-  for (const [key, val] of Object.entries(node)) {
-    if (key === '.' || typeof val !== 'object' || val === null) continue;
+export function renderTreeNode(node, prefix) {
+  const children = Object.entries(node).filter(([key, val]) => key !== '.' && typeof val === 'object' && val !== null);
+  children.forEach(([key, val], index) => {
+    const isLast = index === children.length - 1;
+    const connector = isLast ? '└── ' : '├── ';
+    const childPrefix = prefix + (isLast ? '    ' : '│   ');
+
     const dot = val['.'] || {};
-    const type = (dot.types || [])[0] || '?';
+    const type = dot.type || (dot.types || [])[0] || '?';
     const name = dot.display_name || dot.name || key;
-    const id = dot.id ? `  ${dot.id}` : '';
-    console.log(`${prefix}${name}  (${type})${id}`);
-    const children = Object.fromEntries(
-      Object.entries(val).filter(([k, v]) => k !== '.' && typeof v === 'object' && v !== null)
-    );
-    if (Object.keys(children).length > 0) renderTreeNode(children, prefix + '  ');
-  }
+    const socket = dot.installed_into_socket ? `  \x1b[2m[${dot.installed_into_socket}]\x1b[0m` : '';
+    const id = dot.id ? `  \x1b[2m${dot.id}\x1b[0m` : '';
+    console.log(`${prefix}${connector}${name}  (${type})${socket}${id}`);
+
+    renderTreeNode(val, childPrefix);
+  });
 }
 
 export function componentsCommand() {
@@ -119,9 +122,9 @@ export function componentsCommand() {
         const rootVal = Object.values(tree)[0] || {};
         const dot = rootVal['.'] || {};
         const name = dot.display_name || dot.name || componentId;
-        const type = (dot.types || [])[0] || '?';
-        console.log(`${name}  (${type})  ${componentId}`);
-        renderTreeNode(rootVal, '  ');
+        const type = dot.type || (dot.types || [])[0] || '?';
+        console.log(`${name}  (${type})  \x1b[2m${componentId}\x1b[0m`);
+        renderTreeNode(rootVal, '');
         return;
       }
 
@@ -348,6 +351,86 @@ export function componentsCommand() {
   });
 
   components.addCommand(createCmd);
+
+  // ── duplicate ──────────────────────────────────────────────────────────────
+
+  const duplicateCmd = new Command('duplicate')
+    .argument('<component-id>', 'Component ID to duplicate')
+    .description('Duplicate a component. Omit --target-campaign to duplicate the entire campaign that owns the source component, as a brand-new campaign. Pass --target-campaign to instead duplicate just this one component into an existing campaign (optionally at a specific socket via --target-socket).')
+    .option('--target-campaign <id>', 'Existing campaign ID to install the copy into. Omit to duplicate the source\'s entire owning campaign as a new campaign instead.')
+    .option('--target-socket <name>', 'With --target-campaign: socket name to install the copy into (e.g. an existing component\'s socket)')
+    .option('--display-name <name>', 'Display name for the duplicated component')
+    .option('--description <text>', 'Description for the duplicated component')
+    .option('--tag <tag>', 'Tag on the duplicated component (repeatable)', (v, acc) => [...acc, v], [])
+    .option('-y, --yes', 'Skip confirmation prompt')
+    .option('--dry-run', 'Print the request payload without duplicating anything')
+    .action(async function (componentId) {
+      const opts = this.optsWithGlobals();
+      const token = resolveToken(opts);
+
+      const source = await fetchComponent(componentId, token, opts.verbose);
+      const sourceName = source.display_name || source.name || componentId;
+
+      const payload = {};
+      if (opts.targetCampaign) payload.target_campaign_id = opts.targetCampaign;
+      if (opts.targetSocket) payload.target_setting_name = opts.targetSocket;
+      if (opts.displayName) payload.component_display_name = opts.displayName;
+      if (opts.description) payload.description = opts.description;
+      if (opts.tag?.length) payload.tags = opts.tag;
+
+      console.log(`source:      ${componentId}  (${sourceName})`);
+      console.log(`from campaign: ${source.campaign_id}`);
+      if (opts.targetCampaign) {
+        console.log(`\nWill duplicate just this component into existing campaign ${opts.targetCampaign}${opts.targetSocket ? ` (socket: ${opts.targetSocket})` : ''}.`);
+      } else {
+        console.log(`\nWarning: no --target-campaign given — this duplicates the ENTIRE campaign that owns this component (campaign ${source.campaign_id}) as a brand-new campaign, not just this one component.`);
+      }
+
+      if (opts.dryRun) {
+        console.log(`\nPOST /v1/components/${componentId}/duplicate`);
+        console.log(JSON.stringify(payload, null, 2));
+        return;
+      }
+
+      if (!opts.yes) {
+        const ok = await confirm('\nProceed? (y/N) ');
+        if (!ok) { console.log('Aborted.'); process.exit(0); }
+      }
+
+      const res = await apiFetch(`/v1/components/${componentId}/duplicate`, token, {
+        method: 'POST',
+        body: JSON.stringify(payload),
+        verbose: opts.verbose,
+        baseUrl: API_BASE,
+      });
+      const text = await res.text();
+      if (!res.ok) {
+        console.error(`Error ${res.status}: ${formatApiErrorBody(text)}`);
+        process.exit(1);
+      }
+      let duplicated;
+      try { duplicated = JSON.parse(text); } catch {
+        console.error(`Unexpected non-JSON response: ${text.slice(0, 200)}`);
+        process.exit(1);
+      }
+
+      if (opts.json) { printJson(duplicated, opts); return; }
+      console.log(`\nduplicated:  ${duplicated.id}`);
+      console.log(`campaign:    ${duplicated.campaign_id}`);
+      if (!opts.targetCampaign) console.log(`\nNote: the new campaign is NOT_LAUNCHED. Publish it via my.extole or the platform's publish workflow once configured.`);
+    });
+
+  addGlobalOptions(duplicateCmd, {
+    output: true,
+    examples: [
+      'extole components duplicate <component-id> --display-name "My Integration Copy"',
+      'extole components duplicate <component-id> --target-campaign <campaign-id>',
+      'extole components duplicate <component-id> --target-campaign <campaign-id> --target-socket rewardSuppliers',
+      'extole components duplicate <component-id> --dry-run',
+    ],
+  });
+
+  components.addCommand(duplicateCmd);
 
   // ── delete ─────────────────────────────────────────────────────────────────
 
