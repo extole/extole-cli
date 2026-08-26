@@ -17,6 +17,72 @@ function confirm(question) {
   });
 }
 
+// Setting types that carry a plain string value — sent through unchanged.
+const PLAIN_STRING_SETTING_TYPES = new Set([
+  'STRING', 'GLOB_COMPONENT_PATH', 'BROWSER_SIDE_JAVASCRIPT', 'CSS', 'COLOR', 'IMAGE', 'FONT', 'URL',
+  'CLIENT_KEY_FLOW', 'CLIENT_KEY', 'EXTOLE_CLIENT_KEY', 'REWARD_SUPPLIER_ID', 'AUDIENCE_ID', 'ENUM',
+  'PARTNER_ENUM', 'HTML', 'ADMIN_ICON', 'COMPONENT_ID', 'DELAY', 'WEBHOOK_ID', 'PERSON_KEY_NAME', 'DATE_TIME',
+]);
+
+// Setting types whose value is a JSON array/object rather than a scalar.
+const JSON_SETTING_TYPES = new Set([
+  'STRING_LIST', 'STRING_MAP', 'INTEGER_LIST', 'DELAY_LIST', 'JSON', 'AUDIENCE_ID_LIST', 'ENUM_LIST',
+  'PARTNER_ENUM_LIST', 'REWARD_SUPPLIER_ID_LIST', 'CLIENT_DOMAIN_ID_LIST', 'COMPONENT_REFERENCE',
+  'COMPONENT_REFERENCE_LIST',
+]);
+
+// A COMPONENT_REFERENCE value is a map keyed by "component.id" (dot included), not a bare
+// component ID string — {"component.id": "<id>"}. COMPONENT_REFERENCE_LIST is an array of
+// those maps. Prefer `extole components references` for these once it exists; it builds this
+// shape for you.
+function jsonSettingExample(key, type) {
+  if (type === 'COMPONENT_REFERENCE') return `--setting ${key}='{"component.id":"<component-id>"}'`;
+  if (type === 'COMPONENT_REFERENCE_LIST') return `--setting ${key}='[{"component.id":"<component-id>"}]'`;
+  if (type.endsWith('_MAP') || type === 'JSON') return `--setting ${key}='{"key":"value"}'`;
+  return `--setting ${key}='["a","b"]'`;
+}
+
+// Structural/component-graph settings — not expressible as a single value via `set`.
+const STRUCTURAL_SETTING_TYPES = new Set([
+  'MULTI_SOCKET', 'SOCKET', 'TRIGGER_CONFIGURATION', 'COMPONENT_SETTING_LOOKUP',
+]);
+
+// Coerces a raw string (from --setting or a --setting-file's file contents) to the JSON
+// value the platform expects for the setting's declared type. Returns { value } on success
+// or { error } with a message naming the type and, where useful, a corrected example —
+// every failure is decided before any network call, with no heuristics or silent fallback.
+export function coerceSettingValue(key, rawValue, variable) {
+  const type = variable?.type;
+  if (!type || PLAIN_STRING_SETTING_TYPES.has(type)) return { value: rawValue };
+
+  if (type === 'BOOLEAN') {
+    const lower = rawValue.toLowerCase();
+    if (lower === 'true') return { value: true };
+    if (lower === 'false') return { value: false };
+    return { error: `--setting ${key}=${rawValue} invalid — type BOOLEAN requires true or false` };
+  }
+
+  if (type === 'INTEGER') {
+    const num = Number(rawValue);
+    if (!Number.isInteger(num)) return { error: `--setting ${key}=${rawValue} invalid — type INTEGER requires a whole number` };
+    return { value: num };
+  }
+
+  if (STRUCTURAL_SETTING_TYPES.has(type)) {
+    return { error: `setting "${key}" is type ${type} — not settable via components set (sockets/structural settings are wired via components create/duplicate/deploy)` };
+  }
+
+  if (JSON_SETTING_TYPES.has(type)) {
+    try {
+      return { value: JSON.parse(rawValue) };
+    } catch {
+      return { error: `--setting ${key} invalid — type ${type} requires valid JSON, e.g. ${jsonSettingExample(key, type)}` };
+    }
+  }
+
+  return { value: rawValue };
+}
+
 async function fetchAllComponents(token, params, verbose) {
   const qs = new URLSearchParams({ limit: '500', ...params });
   return apiJson(`/v1/components?${qs}`, token, { verbose, baseUrl: API_BASE });
@@ -625,7 +691,7 @@ export function componentsCommand() {
   // ── set ────────────────────────────────────────────────────────────────────
 
   const setCmd = new Command('set')
-    .description('Patch one or more settings on an existing component without redeploying the bundle. Useful for testing/iteration where you want to tweak a setting and re-fire events. Use --setting-file for multi-line/script-shaped settings — it shows a diff against the current value and asks for confirmation before sending.')
+    .description('Patch one or more settings on an existing component without redeploying the bundle. Useful for testing/iteration where you want to tweak a setting and re-fire events. Values are coerced to the setting\'s declared type (BOOLEAN, INTEGER, JSON arrays/objects for list types) — see the component\'s variables (components get <id>) for each setting\'s type. Use --setting-file for multi-line/script-shaped settings — it shows a diff against the current value and asks for confirmation before sending.')
     .argument('<component-id>', 'Component ID to update')
     .option('--setting <kv>', 'Setting in key=value form (repeatable)', (v, prev) => prev.concat([v]), [])
     .option('--setting-file <kv>', 'Setting in key=path form — reads the new value from a file (repeatable). Best for multi-line/script-shaped settings.', (v, prev) => prev.concat([v]), [])
@@ -638,7 +704,6 @@ export function componentsCommand() {
         process.exit(2);
       }
 
-      const settings = {};
       const inlineEdits = [];
       for (const kv of opts.setting || []) {
         const idx = kv.indexOf('=');
@@ -652,10 +717,6 @@ export function componentsCommand() {
           console.error(`Error: --setting key cannot be empty: ${kv}`);
           process.exit(2);
         }
-        // Settings carry a `values` map; for non-translatable settings the key is `default`.
-        // Type-aware coercion (INTEGER, BOOLEAN) is a follow-up — for now the API rejects type
-        // mismatches with a clear error.
-        settings[key] = { values: { default: rawValue } };
         inlineEdits.push({ key, rawValue });
       }
 
@@ -672,27 +733,44 @@ export function componentsCommand() {
           console.error(`Error: --setting-file key cannot be empty: ${kv}`);
           process.exit(2);
         }
-        let newValue;
+        let rawValue;
         try {
-          newValue = readFileSync(filePath, 'utf8').trim();
+          rawValue = readFileSync(filePath, 'utf8').trim();
         } catch (error) {
           console.error(`Error reading --setting-file path for "${key}": ${error.message}`);
           process.exit(2);
         }
-        settings[key] = { values: { default: newValue } };
-        fileEdits.push({ key, newValue });
+        fileEdits.push({ key, rawValue });
+      }
+
+      const token = resolveToken(opts);
+      const component = await fetchComponent(componentId, token, opts.verbose);
+      const variablesByName = new Map((component.variables || []).map(v => [v.name, v]));
+
+      const settings = {};
+      const coercionErrors = [];
+      for (const { key, rawValue } of [...inlineEdits, ...fileEdits]) {
+        const result = coerceSettingValue(key, rawValue, variablesByName.get(key));
+        if (result.error) {
+          coercionErrors.push(result.error);
+          continue;
+        }
+        settings[key] = { values: { default: result.value } };
+      }
+      if (coercionErrors.length > 0) {
+        for (const error of coercionErrors) console.error(`Error: ${error}`);
+        process.exit(2);
       }
 
       const payload = { settings };
-      const token = resolveToken(opts);
 
       if (fileEdits.length > 0) {
-        const component = await fetchComponent(componentId, token, opts.verbose);
-        for (const { key, newValue } of fileEdits) {
-          const variable = (component.variables || []).find(v => v.name === key);
+        const formatForDiff = (value) => typeof value === 'string' ? value : JSON.stringify(value, null, 2);
+        for (const { key } of fileEdits) {
+          const variable = variablesByName.get(key);
           const currentValue = variable?.values?.default ?? '';
           console.log(`setting: ${key}\n`);
-          printDiff(String(currentValue), newValue);
+          printDiff(formatForDiff(currentValue), formatForDiff(settings[key].values.default));
           console.log();
         }
         if (inlineEdits.length > 0) {
@@ -739,6 +817,9 @@ export function componentsCommand() {
       'extole components set <component-id> --setting apiKey=test_key_123',
       'extole components set <component-id> --setting apiKey=k1 --setting endpoint=https://example.com',
       'extole components set <component-id> --setting apiKey=k1 --dry-run',
+      'extole components set <component-id> --setting enabled=false                    # BOOLEAN setting',
+      'extole components set <component-id> --setting order=2                          # INTEGER setting',
+      `extole components set <component-id> --setting tags='["a","b"]'                  # list/JSON-typed setting`,
       'extole components set <component-id> --setting-file requestScript=request.js',
       'extole components set <component-id> --setting-file requestScript=request.js --yes',
     ],
