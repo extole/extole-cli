@@ -397,3 +397,23 @@ test('coerceSettingValue rejects a structural setting type with an explanatory e
   const result = coerceSettingValue('views', 'x', { type: 'MULTI_SOCKET' });
   assert.match(result.error, /type MULTI_SOCKET — not settable via components set/);
 });
+
+test('coerceSettingValue parses a COMPONENT_REFERENCE value as a component.id map', () => {
+  assert.deepEqual(
+    coerceSettingValue('parentIntegration', '{"component.id":"abc123"}', { type: 'COMPONENT_REFERENCE' }),
+    { value: { 'component.id': 'abc123' } }
+  );
+});
+
+test('coerceSettingValue rejects an invalid COMPONENT_REFERENCE value with a component.id example', () => {
+  const result = coerceSettingValue('parentIntegration', 'abc123', { type: 'COMPONENT_REFERENCE' });
+  assert.match(result.error, /type COMPONENT_REFERENCE requires valid JSON/);
+  assert.match(result.error, /--setting parentIntegration='\{"component\.id":"<component-id>"\}'/);
+});
+
+test('coerceSettingValue parses a COMPONENT_REFERENCE_LIST value as an array of component.id maps', () => {
+  assert.deepEqual(
+    coerceSettingValue('linkedComponents', '[{"component.id":"a"},{"component.id":"b"}]', { type: 'COMPONENT_REFERENCE_LIST' }),
+    { value: [{ 'component.id': 'a' }, { 'component.id': 'b' }] }
+  );
+});

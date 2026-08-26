@@ -27,8 +27,20 @@ const PLAIN_STRING_SETTING_TYPES = new Set([
 // Setting types whose value is a JSON array/object rather than a scalar.
 const JSON_SETTING_TYPES = new Set([
   'STRING_LIST', 'STRING_MAP', 'INTEGER_LIST', 'DELAY_LIST', 'JSON', 'AUDIENCE_ID_LIST', 'ENUM_LIST',
-  'PARTNER_ENUM_LIST', 'REWARD_SUPPLIER_ID_LIST', 'CLIENT_DOMAIN_ID_LIST',
+  'PARTNER_ENUM_LIST', 'REWARD_SUPPLIER_ID_LIST', 'CLIENT_DOMAIN_ID_LIST', 'COMPONENT_REFERENCE',
+  'COMPONENT_REFERENCE_LIST',
 ]);
+
+// A COMPONENT_REFERENCE value is a map keyed by "component.id" (dot included), not a bare
+// component ID string — {"component.id": "<id>"}. COMPONENT_REFERENCE_LIST is an array of
+// those maps. Prefer `extole components references` for these once it exists; it builds this
+// shape for you.
+function jsonSettingExample(key, type) {
+  if (type === 'COMPONENT_REFERENCE') return `--setting ${key}='{"component.id":"<component-id>"}'`;
+  if (type === 'COMPONENT_REFERENCE_LIST') return `--setting ${key}='[{"component.id":"<component-id>"}]'`;
+  if (type.endsWith('_MAP') || type === 'JSON') return `--setting ${key}='{"key":"value"}'`;
+  return `--setting ${key}='["a","b"]'`;
+}
 
 // Structural/component-graph settings — not expressible as a single value via `set`.
 const STRUCTURAL_SETTING_TYPES = new Set([
@@ -64,10 +76,7 @@ export function coerceSettingValue(key, rawValue, variable) {
     try {
       return { value: JSON.parse(rawValue) };
     } catch {
-      const example = type.endsWith('_MAP') || type === 'JSON'
-        ? `--setting ${key}='{"key":"value"}'`
-        : `--setting ${key}='["a","b"]'`;
-      return { error: `--setting ${key} invalid — type ${type} requires valid JSON, e.g. ${example}` };
+      return { error: `--setting ${key} invalid — type ${type} requires valid JSON, e.g. ${jsonSettingExample(key, type)}` };
     }
   }
 
