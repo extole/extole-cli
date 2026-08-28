@@ -162,6 +162,7 @@ export function apiCommand() {
     .allowExcessArguments(false)
     .option('--method <method>', 'HTTP method', 'GET')
     .option('--body <json>', 'Request body as JSON string (for POST/PUT/PATCH)')
+    .option('--query <key=value>', 'Query parameter to append (repeatable, URL-encoded)', (value, previous) => previous.concat([value]), [])
     .option('--auth-base', 'Use auth base URL (api.extole.com) instead of api.extole.io')
     .enablePositionalOptions()
     .action(async function (path) {
@@ -170,10 +171,25 @@ export function apiCommand() {
       const baseUrl = opts.authBase ? AUTH_BASE : API_BASE;
       const method = opts.method.toUpperCase();
 
+      let fullPath = path;
+      if (opts.query.length > 0) {
+        const params = new URLSearchParams();
+        for (const entry of opts.query) {
+          const eq = entry.indexOf('=');
+          if (eq === -1) {
+            console.error(`Error: --query "${entry}" is not in key=value form.`);
+            process.exit(2);
+          }
+          params.append(entry.slice(0, eq), entry.slice(eq + 1));
+        }
+        const sep = path.includes('?') ? '&' : '?';
+        fullPath = `${path}${sep}${params}`;
+      }
+
       const fetchOpts = { method, verbose: opts.verbose, baseUrl };
       if (opts.body) fetchOpts.body = opts.body;
 
-      const res = await apiFetch(path, token, fetchOpts);
+      const res = await apiFetch(fullPath, token, fetchOpts);
       const text = await res.text();
 
       let parsed;
@@ -193,6 +209,7 @@ export function apiCommand() {
       'extole api /v2/campaigns/123/controllers',
       'extole api /v6/webhooks/built',
       'extole api /v2/campaigns/123/publish --method POST --body \'{}\'',
+      'extole api /v1/components --query limit=500 --query offset=500',
       'extole api /v4/tokens --auth-base',
     ],
   });

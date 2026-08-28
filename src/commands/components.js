@@ -102,6 +102,10 @@ async function fetchComponent(id, token, verbose) {
   return apiJson(`/v1/components/${id}`, token, { verbose, baseUrl: API_BASE });
 }
 
+async function fetchBuiltComponent(id, token, verbose) {
+  return apiJson(`/v1/components/${id}/built`, token, { verbose, baseUrl: API_BASE });
+}
+
 async function fetchComponentTree(id, token, verbose) {
   return apiJson(`/v1/components/${id}/tree`, token, { verbose, baseUrl: API_BASE });
 }
@@ -188,6 +192,7 @@ export function componentsCommand() {
     .argument('<component-id>', 'Component ID')
     .option('--tree', 'Show downstream subtree')
     .option('--sockets', 'Show socket references to other components')
+    .option('--built', 'Show resolved buildtime values instead of raw javascript@buildtime:... expressions')
     .action(async function (componentId) {
       const opts = this.optsWithGlobals();
       const token = resolveToken(opts);
@@ -204,7 +209,9 @@ export function componentsCommand() {
         return;
       }
 
-      const c = await fetchComponent(componentId, token, opts.verbose);
+      const c = opts.built
+        ? await fetchBuiltComponent(componentId, token, opts.verbose)
+        : await fetchComponent(componentId, token, opts.verbose);
       if (opts.json) { printJson(c, opts); return; }
 
       const type = c.type || (c.types || [])[0] || '?';
@@ -244,6 +251,7 @@ export function componentsCommand() {
       'extole components get <component-id>',
       'extole components get <component-id> --tree',
       'extole components get <component-id> --sockets',
+      'extole components get <component-id> --built',
       'extole components get <component-id> --json',
     ],
   });
