@@ -282,6 +282,10 @@ extole campaigns maxmind <campaign-id> --json                      # raw trigger
 
 extole campaigns reward-rules <campaign-id>                        # per-role reward rules: rewardee, trigger, supplier, constraints
 extole campaigns reward-rules <campaign-id> --json                 # raw RewardRuleResponse[]
+
+extole campaigns publish <campaign-id>                             # validate, build, and publish
+extole campaigns publish <campaign-id> --launch                    # publish and take live immediately
+extole campaigns publish <campaign-id> --message "wired new reward webhook"
 ```
 
 ### Quality Rules
@@ -291,6 +295,10 @@ extole campaigns reward-rules <campaign-id> --json                 # raw RewardR
 ### MaxMind
 
 `maxmind` walks the built campaign (`GET /v2/campaigns/{id}/built`) and surfaces every `trigger_type: MAXMIND` controller-trigger, with its step, phase, `risk_threshold`, `ip_threshold`, `allow_high_risk_email`, and `default_quality_score`. When a trigger has thresholds different from the recommended value of `20` (the legacy default was `5`), an advisory is printed to stderr. The advisory does not appear in `--json` output.
+
+### Publish
+
+`publish` calls `POST /v2/campaigns/{id}/publish` — the same endpoint `components deploy --publish` uses under the hood — so that taking a config change live doesn't require dropping to `extole api`. Add `--launch` to also set the start date to now in the same call, and `--message` to attach a changelog note to the publish.
 
 ## Audiences
 
@@ -327,13 +335,14 @@ extole components --filter "gift card"             # filter by name substring
 extole components get <component-id>               # full config + variables
 extole components get <component-id> --tree        # downstream subtree (recursive)
 extole components get <component-id> --sockets     # socket references to other components
+extole components get <component-id> --built       # resolved buildtime values, not raw expressions
 
 extole components types                            # all concrete types in this account
 extole components types --parent rule              # subtypes of a given parent type
 extole components types --parent rule --tree       # rendered as a hierarchy
 ```
 
-`--filter-type` does substring matching against the full type hierarchy (`--filter-type reward` matches `reward-v10.0`, `reward-rule-v10.0`, etc.). `--tree` on `get` renders the full downstream subgraph like `tree`/`npm ls` — box-drawing connectors, each node's type, and the socket it's installed into (e.g. `[rewardRules]`), which is often the fastest way to understand how a campaign is actually wired together.
+`--filter-type` does substring matching against the full type hierarchy (`--filter-type reward` matches `reward-v10.0`, `reward-rule-v10.0`, etc.). `--tree` on `get` renders the full downstream subgraph like `tree`/`npm ls` — box-drawing connectors, each node's type, and the socket it's installed into (e.g. `[rewardRules]`), which is often the fastest way to understand how a campaign is actually wired together. `--built` calls `GET /v1/components/{id}/built` so that variables backed by `javascript@buildtime:...` expressions (e.g. a webhook ID discovered by tag) show their resolved value instead of the raw expression — the same pattern `webhooks get --built` uses.
 
 ### Creating Integration Components
 
@@ -802,10 +811,11 @@ For endpoints not yet covered by a specific subcommand:
 extole api /v2/campaigns/123/controllers
 extole api /v6/webhooks/built
 extole api /v2/campaigns/123/publish --method POST --body '{}'
+extole api /v1/components --query limit=500 --query offset=500
 extole api /v4/tokens --auth-base
 ```
 
-GET by default. `--method` to override, `--body` for POST/PUT/PATCH, `--auth-base` for the auth API (`api.extole.com`). Output is JSON-formatted and supports `--compact`.
+GET by default. `--method` to override, `--body` for POST/PUT/PATCH, `--auth-base` for the auth API (`api.extole.com`). `--query key=value` (repeatable) URL-encodes and appends query parameters, so a query value with characters a shell would otherwise mangle doesn't have to be hand-embedded in the path string. Output is JSON-formatted and supports `--compact`.
 
 ## Output Conventions
 
