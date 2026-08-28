@@ -469,8 +469,9 @@ export function webhooksCommand() {
       if (!opts.json) console.log(`added action:       ${action.action_id}  (WEBHOOK / ${opts.quality.toUpperCase()})`);
 
       if (!opts.skipPublish) {
-        const pubRes = await apiFetch(`/v2/campaigns/${opts.campaign}/live`, token, {
+        const pubRes = await apiFetch(`/v2/campaigns/${opts.campaign}/publish`, token, {
           method: 'POST',
+          body: JSON.stringify({ launch: true }),
           verbose: opts.verbose,
           baseUrl: API_BASE,
         });
@@ -597,7 +598,7 @@ export function webhooksCommand() {
       console.log(`added action:       ${action.action_id}`);
 
       // Publish
-      const pubRes = await apiFetch(`/v2/campaigns/${opts.campaign}/live`, token, { method: 'POST', verbose: opts.verbose, baseUrl: API_BASE });
+      const pubRes = await apiFetch(`/v2/campaigns/${opts.campaign}/publish`, token, { method: 'POST', body: JSON.stringify({ launch: true }), verbose: opts.verbose, baseUrl: API_BASE });
       const pubText = await pubRes.text();
       if (!pubRes.ok) {
         await apiFetch(`/v2/campaigns/${opts.campaign}/controllers/${controllerId}`, token, { method: 'DELETE', baseUrl: API_BASE });
@@ -630,7 +631,7 @@ export function webhooksCommand() {
           console.log(`  warning: could not delete webhook ${webhookId}: ${error.message}`);
         }
         try {
-          await apiFetch(`/v2/campaigns/${opts.campaign}/live`, token, { method: 'POST', baseUrl: API_BASE });
+          await apiFetch(`/v2/campaigns/${opts.campaign}/publish`, token, { method: 'POST', body: JSON.stringify({ launch: true }), baseUrl: API_BASE });
           console.log(`republished:        campaign ${opts.campaign}`);
         } catch (error) {
           console.log(`  warning: could not republish campaign ${opts.campaign}: ${error.message}`);

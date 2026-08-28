@@ -83,9 +83,19 @@ export function coerceSettingValue(key, rawValue, variable) {
   return { value: rawValue };
 }
 
+const COMPONENTS_PAGE_SIZE = 500;
+
 async function fetchAllComponents(token, params, verbose) {
-  const qs = new URLSearchParams({ limit: '500', ...params });
-  return apiJson(`/v1/components?${qs}`, token, { verbose, baseUrl: API_BASE });
+  const all = [];
+  let offset = 0;
+  for (;;) {
+    const qs = new URLSearchParams({ limit: String(COMPONENTS_PAGE_SIZE), offset: String(offset), ...params });
+    const page = await apiJson(`/v1/components?${qs}`, token, { verbose, baseUrl: API_BASE });
+    all.push(...page);
+    if (page.length < COMPONENTS_PAGE_SIZE) break;
+    offset += COMPONENTS_PAGE_SIZE;
+  }
+  return all;
 }
 
 async function fetchComponent(id, token, verbose) {
