@@ -1,6 +1,6 @@
 import { Command } from 'commander';
 import { resolveToken, API_BASE } from '../config.js';
-import { apiJson } from '../api.js';
+import { apiJson, apiFetch } from '../api.js';
 import { printJson } from '../output.js';
 import { addGlobalOptions } from '../utils.js';
 
@@ -286,6 +286,59 @@ function rewardRulesCommand() {
   });
 }
 
+function publishCommand() {
+  const cmd = new Command('publish')
+    .description('Validate, build, and publish a campaign')
+    .allowExcessArguments(false)
+    .argument('<campaign-id>', 'Campaign ID')
+    .option('--launch', 'Also set the start date to now, taking the campaign live immediately')
+    .option('--message <text>', 'Publish message/changelog note')
+    .action(async function (campaignId) {
+      const opts = this.optsWithGlobals();
+      const token = resolveToken(opts);
+
+      const body = {};
+      if (opts.launch) body.launch = true;
+      if (opts.message) body.message = opts.message;
+
+      const res = await apiFetch(`/v2/campaigns/${campaignId}/publish`, token, {
+        method: 'POST',
+        body: JSON.stringify(body),
+        verbose: opts.verbose,
+        baseUrl: API_BASE,
+      });
+      const text = await res.text();
+      if (!res.ok) {
+        console.error(`Error ${res.status}: ${text.slice(0, 300)}`);
+        process.exit(1);
+      }
+
+      let campaign;
+      try { campaign = JSON.parse(text); } catch {
+        console.error(`Unexpected non-JSON response: ${text.slice(0, 200)}`);
+        process.exit(1);
+      }
+
+      if (opts.json) { printJson(campaign, opts); return; }
+
+      console.log(`published:     campaign ${campaignId}`);
+      console.log(`state:         ${campaign.state}`);
+      console.log(`is_published:  ${campaign.is_published}`);
+      if (campaign.start_date) console.log(`start_date:    ${campaign.start_date}`);
+    });
+
+  addGlobalOptions(cmd, {
+    output: true,
+    examples: [
+      'extole campaigns publish <campaign-id>',
+      'extole campaigns publish <campaign-id> --launch',
+      'extole campaigns publish <campaign-id> --message "wired new reward webhook"',
+    ],
+  });
+
+  return cmd;
+}
+
 export function campaignsCommand() {
   const cmd = new Command('campaigns')
     .description('Inspect per-campaign configuration (quality rules, MaxMind settings, reward rules)');
@@ -296,9 +349,12 @@ export function campaignsCommand() {
 
   const rewardRules = rewardRulesCommand();
 
+  const publish = publishCommand();
+
   cmd.addCommand(qualityRules);
   cmd.addCommand(maxmind);
   cmd.addCommand(rewardRules);
+  cmd.addCommand(publish);
 
   return cmd;
 }
