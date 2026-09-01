@@ -110,6 +110,100 @@ async function fetchComponentTree(id, token, verbose) {
   return apiJson(`/v1/components/${id}/tree`, token, { verbose, baseUrl: API_BASE });
 }
 
+async function fetchAllWebhooks(token, verbose) {
+  return apiJson('/v6/webhooks/built', token, { verbose, baseUrl: API_BASE });
+}
+
+async function fetchAllEventStreams(token, verbose) {
+  return apiJson('/v6/event-streams/built', token, { verbose, baseUrl: API_BASE });
+}
+
+export function collectTreeIds(node, ids = new Set()) {
+  const dot = node['.'];
+  if (dot?.id) ids.add(dot.id);
+  for (const [key, val] of Object.entries(node)) {
+    if (key !== '.' && typeof val === 'object' && val !== null) collectTreeIds(val, ids);
+  }
+  return ids;
+}
+
+function walkTreeNodes(node, visit) {
+  const dot = node['.'];
+  if (dot) visit(node, dot);
+  for (const [key, val] of Object.entries(node)) {
+    if (key !== '.' && typeof val === 'object' && val !== null) walkTreeNodes(val, visit);
+  }
+}
+
+// `--tree`'s parent→child walk only reaches components owned via component_ids. Webhooks,
+// event streams, and cross-campaign MULTI_SOCKET subscriptions are all attached the other way
+// (they carry a component_ids/values.default field pointing *at* a component) and are otherwise
+// invisible — this resolves and injects them as synthetic children so `--tree` reflects the
+// component's real structure, not just its ownership graph.
+async function augmentTreeWithFullResources(rootVal, token, verbose) {
+  const treeIds = collectTreeIds(rootVal);
+
+  const [webhooks, eventStreams] = await Promise.all([
+    fetchAllWebhooks(token, verbose).catch(() => []),
+    fetchAllEventStreams(token, verbose).catch(() => []),
+  ]);
+
+  const socketFetches = [];
+  walkTreeNodes(rootVal, (node, dot) => {
+    const matchingWebhooks = webhooks.filter(w => (w.component_ids || []).includes(dot.id));
+    for (const webhook of matchingWebhooks) {
+      const webhookId = webhook.webhook_id || webhook.id;
+      node[`webhook:${webhookId}`] = { '.': { ...webhook, id: webhookId, resource_kind: 'webhook' } };
+    }
+
+    const matchingStreams = eventStreams.filter(e => (e.component_ids || []).includes(dot.id));
+    for (const stream of matchingStreams) {
+      node[`event-stream:${stream.id}`] = { '.': { ...stream, id: stream.id, resource_kind: 'event-stream' } };
+    }
+
+    const socketVariables = (dot.variables || []).filter(v => v.type === 'MULTI_SOCKET' || v.type === 'SOCKET');
+    for (const variable of socketVariables) {
+      socketFetches.push({ node, componentId: dot.id, socketName: variable.name });
+    }
+  });
+
+  await Promise.all(socketFetches.map(async ({ node, componentId, socketName }) => {
+    let built;
+    try { built = await fetchBuiltComponent(componentId, token, verbose); } catch { return; }
+    const variable = (built.variables || []).find(v => v.name === socketName);
+    const subscribedIds = (variable?.values?.default || []).filter(id => typeof id === 'string' && !treeIds.has(id));
+    await Promise.all(subscribedIds.map(async (id) => {
+      let sub;
+      try { sub = await fetchComponent(id, token, verbose); } catch { return; }
+      node[`socket:${socketName}:${id}`] = {
+        '.': { ...sub, installed_into_socket: socketName },
+      };
+    }));
+  }));
+}
+
+// A non-root component's own component_references points to its local parent (not the reverse),
+// so the campaign's true root is the only campaign-local component whose references don't target
+// another local sibling — same mechanism used to detect a bundle's root before an upload-bundle
+// call. `--tree` walks up to it so the requested id always shows the component's full real
+// structure, not just what's downstream of wherever in the tree you happened to point it at.
+async function findCampaignRoot(componentId, token, verbose) {
+  const target = await fetchComponent(componentId, token, verbose);
+  if (!target.campaign_id) return componentId;
+
+  const siblings = await fetchAllComponents(token, { campaign_ids: target.campaign_id }, verbose);
+  const localIds = new Set(siblings.map(c => c.id));
+  const hasLocalParent = (component) =>
+    (component.component_references || []).some(ref => ref.component_id !== component.id && localIds.has(ref.component_id));
+
+  const root = siblings.find(c => !hasLocalParent(c));
+  return root?.id || componentId;
+}
+
+function markRequestedNode(rootVal, requestedId) {
+  walkTreeNodes(rootVal, (node, dot) => { if (dot.id === requestedId) dot._requested = true; });
+}
+
 // Match if any entry in the types array contains the filter string (substring, case-insensitive).
 // This catches both exact types and parent types, so passing 'reward-supplier' matches
 // shopify-reward-supplier-v10.0 components that inherit from reward-supplier-v10.0.
@@ -133,11 +227,14 @@ export function renderTreeNode(node, prefix) {
     const childPrefix = prefix + (isLast ? '    ' : '│   ');
 
     const dot = val['.'] || {};
-    const type = dot.type || (dot.types || [])[0] || '?';
+    const type = dot.resource_kind === 'webhook' ? `webhook:${dot.type}`
+      : dot.resource_kind === 'event-stream' ? 'event-stream'
+      : dot.type || (dot.types || [])[0] || 'untyped';
     const name = dot.display_name || dot.name || key;
     const socket = dot.installed_into_socket ? `  \x1b[2m[${dot.installed_into_socket}]\x1b[0m` : '';
     const id = dot.id ? `  \x1b[2m${dot.id}\x1b[0m` : '';
-    console.log(`${prefix}${connector}${name}  (${type})${socket}${id}`);
+    const requested = dot._requested ? '  \x1b[1m← requested\x1b[0m' : '';
+    console.log(`${prefix}${connector}${name}  (${type})${socket}${id}${requested}`);
 
     renderTreeNode(val, childPrefix);
   });
@@ -190,7 +287,8 @@ export function componentsCommand() {
   const getCmd = new Command('get')
     .description('Show full configuration for a component')
     .argument('<component-id>', 'Component ID')
-    .option('--tree', 'Show downstream subtree')
+    .option('--tree', 'Show the component\'s full real structure: downstream subtree plus attached webhooks, event streams, and cross-campaign socket subscriptions')
+    .option('--basic', 'With --tree, show only the ownership subtree (skip resolving webhooks/event-streams/socket subscriptions — faster on accounts with many of either)')
     .option('--sockets', 'Show socket references to other components')
     .option('--built', 'Show resolved buildtime values instead of raw javascript@buildtime:... expressions')
     .action(async function (componentId) {
@@ -198,13 +296,17 @@ export function componentsCommand() {
       const token = resolveToken(opts);
 
       if (opts.tree) {
-        const tree = await fetchComponentTree(componentId, token, opts.verbose);
-        if (opts.json) { printJson(tree, opts); return; }
+        const rootId = await findCampaignRoot(componentId, token, opts.verbose);
+        const tree = await fetchComponentTree(rootId, token, opts.verbose);
         const rootVal = Object.values(tree)[0] || {};
+        if (!opts.basic) await augmentTreeWithFullResources(rootVal, token, opts.verbose);
+        markRequestedNode(rootVal, componentId);
+        if (opts.json) { printJson(tree, opts); return; }
         const dot = rootVal['.'] || {};
-        const name = dot.display_name || dot.name || componentId;
-        const type = dot.type || (dot.types || [])[0] || '?';
-        console.log(`${name}  (${type})  \x1b[2m${componentId}\x1b[0m`);
+        const name = dot.display_name || dot.name || rootId;
+        const type = dot.type || (dot.types || [])[0] || 'untyped';
+        const requested = dot._requested ? '  \x1b[1m← requested\x1b[0m' : '';
+        console.log(`${name}  (${type})  \x1b[2m${rootId}\x1b[0m${requested}`);
         renderTreeNode(rootVal, '');
         return;
       }
@@ -214,7 +316,7 @@ export function componentsCommand() {
         : await fetchComponent(componentId, token, opts.verbose);
       if (opts.json) { printJson(c, opts); return; }
 
-      const type = c.type || (c.types || [])[0] || '?';
+      const type = c.type || (c.types || [])[0] || 'untyped';
       const parents = (c.types || []).slice(1);
       console.log(`id:       ${c.id}`);
       console.log(`type:     ${type}`);
@@ -250,6 +352,7 @@ export function componentsCommand() {
     examples: [
       'extole components get <component-id>',
       'extole components get <component-id> --tree',
+      'extole components get <component-id> --tree --basic',
       'extole components get <component-id> --sockets',
       'extole components get <component-id> --built',
       'extole components get <component-id> --json',
