@@ -333,7 +333,8 @@ extole components --filter-type reward-supplier    # filter by type (matches sub
 extole components --filter "gift card"             # filter by name substring
 
 extole components get <component-id>               # full config + variables
-extole components get <component-id> --tree        # downstream subtree (recursive)
+extole components get <component-id> --tree        # full real structure, from the campaign's true root
+extole components get <component-id> --tree --basic # ownership subtree only, skips the extra resolution calls
 extole components get <component-id> --sockets     # socket references to other components
 extole components get <component-id> --built       # resolved buildtime values, not raw expressions
 
@@ -342,7 +343,7 @@ extole components types --parent rule              # subtypes of a given parent 
 extole components types --parent rule --tree       # rendered as a hierarchy
 ```
 
-`--filter-type` does substring matching against the full type hierarchy (`--filter-type reward` matches `reward-v10.0`, `reward-rule-v10.0`, etc.). `--tree` on `get` renders the full downstream subgraph like `tree`/`npm ls` — box-drawing connectors, each node's type, and the socket it's installed into (e.g. `[rewardRules]`), which is often the fastest way to understand how a campaign is actually wired together. `--built` calls `GET /v1/components/{id}/built` so that variables backed by `javascript@buildtime:...` expressions (e.g. a webhook ID discovered by tag) show their resolved value instead of the raw expression — the same pattern `webhooks get --built` uses.
+`--filter-type` does substring matching against the full type hierarchy (`--filter-type reward` matches `reward-v10.0`, `reward-rule-v10.0`, etc.). `--tree` on `get` renders the full downstream subgraph like `tree`/`npm ls` — box-drawing connectors, each node's type, and the socket it's installed into (e.g. `[rewardRules]`), which is often the fastest way to understand how a campaign is actually wired together. It walks up to the campaign's true root first, regardless of which component id in the tree you passed, so it always shows the complete structure — the id you asked for is marked `← requested` so you don't lose track of it. It also resolves and attaches webhooks, event streams, and cross-campaign socket subscriptions — these are modeled as independent resources that point *at* a component rather than being owned children, so a plain ownership walk would otherwise miss them; add `--basic` to skip that extra resolution on accounts with a lot of webhooks/event-streams where the added latency isn't worth it. `--built` calls `GET /v1/components/{id}/built` so that variables backed by `javascript@buildtime:...` expressions (e.g. a webhook ID discovered by tag) show their resolved value instead of the raw expression — the same pattern `webhooks get --built` uses.
 
 ### Creating Integration Components
 

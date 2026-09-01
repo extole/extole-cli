@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { componentsCommand, renderTreeNode, coerceSettingValue } from '../src/commands/components.js';
+import { componentsCommand, renderTreeNode, coerceSettingValue, collectTreeIds } from '../src/commands/components.js';
 
 // ── fake process.exit for testing action-level validation without killing the test runner ──
 
@@ -318,8 +318,8 @@ test('renderTreeNode uses box-drawing connectors and marks the last child at eac
     second: { '.': { name: 'second' } },
   };
   const lines = captureConsoleLog(() => renderTreeNode(tree, '')).map(stripAnsi);
-  assert.equal(lines[0], '├── first  (?)');
-  assert.equal(lines[1], '└── second  (?)');
+  assert.equal(lines[0], '├── first  (untyped)');
+  assert.equal(lines[1], '└── second  (untyped)');
 });
 
 test('renderTreeNode nests grandchildren under a continuation prefix that matches the parent\'s position', () => {
@@ -330,8 +330,8 @@ test('renderTreeNode nests grandchildren under a continuation prefix that matche
     },
   };
   const lines = captureConsoleLog(() => renderTreeNode(tree, '')).map(stripAnsi);
-  assert.equal(lines[0], '└── onlyChild  (?)');
-  assert.equal(lines[1], '    └── grandchild  (?)');
+  assert.equal(lines[0], '└── onlyChild  (untyped)');
+  assert.equal(lines[1], '    └── grandchild  (untyped)');
 });
 
 test('renderTreeNode labels a child with the socket it is installed into', () => {
@@ -339,7 +339,7 @@ test('renderTreeNode labels a child with the socket it is installed into', () =>
     child: { '.': { name: 'child', installed_into_socket: 'rewardSuppliers' } },
   };
   const lines = captureConsoleLog(() => renderTreeNode(tree, '')).map(stripAnsi);
-  assert.equal(lines[0], '└── child  (?)  [rewardSuppliers]');
+  assert.equal(lines[0], '└── child  (untyped)  [rewardSuppliers]');
 });
 
 test('renderTreeNode prefers the singular type field over an empty types array', () => {
@@ -348,6 +348,36 @@ test('renderTreeNode prefers the singular type field over an empty types array',
   };
   const lines = captureConsoleLog(() => renderTreeNode(tree, '')).map(stripAnsi);
   assert.equal(lines[0], '└── child  (integration-v10.0)');
+});
+
+test('renderTreeNode marks a node flagged _requested and leaves others unmarked', () => {
+  const tree = {
+    first: { '.': { name: 'first', _requested: true } },
+    second: { '.': { name: 'second' } },
+  };
+  const lines = captureConsoleLog(() => renderTreeNode(tree, '')).map(stripAnsi);
+  assert.equal(lines[0], '├── first  (untyped)  ← requested');
+  assert.equal(lines[1], '└── second  (untyped)');
+});
+
+// ── collectTreeIds ───────────────────────────────────────────────────────────
+
+test('collectTreeIds collects the root id plus every descendant id', () => {
+  const rootVal = {
+    '.': { id: 'root-id' },
+    child: {
+      '.': { id: 'child-id' },
+      grandchild: { '.': { id: 'grandchild-id' } },
+    },
+  };
+  const ids = collectTreeIds(rootVal);
+  assert.deepEqual([...ids].sort(), ['child-id', 'grandchild-id', 'root-id']);
+});
+
+test('collectTreeIds skips nodes with no id and does not throw', () => {
+  const rootVal = { '.': { id: 'root-id' }, child: { '.': {} } };
+  const ids = collectTreeIds(rootVal);
+  assert.deepEqual([...ids], ['root-id']);
 });
 
 // ── coerceSettingValue ───────────────────────────────────────────────────────
