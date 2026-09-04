@@ -440,6 +440,30 @@ extole components duplicate <component-id> --dry-run
 
 Passing `--target-campaign` duplicates just the one component and installs the copy into that existing campaign — the pattern for adding a copy of a field, rule, or action alongside what's already there. **Omitting `--target-campaign` duplicates the source component's entire owning campaign as a brand-new campaign** (`NOT_LAUNCHED`), not just the one component — this is the pattern for installing a reusable library integration as a fresh campaign. The CLI shows which of the two will happen and asks for confirmation before acting (skip with `-y`/`--yes`).
 
+**`--target-socket` is currently non-functional** (confirmed via platform source, not just symptoms) — the underlying endpoint needs a target component identifier this flag doesn't yet supply, so it always fails with `socket_not_found` regardless of where the socket actually lives. Use `components socket add` below instead — it targets a specific component directly and works reliably.
+
+### Installing a Component into a Socket
+
+`components socket add`/`remove` wraps the platform's purpose-built socket-installation endpoints — the reliable way to put a reward-supplier template (or anything else) into a `SOCKET`/`MULTI_SOCKET` setting on a specific component, superseding `components duplicate --target-socket` above.
+
+```
+extole components socket add <target-component-id> --setting rewardSuppliers --source <template-component-id>
+extole components socket add <target-component-id> --setting rewardSuppliers --source <template-component-id> --display-name "Gift Card"
+extole components socket remove <target-component-id> --setting rewardSuppliers --component <installed-component-id>
+```
+
+`add` duplicates `--source` and installs the duplicate into `--setting` on `<target-component-id>` — it doesn't reference or modify the source, so the same template can be installed into multiple integrations independently. `remove` deletes the installed duplicate outright, not just unlinks it — any local customization made on it after installing is lost. Use `components get <id> --tree` afterward to confirm the change; full-tree resolution shows socket-installed components in place.
+
+### Finding What References a Component
+
+`components references <id>` answers "what would break if I delete or rename this?" — it's the reverse lookup of `--sockets`. It shows every `COMPONENT_REFERENCE`/`COMPONENT_REFERENCE_LIST` setting across the account that already selects this component, or could.
+
+```
+extole components references <component-id>
+```
+
+Read-only, one GET, no request body.
+
 ### Deleting Components
 
 ```
