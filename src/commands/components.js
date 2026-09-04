@@ -619,6 +619,144 @@ export function componentsCommand() {
 
   components.addCommand(duplicateCmd);
 
+  // ── references ─────────────────────────────────────────────────────────────
+
+  const referencesCmd = new Command('references')
+    .description('Show every COMPONENT_REFERENCE/COMPONENT_REFERENCE_LIST setting across the account that already points at this component, or could — the reverse lookup of "what references this component". Useful before deleting or renaming a component.')
+    .argument('<component-id>', 'Component ID')
+    .action(async function (componentId) {
+      const opts = this.optsWithGlobals();
+      const token = resolveToken(opts);
+
+      const rows = await apiJson(`/v1/components/${componentId}/selectable-by-references`, token, { verbose: opts.verbose, baseUrl: API_BASE });
+      if (opts.json) { printJson(rows, opts); return; }
+
+      if (rows.length === 0) {
+        console.log('No references found — nothing else selects, or could select, this component.');
+        return;
+      }
+
+      const selected = rows.filter(r => r.selection === 'SELECTED');
+      const selectable = rows.filter(r => r.selection === 'SELECTABLE');
+
+      if (selected.length > 0) {
+        console.log('Currently selected by:');
+        for (const r of selected) {
+          const socket = r.socket_name ? `  socket=${r.socket_name}` : '';
+          console.log(`  ${r.campaign_name}  (${r.campaign_id})  ${r.component_name}  ${r.setting_name} [${r.setting_type}]${socket}  variant=${r.variant}`);
+        }
+      }
+
+      if (selectable.length > 0) {
+        console.log(selected.length > 0 ? '\nCould also be selected by:' : 'Could be selected by:');
+        for (const r of selectable) {
+          const socket = r.socket_name ? `  socket=${r.socket_name}` : '';
+          console.log(`  ${r.campaign_name}  (${r.campaign_id})  ${r.component_name}  ${r.setting_name} [${r.setting_type}]${socket}  variant=${r.variant}`);
+        }
+      }
+    });
+
+  addGlobalOptions(referencesCmd, {
+    output: true,
+    examples: [
+      'extole components references <component-id>',
+      'extole components references <component-id> --json',
+    ],
+  });
+
+  components.addCommand(referencesCmd);
+
+  // ── socket ─────────────────────────────────────────────────────────────────
+
+  const socketCmd = new Command('socket')
+    .description('Install or remove a component in a SOCKET/MULTI_SOCKET setting on another component');
+
+  const socketAddCmd = new Command('add')
+    .description('Duplicate --source and install the duplicate into --setting on <target-component-id>. Does not reference or modify the source.')
+    .argument('<target-component-id>', 'Component that owns the SOCKET/MULTI_SOCKET setting')
+    .requiredOption('--setting <name>', 'Name of the target SOCKET/MULTI_SOCKET setting')
+    .requiredOption('--source <component-id>', 'Component to duplicate and install')
+    .option('--display-name <name>', 'Display name for the installed duplicate (defaults to the source\'s)')
+    .action(async function (targetComponentId) {
+      const opts = this.optsWithGlobals();
+      const token = resolveToken(opts);
+
+      const target = await fetchComponent(targetComponentId, token, opts.verbose);
+      if (!target.campaign_id) { console.error('Error: could not resolve a campaign_id for the target component.'); process.exit(1); }
+
+      const body = { source_component_id: opts.source };
+      if (opts.displayName) body.component_display_name = opts.displayName;
+
+      const res = await apiFetch(`/v2/campaigns/${target.campaign_id}/components/${targetComponentId}/settings/${opts.setting}/add-component`, token, {
+        method: 'POST',
+        body: JSON.stringify(body),
+        verbose: opts.verbose,
+        baseUrl: API_BASE,
+      });
+      const text = await res.text();
+      if (!res.ok) { console.error(`Error ${res.status}: ${text.slice(0, 500)}`); process.exit(1); }
+
+      let installed;
+      try { installed = JSON.parse(text); } catch {
+        console.error(`Unexpected non-JSON response: ${text.slice(0, 200)}`);
+        process.exit(1);
+      }
+
+      if (opts.json) { printJson(installed, opts); return; }
+      console.log(`installed:  ${installed.id}  (${installed.display_name || installed.name})`);
+      console.log(`socket:     ${opts.setting}`);
+      console.log(`target:     ${targetComponentId}`);
+    });
+
+  addGlobalOptions(socketAddCmd, {
+    output: true,
+    examples: [
+      'extole components socket add <target-component-id> --setting rewardSuppliers --source <template-component-id>',
+      'extole components socket add <target-component-id> --setting rewardSuppliers --source <template-component-id> --display-name "Gift Card"',
+    ],
+  });
+
+  const socketRemoveCmd = new Command('remove')
+    .description('Remove an installed component from a SOCKET/MULTI_SOCKET setting. This deletes the installed duplicate outright, not just unlinks it — any local customization on it is lost.')
+    .argument('<target-component-id>', 'Component that owns the SOCKET/MULTI_SOCKET setting')
+    .requiredOption('--setting <name>', 'Name of the target SOCKET/MULTI_SOCKET setting')
+    .requiredOption('--component <id>', 'Installed component ID to remove (the duplicate created by `socket add`)')
+    .action(async function (targetComponentId) {
+      const opts = this.optsWithGlobals();
+      const token = resolveToken(opts);
+
+      const target = await fetchComponent(targetComponentId, token, opts.verbose);
+      if (!target.campaign_id) { console.error('Error: could not resolve a campaign_id for the target component.'); process.exit(1); }
+
+      const res = await apiFetch(`/v2/campaigns/${target.campaign_id}/components/${targetComponentId}/settings/${opts.setting}/remove-component/${opts.component}`, token, {
+        method: 'POST',
+        verbose: opts.verbose,
+        baseUrl: API_BASE,
+      });
+      const text = await res.text();
+      if (!res.ok) { console.error(`Error ${res.status}: ${text.slice(0, 500)}`); process.exit(1); }
+
+      let updated;
+      try { updated = JSON.parse(text); } catch {
+        console.error(`Unexpected non-JSON response: ${text.slice(0, 200)}`);
+        process.exit(1);
+      }
+
+      if (opts.json) { printJson(updated, opts); return; }
+      console.log(`removed:  ${opts.component}  from socket ${opts.setting} on ${targetComponentId}`);
+    });
+
+  addGlobalOptions(socketRemoveCmd, {
+    output: true,
+    examples: [
+      'extole components socket remove <target-component-id> --setting rewardSuppliers --component <installed-component-id>',
+    ],
+  });
+
+  socketCmd.addCommand(socketAddCmd);
+  socketCmd.addCommand(socketRemoveCmd);
+  components.addCommand(socketCmd);
+
   // ── delete ─────────────────────────────────────────────────────────────────
 
   const deleteCmd = new Command('delete')
