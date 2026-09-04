@@ -432,19 +432,19 @@ Mixing `--setting` and `--setting-file` in one call sends both in the same PUT, 
 Duplicate an existing component instead of authoring one from scratch. This one endpoint does two different things depending on `--target-campaign`:
 
 ```
-extole components duplicate <component-id> --target-campaign <campaign-id>                      # copy just this component into an existing campaign
-extole components duplicate <component-id> --target-campaign <campaign-id> --target-socket <name> # ...into a specific socket
-extole components duplicate <component-id> --display-name "My Integration Copy"                  # no --target-campaign: duplicates the ENTIRE owning campaign as a new one
+extole components duplicate <component-id> --target-campaign <campaign-id>                                                            # copy just this component into an existing campaign
+extole components duplicate <component-id> --target-campaign <campaign-id> --target-socket <name> --target-component <component-id>  # ...into a specific socket on a specific component
+extole components duplicate <component-id> --display-name "My Integration Copy"                                                       # no --target-campaign: duplicates the ENTIRE owning campaign as a new one
 extole components duplicate <component-id> --dry-run
 ```
 
 Passing `--target-campaign` duplicates just the one component and installs the copy into that existing campaign — the pattern for adding a copy of a field, rule, or action alongside what's already there. **Omitting `--target-campaign` duplicates the source component's entire owning campaign as a brand-new campaign** (`NOT_LAUNCHED`), not just the one component — this is the pattern for installing a reusable library integration as a fresh campaign. The CLI shows which of the two will happen and asks for confirmation before acting (skip with `-y`/`--yes`).
 
-**`--target-socket` is currently non-functional** (confirmed via platform source, not just symptoms) — the underlying endpoint needs a target component identifier this flag doesn't yet supply, so it always fails with `socket_not_found` regardless of where the socket actually lives. Use `components socket add` below instead — it targets a specific component directly and works reliably.
+`--target-socket` requires `--target-component`, the component in the target campaign that owns the socket — the platform's underlying lookup needs an absolute path to that component, not just the campaign, so the CLI resolves `--target-component`'s id to that path automatically.
 
 ### Installing a Component into a Socket
 
-`components socket add`/`remove` wraps the platform's purpose-built socket-installation endpoints — the reliable way to put a reward-supplier template (or anything else) into a `SOCKET`/`MULTI_SOCKET` setting on a specific component, superseding `components duplicate --target-socket` above.
+`components socket add`/`remove` wraps a separate, purpose-built socket-installation endpoint — an alternative to `components duplicate --target-socket` above that only needs the component that owns the socket, not the target campaign.
 
 ```
 extole components socket add <target-component-id> --setting rewardSuppliers --source <template-component-id>
