@@ -204,6 +204,32 @@ function markRequestedNode(rootVal, requestedId) {
   walkTreeNodes(rootVal, (node, dot) => { if (dot.id === requestedId) dot._requested = true; });
 }
 
+// `POST /v1/components/{id}/duplicate`'s target_setting_name only resolves against a socket on
+// the component named by target_component_absolute_name — a "/"-joined path of component names
+// from the campaign root down to the target, computed the same way pluribus's own
+// ComponentAbsoluteNameFinder does (walk up via component_references, skip the literal "root"
+// node, reverse, join with "/"). Without this, --target-socket silently searches an empty
+// candidate set and always 400s with socket_not_found, regardless of where the socket lives.
+async function computeAbsoluteName(componentId, token, verbose) {
+  const target = await fetchComponent(componentId, token, verbose);
+  if (!target.campaign_id) return null;
+
+  const siblings = await fetchAllComponents(token, { campaign_ids: target.campaign_id }, verbose);
+  const byId = new Map(siblings.map(c => [c.id, c]));
+
+  const names = [];
+  const visited = new Set();
+  let current = byId.get(componentId);
+  while (current && !visited.has(current.id)) {
+    visited.add(current.id);
+    if ((current.name || '').toLowerCase() !== 'root') names.push(current.name);
+    const parentRef = (current.component_references || []).find(ref => ref.component_id !== current.id && byId.has(ref.component_id));
+    current = parentRef ? byId.get(parentRef.component_id) : null;
+  }
+  names.reverse();
+  return '/' + names.join('/');
+}
+
 // Match if any entry in the types array contains the filter string (substring, case-insensitive).
 // This catches both exact types and parent types, so passing 'reward-supplier' matches
 // shopify-reward-supplier-v10.0 components that inherit from reward-supplier-v10.0.
@@ -545,7 +571,8 @@ export function componentsCommand() {
     .argument('<component-id>', 'Component ID to duplicate')
     .description('Duplicate a component. Omit --target-campaign to duplicate the entire campaign that owns the source component, as a brand-new campaign. Pass --target-campaign to instead duplicate just this one component into an existing campaign (optionally at a specific socket via --target-socket).')
     .option('--target-campaign <id>', 'Existing campaign ID to install the copy into. Omit to duplicate the source\'s entire owning campaign as a new campaign instead.')
-    .option('--target-socket <name>', 'With --target-campaign: socket name to install the copy into (e.g. an existing component\'s socket)')
+    .option('--target-socket <name>', 'With --target-campaign and --target-component: socket name to install the copy into')
+    .option('--target-component <id>', 'Component in the target campaign that owns --target-socket. Required together with --target-socket — the CLI resolves this to the absolute name the platform requires.')
     .option('--display-name <name>', 'Display name for the duplicated component')
     .option('--description <text>', 'Description for the duplicated component')
     .option('--tag <tag>', 'Tag on the duplicated component (repeatable)', (v, acc) => [...acc, v], [])
@@ -555,12 +582,25 @@ export function componentsCommand() {
       const opts = this.optsWithGlobals();
       const token = resolveToken(opts);
 
+      if (opts.targetSocket && !opts.targetComponent) {
+        console.error('Error: --target-socket requires --target-component (the component in the target campaign that owns the socket).');
+        process.exit(2);
+      }
+
       const source = await fetchComponent(componentId, token, opts.verbose);
       const sourceName = source.display_name || source.name || componentId;
 
       const payload = {};
       if (opts.targetCampaign) payload.target_campaign_id = opts.targetCampaign;
       if (opts.targetSocket) payload.target_setting_name = opts.targetSocket;
+      if (opts.targetComponent) {
+        const absoluteName = await computeAbsoluteName(opts.targetComponent, token, opts.verbose);
+        if (!absoluteName) {
+          console.error(`Error: could not resolve an absolute name for --target-component ${opts.targetComponent} — is it in the target campaign?`);
+          process.exit(1);
+        }
+        payload.target_component_absolute_name = absoluteName;
+      }
       if (opts.displayName) payload.component_display_name = opts.displayName;
       if (opts.description) payload.description = opts.description;
       if (opts.tag?.length) payload.tags = opts.tag;
@@ -568,7 +608,7 @@ export function componentsCommand() {
       console.log(`source:      ${componentId}  (${sourceName})`);
       console.log(`from campaign: ${source.campaign_id}`);
       if (opts.targetCampaign) {
-        console.log(`\nWill duplicate just this component into existing campaign ${opts.targetCampaign}${opts.targetSocket ? ` (socket: ${opts.targetSocket})` : ''}.`);
+        console.log(`\nWill duplicate just this component into existing campaign ${opts.targetCampaign}${opts.targetSocket ? ` (socket: ${opts.targetSocket} on ${payload.target_component_absolute_name})` : ''}.`);
       } else {
         console.log(`\nWarning: no --target-campaign given — this duplicates the ENTIRE campaign that owns this component (campaign ${source.campaign_id}) as a brand-new campaign, not just this one component.`);
       }
@@ -612,7 +652,7 @@ export function componentsCommand() {
     examples: [
       'extole components duplicate <component-id> --display-name "My Integration Copy"',
       'extole components duplicate <component-id> --target-campaign <campaign-id>',
-      'extole components duplicate <component-id> --target-campaign <campaign-id> --target-socket rewardSuppliers',
+      'extole components duplicate <component-id> --target-campaign <campaign-id> --target-socket rewardSuppliers --target-component <integration-component-id>',
       'extole components duplicate <component-id> --dry-run',
     ],
   });
