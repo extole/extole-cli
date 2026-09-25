@@ -11,7 +11,7 @@ async function fetchPrograms(token, verbose) {
 
 export function programsCommand() {
   const cmd = new Command('programs')
-    .description('List campaigns. Shows all types by default; filter with --type.')
+    .description('List campaigns. Shows LIVE only by default (add --all for NOT_LAUNCHED drafts too); shows all types by default, filter with --type.')
     .option('--all', 'Include NOT_LAUNCHED campaigns (default: LIVE only)')
     .option('--type <type>', 'Filter by campaign type (e.g. MARKETING, INTEGRATION, EXTENSION)')
     .action(async (opts) => {
