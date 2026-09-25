@@ -339,6 +339,71 @@ function publishCommand() {
   return cmd;
 }
 
+const VERSIONS_PAGE_SIZE = 100;
+
+async function fetchAllVersions(campaignId, token, verbose) {
+  const all = [];
+  let offset = 0;
+  for (;;) {
+    const versions = await apiJson(
+      `/v2/campaigns/${campaignId}/versions?limit=${VERSIONS_PAGE_SIZE}&offset=${offset}`,
+      token,
+      { verbose, baseUrl: API_BASE },
+    );
+    all.push(...versions);
+    if (versions.length < VERSIONS_PAGE_SIZE) break;
+    offset += VERSIONS_PAGE_SIZE;
+  }
+  return all;
+}
+
+function versionsCommand() {
+  const cmd = new Command('versions')
+    .description('Show a campaign\'s full version history')
+    .allowExcessArguments(false)
+    .argument('<campaign-id>', 'Campaign ID')
+    .action(async function (campaignId) {
+      const opts = this.optsWithGlobals();
+      const token = resolveToken(opts);
+
+      const versions = await fetchAllVersions(campaignId, token, opts.verbose);
+
+      if (opts.json) { printJson(versions, opts); return; }
+
+      if (versions.length === 0) { console.log('No versions found.'); return; }
+
+      const rows = versions.map(v => ({
+        version: (v.version || '').toString(),
+        parent: (v.parent_version || '').toString(),
+        created_date: v.created_date || '',
+        published_date: v.published_date || '',
+        editor: v.editor_type === 'USER' ? (v.user_id || '') : (v.editor_id || v.editor_type || ''),
+      }));
+
+      const widths = {
+        version: Math.max('version'.length, ...rows.map(r => r.version.length)) + 2,
+        parent: Math.max('parent'.length, ...rows.map(r => r.parent.length)) + 2,
+        created_date: Math.max('created_date'.length, ...rows.map(r => r.created_date.length)) + 2,
+        published_date: Math.max('published_date'.length, ...rows.map(r => r.published_date.length)) + 2,
+      };
+
+      console.log(`${'version'.padEnd(widths.version)}${'parent'.padEnd(widths.parent)}${'created_date'.padEnd(widths.created_date)}${'published_date'.padEnd(widths.published_date)}editor`);
+      for (const r of rows) {
+        console.log(`${r.version.padEnd(widths.version)}${r.parent.padEnd(widths.parent)}${r.created_date.padEnd(widths.created_date)}${r.published_date.padEnd(widths.published_date)}${r.editor}`);
+      }
+    });
+
+  addGlobalOptions(cmd, {
+    output: true,
+    examples: [
+      'extole campaigns versions <campaign-id>',
+      'extole campaigns versions <campaign-id> --json',
+    ],
+  });
+
+  return cmd;
+}
+
 export function campaignsCommand() {
   const cmd = new Command('campaigns')
     .description('Inspect per-campaign configuration (quality rules, MaxMind settings, reward rules)');
@@ -351,10 +416,13 @@ export function campaignsCommand() {
 
   const publish = publishCommand();
 
+  const versions = versionsCommand();
+
   cmd.addCommand(qualityRules);
   cmd.addCommand(maxmind);
   cmd.addCommand(rewardRules);
   cmd.addCommand(publish);
+  cmd.addCommand(versions);
 
   return cmd;
 }

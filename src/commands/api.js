@@ -2,6 +2,7 @@ import { Command } from 'commander';
 import { readFileSync, writeFileSync, existsSync, mkdirSync } from 'fs';
 import { homedir } from 'os';
 import { join } from 'path';
+import { spawnSync } from 'child_process';
 import { resolveToken, API_BASE, AUTH_BASE } from '../config.js';
 import { apiFetch } from '../api.js';
 import { printJson } from '../output.js';
@@ -37,6 +38,25 @@ async function loadSpec(name) {
   writeFileSync(metaPath, JSON.stringify({ fetched: Date.now() }));
 
   return JSON.parse(text);
+}
+
+function formatByteSize(byteLength) {
+  if (byteLength < 1024) return `${byteLength} B`;
+  if (byteLength < 1024 * 1024) return `${(byteLength / 1024).toFixed(1)} KB`;
+  return `${(byteLength / (1024 * 1024)).toFixed(1)} MB`;
+}
+
+function applyJqFilter(data, filter) {
+  const result = spawnSync('jq', [filter], { input: JSON.stringify(data), encoding: 'utf8' });
+  if (result.error?.code === 'ENOENT') {
+    console.error('Error: --jq requires the jq binary, which was not found on your PATH. Install it (e.g. brew install jq) or omit --jq and pipe the output to jq yourself.');
+    process.exit(1);
+  }
+  if (result.status !== 0) {
+    console.error(`Error: jq filter failed:\n${result.stderr}`);
+    process.exit(1);
+  }
+  return result.stdout.replace(/\n$/, '');
 }
 
 const STOP_WORDS = new Set(['a', 'an', 'the', 'to', 'for', 'in', 'of', 'by', 'with', 'and', 'or']);
@@ -163,6 +183,7 @@ export function apiCommand() {
     .option('--method <method>', 'HTTP method', 'GET')
     .option('--body <json>', 'Request body as JSON string (for POST/PUT/PATCH)')
     .option('--query <key=value>', 'Query parameter to append (repeatable, URL-encoded)', (value, previous) => previous.concat([value]), [])
+    .option('--jq <filter>', 'Pipe the response through a jq filter (requires jq on PATH)')
     .option('--auth-base', 'Use auth base URL (api.extole.com) instead of api.extole.io')
     .enablePositionalOptions()
     .action(async function (path) {
@@ -180,7 +201,12 @@ export function apiCommand() {
             console.error(`Error: --query "${entry}" is not in key=value form.`);
             process.exit(2);
           }
-          params.append(entry.slice(0, eq), entry.slice(eq + 1));
+          const key = entry.slice(0, eq);
+          if (key === 'jq') {
+            console.error('Error: --query jq=... is not a real server-side parameter; the server silently ignores it and returns the unfiltered response. Use --jq <filter> instead.');
+            process.exit(2);
+          }
+          params.append(key, entry.slice(eq + 1));
         }
         const sep = path.includes('?') ? '&' : '?';
         fullPath = `${path}${sep}${params}`;
@@ -191,6 +217,7 @@ export function apiCommand() {
 
       const res = await apiFetch(fullPath, token, fetchOpts);
       const text = await res.text();
+      process.stderr.write(`← ${formatByteSize(Buffer.byteLength(text, 'utf8'))}\n`);
 
       let parsed;
       try { parsed = JSON.parse(text); } catch { parsed = text; }
@@ -199,6 +226,8 @@ export function apiCommand() {
         console.error(`Error ${res.status}: ${typeof parsed === 'object' ? JSON.stringify(parsed, null, 2) : parsed}`);
         process.exit(1);
       }
+
+      if (opts.jq) { console.log(applyJqFilter(parsed, opts.jq)); return; }
 
       printJson(parsed, opts);
     });
@@ -211,6 +240,7 @@ export function apiCommand() {
       'extole api /v2/campaigns/123/publish --method POST --body \'{}\'',
       'extole api /v1/components --query limit=500 --query offset=500',
       'extole api /v4/tokens --auth-base',
+      'extole api /v1/components/123 --jq .variables[0].name',
     ],
   });
 
