@@ -182,6 +182,25 @@ async function augmentTreeWithFullResources(rootVal, token, verbose) {
   }));
 }
 
+// `/v1/components/{id}/tree` has no built/resolved variant and takes no query parameters, so
+// getting buildtime-resolved variables into a tree means fetching each real node's own
+// `/built` representation individually and splicing its variables back in. Webhooks and event
+// streams are skipped: they're synthetic nodes injected by augmentTreeWithFullResources and
+// already came from /built sources (/v6/webhooks/built, /v6/event-streams/built).
+async function resolveTreeToBuilt(rootVal, token, verbose) {
+  const dots = [];
+  walkTreeNodes(rootVal, (node, dot) => {
+    if (dot.resource_kind === 'webhook' || dot.resource_kind === 'event-stream') return;
+    if (dot.id) dots.push(dot);
+  });
+
+  await Promise.all(dots.map(async (dot) => {
+    let built;
+    try { built = await fetchBuiltComponent(dot.id, token, verbose); } catch { return; }
+    dot.variables = built.variables;
+  }));
+}
+
 // A non-root component's own component_references points to its local parent (not the reverse),
 // so the campaign's true root is the only campaign-local component whose references don't target
 // another local sibling — same mechanism used to detect a bundle's root before an upload-bundle
@@ -271,12 +290,16 @@ export function componentsCommand() {
     .description('Browse and inspect Extole components')
     .option('--program <id>', 'Filter by program (campaign) ID')
     .option('--filter-type <type>', 'Filter by component type (matches parent types and subtypes)')
+    .option('--having-any-types <types>', 'Server-side filter by exact type(s), comma-separated (e.g. reward-supplier-v10.0,reward-supplier-v10.1)')
+    .option('--state <state>', 'Filter by owning campaign state (e.g. LIVE, NOT_LAUNCHED)')
     .option('--filter <substr>', 'Filter by name substring (case-insensitive)')
     .enablePositionalOptions()
     .action(async (opts) => {
       const token = resolveToken(opts);
       const params = {};
       if (opts.program) params.campaign_ids = opts.program;
+      if (opts.havingAnyTypes) params.having_any_types = opts.havingAnyTypes;
+      if (opts.state) params.state = opts.state;
 
       let list = await fetchAllComponents(token, params, opts.verbose);
 
@@ -305,8 +328,42 @@ export function componentsCommand() {
       'extole components --program <program-id>',
       'extole components --filter-type reward-supplier',
       'extole components --filter "gift card"',
+      'extole components --having-any-types reward-supplier-v10.0 --state LIVE',
     ],
   });
+
+  // ── settings ───────────────────────────────────────────────────────────────
+
+  const settingsCmd = new Command('settings')
+    .description('Show a component\'s settings alone, without the rest of its configuration')
+    .argument('<component-id>', 'Component ID')
+    .option('--built', 'Show resolved buildtime values instead of raw javascript@buildtime:... expressions')
+    .action(async function (componentId) {
+      const opts = this.optsWithGlobals();
+      const token = resolveToken(opts);
+
+      const path = opts.built ? `/v1/components/${componentId}/settings/built` : `/v1/components/${componentId}/settings`;
+      const variables = await apiJson(path, token, { verbose: opts.verbose, baseUrl: API_BASE });
+
+      if (opts.json) { printJson(variables, opts); return; }
+
+      if (variables.length === 0) { console.log('No settings found.'); return; }
+
+      for (const v of variables) {
+        console.log(`${v.name}  (${v.type})`);
+        console.log(`  ${JSON.stringify(v.values?.default)}`);
+      }
+    });
+
+  addGlobalOptions(settingsCmd, {
+    output: true,
+    examples: [
+      'extole components settings <component-id>',
+      'extole components settings <component-id> --built',
+    ],
+  });
+
+  components.addCommand(settingsCmd);
 
   // ── get ────────────────────────────────────────────────────────────────────
 
@@ -326,6 +383,7 @@ export function componentsCommand() {
         const tree = await fetchComponentTree(rootId, token, opts.verbose);
         const rootVal = Object.values(tree)[0] || {};
         if (!opts.basic) await augmentTreeWithFullResources(rootVal, token, opts.verbose);
+        if (opts.built) await resolveTreeToBuilt(rootVal, token, opts.verbose);
         markRequestedNode(rootVal, componentId);
         if (opts.json) { printJson(tree, opts); return; }
         const dot = rootVal['.'] || {};
@@ -793,8 +851,33 @@ export function componentsCommand() {
     ],
   });
 
+  const socketListCmd = new Command('list')
+    .description('List components currently installed in a SOCKET/MULTI_SOCKET setting')
+    .argument('<target-component-id>', 'Component that owns the SOCKET/MULTI_SOCKET setting')
+    .requiredOption('--setting <name>', 'Name of the target SOCKET/MULTI_SOCKET setting')
+    .action(async function (targetComponentId) {
+      const opts = this.optsWithGlobals();
+      const token = resolveToken(opts);
+
+      const installed = await apiJson(`/v1/components/${targetComponentId}/settings/${opts.setting}/installed-components`, token, { verbose: opts.verbose, baseUrl: API_BASE });
+
+      if (opts.json) { printJson(installed, opts); return; }
+
+      if (installed.length === 0) { console.log('No components installed in this socket.'); return; }
+
+      for (const c of installed) formatRow(c);
+    });
+
+  addGlobalOptions(socketListCmd, {
+    output: true,
+    examples: [
+      'extole components socket list <target-component-id> --setting rewardSuppliers',
+    ],
+  });
+
   socketCmd.addCommand(socketAddCmd);
   socketCmd.addCommand(socketRemoveCmd);
+  socketCmd.addCommand(socketListCmd);
   components.addCommand(socketCmd);
 
   // ── delete ─────────────────────────────────────────────────────────────────
