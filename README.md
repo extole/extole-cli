@@ -286,6 +286,9 @@ extole campaigns reward-rules <campaign-id> --json                 # raw RewardR
 extole campaigns publish <campaign-id>                             # validate, build, and publish
 extole campaigns publish <campaign-id> --launch                    # publish and take live immediately
 extole campaigns publish <campaign-id> --message "wired new reward webhook"
+
+extole campaigns versions <campaign-id>                            # full version history, newest first
+extole campaigns versions <campaign-id> --json                     # raw version array
 ```
 
 ### Quality Rules
@@ -299,6 +302,10 @@ extole campaigns publish <campaign-id> --message "wired new reward webhook"
 ### Publish
 
 `publish` calls `POST /v2/campaigns/{id}/publish` — the same endpoint `components deploy --publish` uses under the hood — so that taking a config change live doesn't require dropping to `extole api`. Add `--launch` to also set the start date to now in the same call, and `--message` to attach a changelog note to the publish.
+
+### Versions
+
+`versions` calls `GET /v2/campaigns/{id}/versions` and auto-paginates in steps of 100 (the endpoint's own default page size) so a campaign with hundreds of versions comes back in full, instead of silently truncating at the first page. Each row shows the version number, its parent version, created/published timestamps, and the editor (a user id, or the automated actor for system-initiated versions).
 
 ## Audiences
 
@@ -331,19 +338,26 @@ extole components                                  # all components, account-wid
 extole components --program <id>                   # scoped to one program
 extole components --filter-type reward-supplier    # filter by type (matches subtypes too)
 extole components --filter "gift card"             # filter by name substring
+extole components --having-any-types reward-supplier-v10.0 --state LIVE  # server-side exact-type + campaign-state filter
 
 extole components get <component-id>               # full config + variables
 extole components get <component-id> --tree        # full real structure, from the campaign's true root
 extole components get <component-id> --tree --basic # ownership subtree only, skips the extra resolution calls
 extole components get <component-id> --sockets     # socket references to other components
 extole components get <component-id> --built       # resolved buildtime values, not raw expressions
+extole components get <component-id> --tree --built # full tree with every node's values resolved
+
+extole components settings <component-id>          # just the settings, without the rest of the config
+extole components settings <component-id> --built  # resolved buildtime values
 
 extole components types                            # all concrete types in this account
 extole components types --parent rule              # subtypes of a given parent type
 extole components types --parent rule --tree       # rendered as a hierarchy
 ```
 
-`--filter-type` does substring matching against the full type hierarchy (`--filter-type reward` matches `reward-v10.0`, `reward-rule-v10.0`, etc.). `--tree` on `get` renders the full downstream subgraph like `tree`/`npm ls` — box-drawing connectors, each node's type, and the socket it's installed into (e.g. `[rewardRules]`), which is often the fastest way to understand how a campaign is actually wired together. It walks up to the campaign's true root first, regardless of which component id in the tree you passed, so it always shows the complete structure — the id you asked for is marked `← requested` so you don't lose track of it. It also resolves and attaches webhooks, event streams, and cross-campaign socket subscriptions — these are modeled as independent resources that point *at* a component rather than being owned children, so a plain ownership walk would otherwise miss them; add `--basic` to skip that extra resolution on accounts with a lot of webhooks/event-streams where the added latency isn't worth it. `--built` calls `GET /v1/components/{id}/built` so that variables backed by `javascript@buildtime:...` expressions (e.g. a webhook ID discovered by tag) show their resolved value instead of the raw expression — the same pattern `webhooks get --built` uses.
+`--filter-type` does substring matching against the full type hierarchy (`--filter-type reward` matches `reward-v10.0`, `reward-rule-v10.0`, etc.), evaluated client-side. `--having-any-types` is the server-side equivalent for exact type matches (comma-separated for more than one), and `--state` filters by the owning campaign's state (`LIVE`, `NOT_LAUNCHED`) — added since combining type and state filtering previously meant hand-rolling an `extole api` call. `--tree` on `get` renders the full downstream subgraph like `tree`/`npm ls` — box-drawing connectors, each node's type, and the socket it's installed into (e.g. `[rewardRules]`), which is often the fastest way to understand how a campaign is actually wired together. It walks up to the campaign's true root first, regardless of which component id in the tree you passed, so it always shows the complete structure — the id you asked for is marked `← requested` so you don't lose track of it. It also resolves and attaches webhooks, event streams, and cross-campaign socket subscriptions — these are modeled as independent resources that point *at* a component rather than being owned children, so a plain ownership walk would otherwise miss them; add `--basic` to skip that extra resolution on accounts with a lot of webhooks/event-streams where the added latency isn't worth it. `--built` calls `GET /v1/components/{id}/built` so that variables backed by `javascript@buildtime:...` expressions (e.g. a webhook ID discovered by tag) show their resolved value instead of the raw expression — the same pattern `webhooks get --built` uses. Combined with `--tree`, `--built` resolves every real node in the tree the same way — added since the tree endpoint itself has no built/resolved variant, so each node's own `/built` representation is fetched in parallel and spliced back in (synthetic webhook/event-stream nodes are skipped since they already come from already-built sources).
+
+`components settings` calls `GET /v1/components/{id}/settings[/built]` — a narrower, lighter-weight sibling to `components get` for callers that only need the variables array (e.g. reading integration config at runtime), without the rest of the component object.
 
 ### Creating Integration Components
 
@@ -450,9 +464,10 @@ Passing `--target-campaign` duplicates just the one component and installs the c
 extole components socket add <target-component-id> --setting rewardSuppliers --source <template-component-id>
 extole components socket add <target-component-id> --setting rewardSuppliers --source <template-component-id> --display-name "Gift Card"
 extole components socket remove <target-component-id> --setting rewardSuppliers --component <installed-component-id>
+extole components socket list <target-component-id> --setting rewardSuppliers
 ```
 
-`add` duplicates `--source` and installs the duplicate into `--setting` on `<target-component-id>` — it doesn't reference or modify the source, so the same template can be installed into multiple integrations independently. `remove` deletes the installed duplicate outright, not just unlinks it — any local customization made on it after installing is lost. Use `components get <id> --tree` afterward to confirm the change; full-tree resolution shows socket-installed components in place.
+`add` duplicates `--source` and installs the duplicate into `--setting` on `<target-component-id>` — it doesn't reference or modify the source, so the same template can be installed into multiple integrations independently. `remove` deletes the installed duplicate outright, not just unlinks it — any local customization made on it after installing is lost. `list` shows what's currently installed, added so checking a socket's contents doesn't require dropping to `extole api /v1/components/{id}/settings/{name}/installed-components` directly. Use `components get <id> --tree` afterward to confirm the change; full-tree resolution shows socket-installed components in place.
 
 ### Finding What References a Component
 
@@ -838,9 +853,14 @@ extole api /v6/webhooks/built
 extole api /v2/campaigns/123/publish --method POST --body '{}'
 extole api /v1/components --query limit=500 --query offset=500
 extole api /v4/tokens --auth-base
+extole api /v1/components/123 --jq '.variables[0].name'
 ```
 
 GET by default. `--method` to override, `--body` for POST/PUT/PATCH, `--auth-base` for the auth API (`api.extole.com`). `--query key=value` (repeatable) URL-encodes and appends query parameters, so a query value with characters a shell would otherwise mangle doesn't have to be hand-embedded in the path string. Output is JSON-formatted and supports `--compact`.
+
+Added `--jq <filter>` to project or trim large responses without piping to a separate process — it shells out to `jq` on your `PATH` (install it if missing; the error message says how) and prints its output directly, so any jq filter you'd normally run against the raw JSON works unchanged. `--query jq=...` is rejected with a pointer to `--jq` instead of being silently forwarded — no endpoint actually supports `jq` as a server-side query parameter, so that form previously just returned the full unfiltered payload with no warning.
+
+Every call also prints the response size to stderr (e.g. `← 24.5 MB`), added so an unexpectedly large payload — the kind that chokes a naive parser or an external tool's own size cap — is visible at a glance instead of requiring a manual `| wc -c` to notice. It's on stderr so it never mixes into piped stdout output; redirect it away (`2>/dev/null`) if it's not wanted.
 
 ## Output Conventions
 
