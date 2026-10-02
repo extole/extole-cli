@@ -299,6 +299,7 @@ export function reportsCommand() {
         if (description) console.log(description);
       }
       console.log(`executor: ${data.executor_type}   formats: ${(data.formats || []).join(', ')}`);
+      if (data.data_sources?.length) console.log(`data_sources: ${data.data_sources.join(', ')}`);
       console.log();
 
       if (!data.parameters?.length) {
