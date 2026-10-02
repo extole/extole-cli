@@ -11,16 +11,27 @@ async function fetchPrograms(token, verbose) {
 
 export function programsCommand() {
   const cmd = new Command('programs')
-    .description('List campaigns. Shows LIVE only by default (add --all for NOT_LAUNCHED drafts too); shows all types by default, filter with --type.')
+    .description('List campaigns. Shows LIVE only by default (add --all for NOT_LAUNCHED drafts too, or --state for an exact set including ARCHIVED); shows all types by default, filter with --type.')
     .option('--all', 'Include NOT_LAUNCHED campaigns (default: LIVE only)')
+    .option('--state <state>', 'Filter to an exact set of states (repeatable, e.g. --state LIVE --state ARCHIVED). Overrides --all and the default ARCHIVED exclusion.', (value, previous) => previous.concat([value.toUpperCase()]), [])
     .option('--type <type>', 'Filter by campaign type (e.g. MARKETING, INTEGRATION, EXTENSION)')
     .action(async (opts) => {
+      if (opts.all && opts.state.length > 0) {
+        console.error('Error: --all and --state are mutually exclusive — --state already controls which states are included.');
+        process.exit(2);
+      }
+
       const token = resolveToken(opts);
       const raw = await fetchPrograms(token, opts.verbose);
       const list = Array.isArray(raw) ? raw : (raw?.campaigns || []);
 
-      let rows = list.filter(c => c.state !== 'ARCHIVED');
-      if (!opts.all) rows = rows.filter(c => c.state === 'LIVE');
+      let rows;
+      if (opts.state.length > 0) {
+        rows = list.filter(c => opts.state.includes(c.state));
+      } else {
+        rows = list.filter(c => c.state !== 'ARCHIVED');
+        if (!opts.all) rows = rows.filter(c => c.state === 'LIVE');
+      }
       if (opts.type) rows = rows.filter(c => (c.campaign_type || '').toUpperCase() === opts.type.toUpperCase());
 
       rows.sort((a, b) => {
@@ -78,6 +89,8 @@ export function programsCommand() {
       'extole programs --all',
       'extole programs --type integration',
       'extole programs --type marketing --all',
+      'extole programs --state PAUSED --state STOPPED',
+      'extole programs --state ARCHIVED',
       'extole programs --json',
     ],
   });

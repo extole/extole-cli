@@ -249,6 +249,37 @@ async function computeAbsoluteName(componentId, token, verbose) {
   return '/' + names.join('/');
 }
 
+// A `campaign_name_already_used` 403 can be a false negative: the name-uniqueness check can race
+// the campaign creation it's guarding, so the campaign this exact call attempted to create may
+// have actually been created despite the error. This can't be confirmed with certainty (a
+// same-named campaign may simply have pre-existed), so it only adds a diagnostic note, never
+// silently converts the failure into a success.
+const RECENTLY_CREATED_WINDOW_MS = 5 * 60 * 1000;
+
+async function warnIfCampaignLikelyCreatedDespiteError(attemptedName, token, verbose) {
+  let campaigns;
+  try {
+    const raw = await apiJson('/v2/campaign-summaries', token, { verbose, baseUrl: API_BASE });
+    campaigns = Array.isArray(raw) ? raw : (raw?.campaigns || []);
+  } catch {
+    return;
+  }
+
+  const now = Date.now();
+  const matches = campaigns.filter(c =>
+    c.name === attemptedName &&
+    c.updated_date &&
+    (now - new Date(c.updated_date).getTime()) < RECENTLY_CREATED_WINDOW_MS);
+
+  if (matches.length === 0) return;
+
+  console.error('\nNote: a campaign named exactly this was updated in the last 5 minutes — this error can be a known race condition (the name-uniqueness check racing the actual creation), in which case the campaign below was created despite the error:');
+  for (const c of matches) {
+    console.error(`  ${c.campaign_id}  ${c.state}  updated ${c.updated_date}`);
+  }
+  console.error('Check with `extole api /v2/campaigns/<campaign-id>` before retrying, to avoid creating a duplicate.');
+}
+
 // Match if any entry in the types array contains the filter string (substring, case-insensitive).
 // This catches both exact types and parent types, so passing 'reward-supplier' matches
 // shopify-reward-supplier-v10.0 components that inherit from reward-supplier-v10.0.
@@ -720,38 +751,98 @@ export function componentsCommand() {
   // ── references ─────────────────────────────────────────────────────────────
 
   const referencesCmd = new Command('references')
-    .description('Show every COMPONENT_REFERENCE/COMPONENT_REFERENCE_LIST setting across the account that already points at this component, or could — the reverse lookup of "what references this component". Useful before deleting or renaming a component.')
-    .argument('<component-id>', 'Component ID')
+    .description('Without --setting: show every COMPONENT_REFERENCE/COMPONENT_REFERENCE_LIST setting across the account that already points at this component, or could — the reverse lookup of "what references this component". Useful before deleting or renaming a component. With --setting: manage one COMPONENT_REFERENCE(_LIST) setting owned by this component.')
+    .argument('<component-id>', 'Component ID — the reference target (no --setting), or the component that owns --setting')
+    .option('--setting <name>', 'Manage this COMPONENT_REFERENCE/COMPONENT_REFERENCE_LIST setting on <component-id>, instead of the reverse lookup')
+    .option('--select <component-id>', 'Select this component for --setting (repeatable for COMPONENT_REFERENCE_LIST settings — replaces the full selected set)', (value, previous) => previous.concat([value]), [])
+    .option('--unselect <component-id>', 'Unselect this component for --setting (repeatable for COMPONENT_REFERENCE_LIST settings)', (value, previous) => previous.concat([value]), [])
+    .option('--list-selectable', 'List components eligible for selection on --setting')
+    .option('--list-selected', 'List components currently selected for --setting')
+    .option('--variant <name>', 'Setting value variant to act on (default: "default")')
     .action(async function (componentId) {
       const opts = this.optsWithGlobals();
       const token = resolveToken(opts);
 
-      const rows = await apiJson(`/v1/components/${componentId}/selectable-by-references`, token, { verbose: opts.verbose, baseUrl: API_BASE });
-      if (opts.json) { printJson(rows, opts); return; }
+      if (!opts.setting) {
+        const rows = await apiJson(`/v1/components/${componentId}/selectable-by-references`, token, { verbose: opts.verbose, baseUrl: API_BASE });
+        if (opts.json) { printJson(rows, opts); return; }
 
-      if (rows.length === 0) {
-        console.log('No references found — nothing else selects, or could select, this component.');
+        if (rows.length === 0) {
+          console.log('No references found — nothing else selects, or could select, this component.');
+          return;
+        }
+
+        const selected = rows.filter(r => r.selection === 'SELECTED');
+        const selectable = rows.filter(r => r.selection === 'SELECTABLE');
+
+        if (selected.length > 0) {
+          console.log('Currently selected by:');
+          for (const r of selected) {
+            const socket = r.socket_name ? `  socket=${r.socket_name}` : '';
+            console.log(`  ${r.campaign_name}  (${r.campaign_id})  ${r.component_name}  ${r.setting_name} [${r.setting_type}]${socket}  variant=${r.variant}`);
+          }
+        }
+
+        if (selectable.length > 0) {
+          console.log(selected.length > 0 ? '\nCould also be selected by:' : 'Could be selected by:');
+          for (const r of selectable) {
+            const socket = r.socket_name ? `  socket=${r.socket_name}` : '';
+            console.log(`  ${r.campaign_name}  (${r.campaign_id})  ${r.component_name}  ${r.setting_name} [${r.setting_type}]${socket}  variant=${r.variant}`);
+          }
+        }
         return;
       }
 
-      const selected = rows.filter(r => r.selection === 'SELECTED');
-      const selectable = rows.filter(r => r.selection === 'SELECTABLE');
-
-      if (selected.length > 0) {
-        console.log('Currently selected by:');
-        for (const r of selected) {
-          const socket = r.socket_name ? `  socket=${r.socket_name}` : '';
-          console.log(`  ${r.campaign_name}  (${r.campaign_id})  ${r.component_name}  ${r.setting_name} [${r.setting_type}]${socket}  variant=${r.variant}`);
-        }
+      const modesRequested = [opts.select.length > 0, opts.unselect.length > 0, opts.listSelectable, opts.listSelected].filter(Boolean).length;
+      if (modesRequested !== 1) {
+        console.error('Error: with --setting, pass exactly one of --select, --unselect, --list-selectable, --list-selected.');
+        process.exit(2);
       }
 
-      if (selectable.length > 0) {
-        console.log(selected.length > 0 ? '\nCould also be selected by:' : 'Could be selected by:');
-        for (const r of selectable) {
-          const socket = r.socket_name ? `  socket=${r.socket_name}` : '';
-          console.log(`  ${r.campaign_name}  (${r.campaign_id})  ${r.component_name}  ${r.setting_name} [${r.setting_type}]${socket}  variant=${r.variant}`);
-        }
+      const component = await fetchComponent(componentId, token, opts.verbose);
+      const variable = (component.variables || []).find(v => v.name === opts.setting);
+      if (!variable) {
+        console.error(`Error: no setting named "${opts.setting}" on this component.`);
+        process.exit(1);
       }
+      if (variable.type !== 'COMPONENT_REFERENCE' && variable.type !== 'COMPONENT_REFERENCE_LIST') {
+        console.error(`Error: setting "${opts.setting}" is type ${variable.type}, not COMPONENT_REFERENCE or COMPONENT_REFERENCE_LIST.`);
+        process.exit(1);
+      }
+      const isList = variable.type === 'COMPONENT_REFERENCE_LIST';
+      const basePath = isList ? 'component-reference-list' : 'component-reference';
+      const query = opts.variant ? `?variant=${encodeURIComponent(opts.variant)}` : '';
+
+      if (opts.listSelectable || opts.listSelected) {
+        const endpoint = opts.listSelectable ? 'selectable-components' : 'selected-components';
+        const rows = await apiJson(`/v1/components/${componentId}/settings/${basePath}/${opts.setting}/${endpoint}${query}`, token, { verbose: opts.verbose, baseUrl: API_BASE });
+        if (opts.json) { printJson(rows, opts); return; }
+        if (rows.length === 0) { console.log(opts.listSelectable ? 'No selectable components.' : 'Nothing selected.'); return; }
+        for (const c of rows) formatRow(c);
+        return;
+      }
+
+      const action = opts.select.length > 0 ? 'select' : 'unselect';
+      const ids = opts.select.length > 0 ? opts.select : opts.unselect;
+      if (!isList && ids.length > 1) {
+        console.error(`Error: "${opts.setting}" is a single-valued COMPONENT_REFERENCE setting — pass exactly one --${action} value.`);
+        process.exit(2);
+      }
+
+      const body = isList
+        ? { component_ids: ids, ...(opts.variant ? { variant: opts.variant } : {}) }
+        : { component_id: ids[0], ...(opts.variant ? { variant: opts.variant } : {}) };
+
+      const result = await apiJson(`/v1/components/${componentId}/settings/${basePath}/${opts.setting}/${action}`, token, {
+        method: 'POST',
+        body: JSON.stringify(body),
+        verbose: opts.verbose,
+        baseUrl: API_BASE,
+      });
+
+      if (opts.json) { printJson(result, opts); return; }
+      console.log(`${action === 'select' ? 'Selected' : 'Unselected'} on "${opts.setting}":`);
+      console.log(JSON.stringify(result.values, null, 2));
     });
 
   addGlobalOptions(referencesCmd, {
@@ -759,6 +850,10 @@ export function componentsCommand() {
     examples: [
       'extole components references <component-id>',
       'extole components references <component-id> --json',
+      'extole components references <component-id> --setting rewardSupplier --list-selectable',
+      'extole components references <component-id> --setting rewardSupplier --list-selected',
+      'extole components references <component-id> --setting rewardSupplier --select <target-id>',
+      'extole components references <component-id> --setting rewardSupplier --unselect <target-id>',
     ],
   });
 
@@ -1012,6 +1107,10 @@ export function componentsCommand() {
             console.error(`Error ${res.status}: ${errJson?.code || res.status}`);
             console.error(detail);
             if (opts.verbose) console.error(JSON.stringify(errJson, null, 2));
+
+            if (!isUpdate && errJson?.code === 'campaign_name_already_used' && params.name) {
+              await warnIfCampaignLikelyCreatedDespiteError(params.name, token, opts.verbose);
+            }
           } catch {
             console.error(`Error ${res.status}: ${text.slice(0, 2000)}`);
           }

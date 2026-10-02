@@ -262,10 +262,14 @@ The list uses the `/built` endpoint so component-bundle suppliers display their 
 ## Programs
 
 ```
-extole programs           # list LIVE programs and campaigns
-extole programs --all     # include PAUSED, STOPPED, NOT_LAUNCHED
+extole programs                              # list LIVE programs and campaigns
+extole programs --all                        # include PAUSED, STOPPED, NOT_LAUNCHED
+extole programs --state PAUSED --state STOPPED  # an exact set of states, repeatable
+extole programs --state ARCHIVED             # ARCHIVED is excluded unless explicitly requested
 extole programs --json
 ```
+
+`--state` filters to exactly the states you name (case-insensitive) and overrides both `--all` and the default `ARCHIVED` exclusion — it's the only way to see archived campaigns, since every other call excludes them unconditionally. `--all`/`--state` are mutually exclusive.
 
 ## Campaigns
 
@@ -420,6 +424,8 @@ extole components deploy --source ./my_integration --verbose
 
 Running `deploy` without `--component` always creates a new campaign. Pass `--component` with the ID from the first deploy to update in place. Settings values can reference external files using `%{/path/to/file.js}%` — the CLI inlines the file content before uploading.
 
+On a `campaign_name_already_used` error when creating a new campaign, the server's name-uniqueness check can race the campaign creation it's guarding — so the campaign this exact call attempted to create may have actually been created despite the error. `deploy` checks for a campaign with the exact attempted name updated in the last 5 minutes and, if found, prints its id alongside the error as a note to check before retrying — it never silently converts the failure into a success, since a same-named campaign may simply have pre-existed.
+
 ### Patching Component Settings
 
 Update one or more settings on an already-deployed component without redeploying the bundle. Settings are integration-specific — the names and valid values depend on the component type (e.g. a webhook integration might have `webhookUrl` and `authHeader`; a CRM connector might have `instanceUrl` and `objectType`).
@@ -478,6 +484,17 @@ extole components references <component-id>
 ```
 
 Read-only, one GET, no request body.
+
+Pass `--setting <name>` to manage one `COMPONENT_REFERENCE`(`_LIST`) setting owned by `<component-id>` directly, instead of the reverse lookup — a more direct path than hand-constructing the `{"component.id": ...}` map shape via `components set`:
+
+```
+extole components references <component-id> --setting rewardSupplier --list-selectable
+extole components references <component-id> --setting rewardSupplier --list-selected
+extole components references <component-id> --setting rewardSupplier --select <target-id>
+extole components references <component-id> --setting rewardSupplier --unselect <target-id>
+```
+
+The CLI reads the setting's declared type off the component itself and picks the right endpoint family automatically (`COMPONENT_REFERENCE` vs. `COMPONENT_REFERENCE_LIST`) — you don't need to know which one it is. `--select`/`--unselect` are repeatable, but only meaningful for `COMPONENT_REFERENCE_LIST` settings; a single-valued `COMPONENT_REFERENCE` setting accepts exactly one. **For `COMPONENT_REFERENCE_LIST`, `--select` replaces the complete selected set** (the server-side contract is "send everything that should end up selected," not "add this one") — pass every id that should remain selected, not just the new one. Add `--variant <name>` to act on a setting value variant other than `default`.
 
 ### Deleting Components
 
