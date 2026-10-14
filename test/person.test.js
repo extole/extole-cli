@@ -1,6 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { VALID_REWARD_STATES } from '../src/commands/rewards.js';
+import { getPersonStats } from '../src/person-api.js';
 
 test('VALID_REWARD_STATES includes expected states', () => {
   for (const state of ['EARNED', 'FULFILLED', 'SENT', 'REDEEMED', 'CANCELED', 'FAILED', 'REVOKED', 'EXPIRED']) {
@@ -12,4 +13,22 @@ test('VALID_REWARD_STATES rejects unknown status', () => {
   assert.equal(VALID_REWARD_STATES.has('BOGUS'), false);
   assert.equal(VALID_REWARD_STATES.has(''), false);
   assert.equal(VALID_REWARD_STATES.has('earned'), false); // case-sensitive
+});
+
+test('getPersonStats reads personal and network stats from the v5 person routes', async () => {
+  const requestedUrls = [];
+  const originalFetch = globalThis.fetch;
+  globalThis.fetch = async (url) => {
+    requestedUrls.push(String(url));
+    return { ok: true, status: 200, text: async () => '{"aov":"0.00"}' };
+  };
+  try {
+    await getPersonStats('123', 'tok');
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+  assert.deepEqual(requestedUrls.map((url) => new URL(url).pathname).sort(), [
+    '/v5/persons/123/network-stats',
+    '/v5/persons/123/stats',
+  ]);
 });
