@@ -33,8 +33,8 @@ export async function getPersonRelationships(personId, token, verbose = false) {
 
 export async function getPersonStats(personId, token, verbose = false) {
   const [stats, networkStats] = await Promise.all([
-    apiJson(`/v4/persons/${personId}/stats`, token, { verbose, baseUrl: API_BASE }),
-    apiJson(`/v4/persons/${personId}/network-stats`, token, { verbose, baseUrl: API_BASE }),
+    apiJson(`/v5/persons/${personId}/stats`, token, { verbose, baseUrl: API_BASE }),
+    apiJson(`/v5/persons/${personId}/network-stats`, token, { verbose, baseUrl: API_BASE }),
   ]);
   return { stats, networkStats };
 }
