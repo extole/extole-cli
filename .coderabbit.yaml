@@ -1,0 +1,17 @@
+reviews:
+  auto_review:
+    enabled: true
+  path_instructions:
+    - path: "**/*.js"
+      instructions: |
+        Apply the conventions in AGENTS.md: descriptive full-word names (no abbreviations, not even
+        for widely-used framework conventions), no comments in source files, smallest implementation
+        that satisfies the requirement, type coercion validated at system boundaries.
+
+        Flag a parent Commander command that declares an option sharing a name with one of its
+        subcommand's own options — the parent's definition silently consumes the value before the
+        subcommand sees it, unless the parent calls enablePositionalOptions().
+    - path: "test/**/*.js"
+      instructions: |
+        This codebase only unit-tests pure functions; commands that make network calls are verified
+        live instead, not mocked. Do not request mock-based tests for network-touching code.
