@@ -1,33 +1,64 @@
 import { Command } from 'commander';
 import { resolveToken } from '../config.js';
-import { addGlobalOptions, fetchWithTimeout } from '../utils.js';
+import { apiJson } from '../api.js';
+import { addGlobalOptions, sleep } from '../utils.js';
 
 const AGENT_URL = 'https://agent.extole.com';
 const AGENT_NAME = 'extole_assistant_cli';
 const APP_TYPE = 'extole-cli';
 
-export async function sendToAgent(prompt, token) {
-  let response;
-  try {
-    response = await fetchWithTimeout(`${AGENT_URL}/conversations:agent?app_type=${APP_TYPE}`, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'Authorization': `Bearer ${token}`,
-        'x-extole-app-type': APP_TYPE,
-      },
-      body: JSON.stringify({ agentName: AGENT_NAME, userPrompt: prompt, surface: APP_TYPE }),
-    }, 120_000);
-  } catch {
-    throw new Error('Extole AI agent server is unavailable');
+const POLL_INTERVAL_MS = 2000;
+const POLL_MAX_ATTEMPTS = 90; // 90 × 2s = 3 minutes
+const MAX_POLL_ERRORS = 5;
+
+export async function sendToAgent(prompt, token, verbose) {
+  const created = await apiJson('/v1/conversations:agent', token, {
+    method: 'POST',
+    body: JSON.stringify({ agentName: AGENT_NAME, userPrompt: prompt, surface: APP_TYPE }),
+    verbose,
+    baseUrl: AGENT_URL,
+  });
+
+  const frames = ['⠋', '⠙', '⠹', '⠸', '⠼', '⠴', '⠦', '⠧', '⠇', '⠏'];
+  let frame = 0;
+  let pollAttempts = 0;
+  let pollErrors = 0;
+
+  for (;;) {
+    if (++pollAttempts > POLL_MAX_ATTEMPTS) {
+      process.stderr.write('\r\x1b[K');
+      throw new Error(`Agent did not respond after ${POLL_MAX_ATTEMPTS} attempts.`);
+    }
+    await sleep(POLL_INTERVAL_MS);
+
+    let messages;
+    try {
+      messages = await apiJson(`/v1/conversations/${created.conversationId}/messages`, token, { verbose, baseUrl: AGENT_URL });
+      pollErrors = 0;
+    } catch (e) {
+      if (++pollErrors >= MAX_POLL_ERRORS) {
+        process.stderr.write('\r\x1b[K');
+        throw new Error(`Too many poll errors: ${e.message}`);
+      }
+      process.stderr.write(`\r  poll error (${pollErrors}/${MAX_POLL_ERRORS}): ${e.message}    `);
+      continue;
+    }
+
+    const assistantMessage = [...messages].reverse().find(message => message.type === 'assistant');
+    if (assistantMessage) {
+      process.stderr.write('\r\x1b[K');
+      return assistantMessage.text;
+    }
+
+    const errorMessage = [...messages].reverse().find(message => message.type === 'error');
+    if (errorMessage) {
+      process.stderr.write('\r\x1b[K');
+      throw new Error(errorMessage.text || 'Agent reported an error');
+    }
+
+    const lastMessage = messages[messages.length - 1];
+    process.stderr.write(`\r${frames[frame++ % frames.length]}  ${lastMessage?.type || 'waiting'}    `);
   }
-  if (!response.ok) {
-    const text = await response.text();
-    throw new Error(`Agent error ${response.status}: ${text}`);
-  }
-  const data = await response.json();
-  const assistantMessage = [...(data.messages ?? [])].reverse().find(message => message.type === 'assistant');
-  return assistantMessage?.text ?? data.response ?? JSON.stringify(data);
 }
 
 export function chatCommand() {
@@ -39,7 +70,7 @@ export function chatCommand() {
       const token = resolveToken(options);
       const prompt = promptParts.join(' ');
       try {
-        const reply = await sendToAgent(prompt, token);
+        const reply = await sendToAgent(prompt, token, options.verbose);
         console.log(reply);
       } catch (error) {
         console.error(`Error: ${error.message}`);
