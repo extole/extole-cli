@@ -85,12 +85,13 @@ export function coerceSettingValue(key, rawValue, variable) {
 
 const COMPONENTS_PAGE_SIZE = 500;
 
-async function fetchAllComponents(token, params, verbose) {
+async function fetchAllComponents(token, params, verbose, built = false) {
   const all = [];
   let offset = 0;
+  const path = built ? '/v1/components/built' : '/v1/components';
   for (;;) {
     const qs = new URLSearchParams({ limit: String(COMPONENTS_PAGE_SIZE), offset: String(offset), ...params });
-    const page = await apiJson(`/v1/components?${qs}`, token, { verbose, baseUrl: API_BASE });
+    const page = await apiJson(`${path}?${qs}`, token, { verbose, baseUrl: API_BASE });
     all.push(...page);
     if (page.length < COMPONENTS_PAGE_SIZE) break;
     offset += COMPONENTS_PAGE_SIZE;
@@ -323,16 +324,26 @@ export function componentsCommand() {
     .option('--filter-type <type>', 'Filter by component type (matches parent types and subtypes)')
     .option('--having-any-types <types>', 'Server-side filter by exact type(s), comma-separated (e.g. reward-supplier-v10.0,reward-supplier-v10.1)')
     .option('--state <state>', 'Filter by owning campaign state (e.g. LIVE, NOT_LAUNCHED)')
+    .option('--parent <id>', 'Server-side filter to descendants of this component (flat list, not nested — pair with --max-depth)')
+    .option('--max-depth <n>', 'With --parent, how many levels down to include: a number, or "all" (default: 1, direct children only)')
+    .option('--built', 'Show resolved buildtime values instead of raw javascript@buildtime:... expressions, for every listed component')
     .option('--filter <substr>', 'Filter by name substring (case-insensitive)')
     .enablePositionalOptions()
     .action(async (opts) => {
+      if (opts.maxDepth && !opts.parent) {
+        console.error('Error: --max-depth requires --parent.');
+        process.exit(2);
+      }
+
       const token = resolveToken(opts);
       const params = {};
       if (opts.program) params.campaign_ids = opts.program;
       if (opts.havingAnyTypes) params.having_any_types = opts.havingAnyTypes;
       if (opts.state) params.state = opts.state;
+      if (opts.parent) params.parent_component_id = opts.parent;
+      if (opts.maxDepth) params.max_depth = opts.maxDepth;
 
-      let list = await fetchAllComponents(token, params, opts.verbose);
+      let list = await fetchAllComponents(token, params, opts.verbose, opts.built);
 
       if (opts.filterType) list = list.filter(c => matchesType(c, opts.filterType));
       if (opts.filter) {
@@ -360,6 +371,9 @@ export function componentsCommand() {
       'extole components --filter-type reward-supplier',
       'extole components --filter "gift card"',
       'extole components --having-any-types reward-supplier-v10.0 --state LIVE',
+      'extole components --parent <component-id>',
+      'extole components --parent <component-id> --max-depth all',
+      'extole components --having-any-types reward-supplier-v10.0 --built --json',
     ],
   });
 
@@ -754,7 +768,10 @@ export function componentsCommand() {
     .description('Without --setting: show every COMPONENT_REFERENCE/COMPONENT_REFERENCE_LIST setting across the account that already points at this component, or could — the reverse lookup of "what references this component". Useful before deleting or renaming a component. With --setting: manage one COMPONENT_REFERENCE(_LIST) setting owned by this component.')
     .argument('<component-id>', 'Component ID — the reference target (no --setting), or the component that owns --setting')
     .option('--setting <name>', 'Manage this COMPONENT_REFERENCE/COMPONENT_REFERENCE_LIST setting on <component-id>, instead of the reverse lookup')
+    .option('--selection <selection>', 'Without --setting: filter to SELECTED or SELECTABLE only')
+    .option('--having-any-ancestor-types <types>', 'Without --setting: filter to referencers whose component has any of these types in its ancestry, comma-separated')
     .option('--select <component-id>', 'Select this component for --setting (repeatable for COMPONENT_REFERENCE_LIST settings — replaces the full selected set)', (value, previous) => previous.concat([value]), [])
+    .option('--add <component-id>', 'Add this component to --setting without disturbing the existing selection (repeatable; COMPONENT_REFERENCE_LIST settings only)', (value, previous) => previous.concat([value]), [])
     .option('--unselect <component-id>', 'Unselect this component for --setting (repeatable for COMPONENT_REFERENCE_LIST settings)', (value, previous) => previous.concat([value]), [])
     .option('--list-selectable', 'List components eligible for selection on --setting')
     .option('--list-selected', 'List components currently selected for --setting')
@@ -764,7 +781,12 @@ export function componentsCommand() {
       const token = resolveToken(opts);
 
       if (!opts.setting) {
-        const rows = await apiJson(`/v1/components/${componentId}/selectable-by-references`, token, { verbose: opts.verbose, baseUrl: API_BASE });
+        const query = new URLSearchParams();
+        if (opts.selection) query.set('selection', opts.selection);
+        if (opts.havingAnyAncestorTypes) query.set('having_any_ancestor_types', opts.havingAnyAncestorTypes);
+        const queryString = query.toString() ? `?${query}` : '';
+
+        const rows = await apiJson(`/v1/components/${componentId}/selectable-by-references${queryString}`, token, { verbose: opts.verbose, baseUrl: API_BASE });
         if (opts.json) { printJson(rows, opts); return; }
 
         if (rows.length === 0) {
@@ -779,7 +801,9 @@ export function componentsCommand() {
           console.log('Currently selected by:');
           for (const r of selected) {
             const socket = r.socket_name ? `  socket=${r.socket_name}` : '';
-            console.log(`  ${r.campaign_name}  (${r.campaign_id})  ${r.component_name}  ${r.setting_name} [${r.setting_type}]${socket}  variant=${r.variant}`);
+            const componentName = r.component_display_name || r.component_name;
+            const settingName = r.setting_display_name || r.setting_name;
+            console.log(`  ${r.campaign_name}  (${r.campaign_id})  ${componentName}  ${settingName} [${r.setting_type}]${socket}  variant=${r.variant}`);
           }
         }
 
@@ -787,15 +811,17 @@ export function componentsCommand() {
           console.log(selected.length > 0 ? '\nCould also be selected by:' : 'Could be selected by:');
           for (const r of selectable) {
             const socket = r.socket_name ? `  socket=${r.socket_name}` : '';
-            console.log(`  ${r.campaign_name}  (${r.campaign_id})  ${r.component_name}  ${r.setting_name} [${r.setting_type}]${socket}  variant=${r.variant}`);
+            const componentName = r.component_display_name || r.component_name;
+            const settingName = r.setting_display_name || r.setting_name;
+            console.log(`  ${r.campaign_name}  (${r.campaign_id})  ${componentName}  ${settingName} [${r.setting_type}]${socket}  variant=${r.variant}`);
           }
         }
         return;
       }
 
-      const modesRequested = [opts.select.length > 0, opts.unselect.length > 0, opts.listSelectable, opts.listSelected].filter(Boolean).length;
+      const modesRequested = [opts.select.length > 0, opts.add.length > 0, opts.unselect.length > 0, opts.listSelectable, opts.listSelected].filter(Boolean).length;
       if (modesRequested !== 1) {
-        console.error('Error: with --setting, pass exactly one of --select, --unselect, --list-selectable, --list-selected.');
+        console.error('Error: with --setting, pass exactly one of --select, --add, --unselect, --list-selectable, --list-selected.');
         process.exit(2);
       }
 
@@ -822,8 +848,13 @@ export function componentsCommand() {
         return;
       }
 
-      const action = opts.select.length > 0 ? 'select' : 'unselect';
-      const ids = opts.select.length > 0 ? opts.select : opts.unselect;
+      if (opts.add.length > 0 && !isList) {
+        console.error(`Error: --add only applies to COMPONENT_REFERENCE_LIST settings — "${opts.setting}" is a single-valued COMPONENT_REFERENCE. Use --select instead.`);
+        process.exit(2);
+      }
+
+      const action = opts.select.length > 0 ? 'select' : opts.add.length > 0 ? 'add' : 'unselect';
+      const ids = opts.select.length > 0 ? opts.select : opts.add.length > 0 ? opts.add : opts.unselect;
       if (!isList && ids.length > 1) {
         console.error(`Error: "${opts.setting}" is a single-valued COMPONENT_REFERENCE setting — pass exactly one --${action} value.`);
         process.exit(2);
@@ -841,7 +872,8 @@ export function componentsCommand() {
       });
 
       if (opts.json) { printJson(result, opts); return; }
-      console.log(`${action === 'select' ? 'Selected' : 'Unselected'} on "${opts.setting}":`);
+      const actionLabel = action === 'select' ? 'Selected' : action === 'add' ? 'Added' : 'Unselected';
+      console.log(`${actionLabel} on "${opts.setting}":`);
       console.log(JSON.stringify(result.values, null, 2));
     });
 
@@ -850,9 +882,12 @@ export function componentsCommand() {
     examples: [
       'extole components references <component-id>',
       'extole components references <component-id> --json',
+      'extole components references <component-id> --selection SELECTED',
+      'extole components references <component-id> --having-any-ancestor-types reward-supplier-v10.0',
       'extole components references <component-id> --setting rewardSupplier --list-selectable',
       'extole components references <component-id> --setting rewardSupplier --list-selected',
       'extole components references <component-id> --setting rewardSupplier --select <target-id>',
+      'extole components references <component-id> --setting rewardSupplier --add <target-id>',
       'extole components references <component-id> --setting rewardSupplier --unselect <target-id>',
     ],
   });
@@ -1412,6 +1447,50 @@ export function componentsCommand() {
 
   components.addCommand(setCmd);
   components.addCommand(downloadCmd);
+
+  // ── export ─────────────────────────────────────────────────────────────────
+
+  const exportCmd = new Command('export')
+    .description('Read every component matching the given type(s), with buildtime values resolved, into one JSON document — for cross-client config review or diffing against another account')
+    .requiredOption('--having-any-types <types>', 'Exact type(s) to export, comma-separated')
+    .option('--state <state>', 'Filter by owning campaign state (e.g. LIVE, NOT_LAUNCHED)')
+    .option('--program <id>', 'Filter by program (campaign) ID')
+    .option('--output <file>', 'Write the document to this file instead of stdout')
+    .action(async function (opts) {
+      const options = this.optsWithGlobals();
+      const token = resolveToken(options);
+      const params = { having_any_types: options.havingAnyTypes };
+      if (options.state) params.state = options.state;
+      if (options.program) params.campaign_ids = options.program;
+
+      const list = await fetchAllComponents(token, params, options.verbose, true);
+      const document = list.map(c => ({
+        id: c.id,
+        name: c.name,
+        display_name: c.display_name,
+        types: c.types,
+        campaign_id: c.campaign_id,
+        campaign_state: c.campaign_state,
+        variables: c.variables,
+      }));
+
+      if (options.output) {
+        writeFileSync(options.output, JSON.stringify(document, null, 2) + '\n');
+        console.error(`Exported ${document.length} component(s) to ${options.output}`);
+        return;
+      }
+      printJson(document, options);
+    });
+
+  addGlobalOptions(exportCmd, {
+    output: true,
+    examples: [
+      'extole components export --having-any-types reward-supplier-v10.0',
+      'extole components export --having-any-types reward-supplier-v10.0 --state LIVE --output reward-suppliers.json',
+    ],
+  });
+
+  components.addCommand(exportCmd);
 
   return components;
 }

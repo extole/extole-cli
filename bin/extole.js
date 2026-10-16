@@ -23,6 +23,8 @@ import { audiencesCommand } from '../src/commands/audiences.js';
 import { notificationsCommand } from '../src/commands/notifications.js';
 import { rewardSuppliersCommand } from '../src/commands/reward-suppliers.js';
 import { apiCommand } from '../src/commands/api.js';
+import { sftpDestinationsCommand } from '../src/commands/sftp-destinations.js';
+import { keysCommand } from '../src/commands/keys.js';
 import { setRequestTimeoutMs } from '../src/api.js';
 
 const { version } = pkg;
@@ -72,6 +74,8 @@ program.addCommand(eventsCommand().helpGroup('Events & Integrations:'));
 program.addCommand(streamCommand().helpGroup('Events & Integrations:'));
 program.addCommand(webhooksCommand().helpGroup('Events & Integrations:'));
 program.addCommand(notificationsCommand().helpGroup('Events & Integrations:'));
+program.addCommand(sftpDestinationsCommand().helpGroup('Events & Integrations:'));
+program.addCommand(keysCommand().helpGroup('Events & Integrations:'));
 
 program.addCommand(reportsCommand().helpGroup('Reports & Health:'));
 program.addCommand(healthCommand().helpGroup('Reports & Health:'));
