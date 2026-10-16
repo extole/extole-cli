@@ -26,6 +26,8 @@ Developer CLI for the Extole API.
 - [Events](#events)
 - [Webhooks](#webhooks)
 - [Notifications](#notifications)
+- [Keys](#keys)
+- [SFTP Destinations](#sftp-destinations)
 - [Reports](#reports)
 - [Health](#health)
 - [Chat](#chat)
@@ -125,6 +127,8 @@ extole auth logout --account acme                             # remove account
 extole auth token | pbcopy
 curl -H "Authorization: Bearer $(extole auth token)" https://api.extole.io/v6/webhooks/built
 ```
+
+Running `auth token` from an AI coding agent can be blocked by the agent's own permission classifier, since the command prints a live credential into the conversation transcript.
 
 All commands use the default account unless `--account NAME` is specified.
 
@@ -343,6 +347,9 @@ extole components --program <id>                   # scoped to one program
 extole components --filter-type reward-supplier    # filter by type (matches subtypes too)
 extole components --filter "gift card"             # filter by name substring
 extole components --having-any-types reward-supplier-v10.0 --state LIVE  # server-side exact-type + campaign-state filter
+extole components --parent <component-id>          # direct children only, server-side, flat list
+extole components --parent <component-id> --max-depth all  # every descendant
+extole components --having-any-types reward-supplier-v10.0 --built --json  # resolved buildtime values, every match
 
 extole components get <component-id>               # full config + variables
 extole components get <component-id> --tree        # full real structure, from the campaign's true root
@@ -354,12 +361,15 @@ extole components get <component-id> --tree --built # full tree with every node'
 extole components settings <component-id>          # just the settings, without the rest of the config
 extole components settings <component-id> --built  # resolved buildtime values
 
+extole components export --having-any-types reward-supplier-v10.0                    # one document, every match
+extole components export --having-any-types reward-supplier-v10.0 --output file.json # write to a file
+
 extole components types                            # all concrete types in this account
 extole components types --parent rule              # subtypes of a given parent type
 extole components types --parent rule --tree       # rendered as a hierarchy
 ```
 
-`--filter-type` does substring matching against the full type hierarchy (`--filter-type reward` matches `reward-v10.0`, `reward-rule-v10.0`, etc.), evaluated client-side. `--having-any-types` is the server-side equivalent for exact type matches (comma-separated for more than one), and `--state` filters by the owning campaign's state (`LIVE`, `NOT_LAUNCHED`) — added since combining type and state filtering previously meant hand-rolling an `extole api` call. `--tree` on `get` renders the full downstream subgraph like `tree`/`npm ls` — box-drawing connectors, each node's type, and the socket it's installed into (e.g. `[rewardRules]`), which is often the fastest way to understand how a campaign is actually wired together. It walks up to the campaign's true root first, regardless of which component id in the tree you passed, so it always shows the complete structure — the id you asked for is marked `← requested` so you don't lose track of it. It also resolves and attaches webhooks, event streams, and cross-campaign socket subscriptions — these are modeled as independent resources that point *at* a component rather than being owned children, so a plain ownership walk would otherwise miss them; add `--basic` to skip that extra resolution on accounts with a lot of webhooks/event-streams where the added latency isn't worth it. `--built` calls `GET /v1/components/{id}/built` so that variables backed by `javascript@buildtime:...` expressions (e.g. a webhook ID discovered by tag) show their resolved value instead of the raw expression — the same pattern `webhooks get --built` uses. Combined with `--tree`, `--built` resolves every real node in the tree the same way — added since the tree endpoint itself has no built/resolved variant, so each node's own `/built` representation is fetched in parallel and spliced back in (synthetic webhook/event-stream nodes are skipped since they already come from already-built sources).
+`--filter-type` does substring matching against the full type hierarchy (`--filter-type reward` matches `reward-v10.0`, `reward-rule-v10.0`, etc.), evaluated client-side. `--having-any-types` is the server-side equivalent for exact type matches (comma-separated for more than one), and `--state` filters by the owning campaign's state (`LIVE`, `NOT_LAUNCHED`) — added since combining type and state filtering previously meant hand-rolling an `extole api` call. `--parent <component-id>` (a different thing from `types --parent`, a parent *type name*) returns a component's descendants as a flat, paginated list computed server-side — `--max-depth` controls how many levels down (a number, or `all`; defaults to 1, direct children only) — a lighter-weight alternative to `get --tree` when you don't need the full nested/rendered structure, webhooks, or event streams, just the list of components under a given one. `--built` on the bulk list resolves buildtime values for every listed component via `GET /v1/components/built`, auto-paginating past that endpoint's own silent 1,000-result default. `--tree` on `get` renders the full downstream subgraph like `tree`/`npm ls` — box-drawing connectors, each node's type, and the socket it's installed into (e.g. `[rewardRules]`), which is often the fastest way to understand how a campaign is actually wired together. It walks up to the campaign's true root first, regardless of which component id in the tree you passed, so it always shows the complete structure — the id you asked for is marked `← requested` so you don't lose track of it. It also resolves and attaches webhooks, event streams, and cross-campaign socket subscriptions — these are modeled as independent resources that point *at* a component rather than being owned children, so a plain ownership walk would otherwise miss them; add `--basic` to skip that extra resolution on accounts with a lot of webhooks/event-streams where the added latency isn't worth it. `--built` calls `GET /v1/components/{id}/built` so that variables backed by `javascript@buildtime:...` expressions (e.g. a webhook ID discovered by tag) show their resolved value instead of the raw expression — the same pattern `webhooks get --built` uses. Combined with `--tree`, `--built` resolves every real node in the tree the same way — added since the tree endpoint itself has no built/resolved variant, so each node's own `/built` representation is fetched in parallel and spliced back in (synthetic webhook/event-stream nodes are skipped since they already come from already-built sources). `--built`'s `variables` array has no structural signal linking related settings — `html` and `css` on a creative component, for instance, sit as independent flat entries with no indication that both are required together for correct rendering. `export` combines `--having-any-types`/`--state`/`--program` with `--built`-style resolution into a single document — one JSON array covering every matching component's id, types, owning campaign, and resolved settings — for comparing a type's configuration across many campaigns or accounts at once.
 
 `components settings` calls `GET /v1/components/{id}/settings[/built]` — a narrower, lighter-weight sibling to `components get` for callers that only need the variables array (e.g. reading integration config at runtime), without the rest of the component object.
 
@@ -424,7 +434,7 @@ extole components deploy --source ./my_integration --verbose
 
 Running `deploy` without `--component` always creates a new campaign. Pass `--component` with the ID from the first deploy to update in place. Settings values can reference external files using `%{/path/to/file.js}%` — the CLI inlines the file content before uploading.
 
-On a `campaign_name_already_used` error when creating a new campaign, the server's name-uniqueness check can race the campaign creation it's guarding — so the campaign this exact call attempted to create may have actually been created despite the error. `deploy` checks for a campaign with the exact attempted name updated in the last 5 minutes and, if found, prints its id alongside the error as a note to check before retrying — it never silently converts the failure into a success, since a same-named campaign may simply have pre-existed.
+On a `campaign_name_already_used` error when creating a new campaign, the server's name-uniqueness check can race the campaign creation it's guarding — so the campaign this exact call attempted to create may have actually been created despite the error. `deploy` checks for a campaign with the exact attempted name updated in the last 5 minutes and, if found, prints its id alongside the error as a note to check before retrying — the call still reports the original error, since a same-named campaign may simply have pre-existed.
 
 ### Patching Component Settings
 
@@ -436,7 +446,7 @@ extole components set <component-id> --setting webhookUrl=https://example.com/ho
 extole components set <component-id> --setting webhookUrl=https://example.com/hook --dry-run
 ```
 
-Values are coerced to the setting's declared type before sending — check a setting's type via `components get <component-id>` (each entry in `variables` has a `type`). `BOOLEAN` accepts `true`/`false`; `INTEGER` accepts a whole number; list/object-typed settings (`STRING_LIST`, `STRING_MAP`, `JSON`, etc.) require a valid JSON value, e.g. `--setting tags='["a","b"]'`. Anything else is sent as a plain string, unchanged. A value that doesn't match its type's contract errors immediately, before any network call — no silent guessing. Structural settings (`MULTI_SOCKET`, `SOCKET`, etc.) aren't settable this way at all; those are wired via `components create`/`duplicate`/`deploy`. Changes on LIVE campaigns are staged until you republish (via `components deploy --publish` or my.extole).
+Values are coerced to the setting's declared type before sending — check a setting's type via `components get <component-id>` (each entry in `variables` has a `type`). `BOOLEAN` accepts `true`/`false`; `INTEGER` accepts a whole number; list/object-typed settings (`STRING_LIST`, `STRING_MAP`, `JSON`, etc.) require a valid JSON value, e.g. `--setting tags='["a","b"]'`. Anything else is sent as a plain string, unchanged. A value that doesn't match its type's contract errors immediately, before any network call. Structural settings (`MULTI_SOCKET`, `SOCKET`, etc.) aren't settable this way at all; those are wired via `components create`/`duplicate`/`deploy`. Changes on LIVE campaigns are staged until you republish (via `components deploy --publish` or my.extole).
 
 For multi-line/script-shaped settings, use `--setting-file <name>=<path>` instead of typing the value inline — it reads the new value from a file, shows a diff against the current value, and asks for confirmation before sending (skip the prompt with `-y`/`--yes` for non-interactive/agent use):
 
@@ -445,7 +455,7 @@ extole components set <component-id> --setting-file requestScript=request.js
 extole components set <component-id> --setting-file requestScript=request.js --yes
 ```
 
-Mixing `--setting` and `--setting-file` in one call sends both in the same PUT, but only the `--setting-file` entries get a diff — the confirmation prompt lists any inline `--setting` values alongside it so it's clear they're included too.
+Mixing `--setting` and `--setting-file` in one call sends both in the same PUT, but only the `--setting-file` entries get a diff — the confirmation prompt lists any inline `--setting` values alongside it.
 
 ### Duplicating Components
 
@@ -460,7 +470,7 @@ extole components duplicate <component-id> --dry-run
 
 Passing `--target-campaign` duplicates just the one component and installs the copy into that existing campaign — the pattern for adding a copy of a field, rule, or action alongside what's already there. **Omitting `--target-campaign` duplicates the source component's entire owning campaign as a brand-new campaign** (`NOT_LAUNCHED`), not just the one component — this is the pattern for installing a reusable library integration as a fresh campaign. The CLI shows which of the two will happen and asks for confirmation before acting (skip with `-y`/`--yes`).
 
-`--target-socket` requires `--target-component`, the component in the target campaign that owns the socket — the platform's underlying lookup needs an absolute path to that component, not just the campaign, so the CLI resolves `--target-component`'s id to that path automatically.
+`--target-socket` requires `--target-component`, the component in the target campaign that owns the socket. The CLI resolves `--target-component`'s id to its absolute path automatically.
 
 ### Installing a Component into a Socket
 
@@ -481,9 +491,11 @@ extole components socket list <target-component-id> --setting rewardSuppliers
 
 ```
 extole components references <component-id>
+extole components references <component-id> --selection SELECTED
+extole components references <component-id> --having-any-ancestor-types reward-supplier-v10.0
 ```
 
-Read-only, one GET, no request body.
+Read-only, one GET, no request body. `--selection` (`SELECTED` or `SELECTABLE`) and `--having-any-ancestor-types` (comma-separated) filter server-side instead of scrolling past rows you don't want. Output prefers display names (`component_display_name`, `setting_display_name`) over raw names where the server provides them, falling back to the raw name otherwise.
 
 Pass `--setting <name>` to manage one `COMPONENT_REFERENCE`(`_LIST`) setting owned by `<component-id>` directly, instead of the reverse lookup — a more direct path than hand-constructing the `{"component.id": ...}` map shape via `components set`:
 
@@ -491,10 +503,11 @@ Pass `--setting <name>` to manage one `COMPONENT_REFERENCE`(`_LIST`) setting own
 extole components references <component-id> --setting rewardSupplier --list-selectable
 extole components references <component-id> --setting rewardSupplier --list-selected
 extole components references <component-id> --setting rewardSupplier --select <target-id>
+extole components references <component-id> --setting rewardSupplier --add <target-id>
 extole components references <component-id> --setting rewardSupplier --unselect <target-id>
 ```
 
-The CLI reads the setting's declared type off the component itself and picks the right endpoint family automatically (`COMPONENT_REFERENCE` vs. `COMPONENT_REFERENCE_LIST`) — you don't need to know which one it is. `--select`/`--unselect` are repeatable, but only meaningful for `COMPONENT_REFERENCE_LIST` settings; a single-valued `COMPONENT_REFERENCE` setting accepts exactly one. **For `COMPONENT_REFERENCE_LIST`, `--select` replaces the complete selected set** (the server-side contract is "send everything that should end up selected," not "add this one") — pass every id that should remain selected, not just the new one. Add `--variant <name>` to act on a setting value variant other than `default`.
+The CLI reads the setting's declared type off the component itself and picks the right endpoint family automatically (`COMPONENT_REFERENCE` vs. `COMPONENT_REFERENCE_LIST`) — you don't need to know which one it is. `--select`/`--unselect` are repeatable, but only meaningful for `COMPONENT_REFERENCE_LIST` settings; a single-valued `COMPONENT_REFERENCE` setting accepts exactly one. **For `COMPONENT_REFERENCE_LIST`, `--select` replaces the complete selected set** (the server-side contract is "send everything that should end up selected," not "add this one") — pass every id that should remain selected, not just the new one. Use `--add` instead when you only want to add to the existing selection without reading it first — it's `COMPONENT_REFERENCE_LIST`-only (a single-valued `COMPONENT_REFERENCE` has nothing to add to; use `--select`). Add `--variant <name>` to act on a setting value variant other than `default`.
 
 ### Deleting Components
 
@@ -639,7 +652,7 @@ extole webhooks delete <webhook-id>
 
 ### Editing an Existing Webhook
 
-Update a single field on an existing webhook via a partial PUT — e.g. tweak the `request` or `response_body_handler` script without touching anything else (name, URL, tags, etc. stay untouched). Shows a diff against the current value and asks for confirmation before sending, since this changes live dispatch/fulfillment logic. Skip the prompt with `-y`/`--yes` for non-interactive/agent use.
+Update a single field on an existing webhook via a partial PUT — e.g. tweak the `request` or `response_body_handler` script without touching anything else (name, URL, tags, etc. stay untouched). Shows a diff against the current value and asks for confirmation before sending. Skip the prompt with `-y`/`--yes` for non-interactive/agent use.
 
 ```
 extole webhooks edit <webhook-id> --field request --file request.js
@@ -742,6 +755,54 @@ extole notifications --json            # raw response, suitable for scripting
 
 Each notification shows time, level, name, message, and key data fields (campaign_id, controller_id, person_id, cause_event_id) — most of which feed into other CLI commands.
 
+## Keys
+
+Manage Security Center client keys — credentials and cryptographic material referenced by id elsewhere (SFTP destinations' `--key-id`/`--key-ids`, OAuth integrations, webhook secrets, JWT signing keys). Create once, then reference the id wherever it's needed.
+
+```
+extole keys                              # list all
+extole keys --tag internal:shopify       # filter by tag (repeatable)
+extole keys --built                      # fully resolved runtime form
+
+extole keys create --body-file key.json
+cat key.json | extole keys create --body-file -
+
+extole keys archive <id>                 # retained, restorable
+extole keys unarchive <id>
+extole keys delete <id> --yes            # permanent
+```
+
+`create` only accepts the request body via `--body-file` (a path, or `-` for stdin), never as an inline flag. The request shape is polymorphic on `algorithm` (OAuth variants, SSH, PGP, JWT, generic password/HTTP-basic); see [the API reference](https://docs.extole.com/api-reference/security-keys/create-client-key) for the full set of fields per algorithm. A `PASSWORD`-algorithm key's value is masked (`*****`) in the `create` response and in `list`.
+
+## SFTP Destinations
+
+Manage SFTP connection profiles used for automated report and file delivery. Two types: `LOCAL` (an Extole-hosted dropbox the client's own systems connect to) and `EXTERNAL` (a partner-hosted server Extole connects out to).
+
+```
+extole sftp-destinations                                  # list all
+extole sftp-destinations --filter-type LOCAL              # filter by type
+extole sftp-destinations --filter-name "Reward Fulfillment"
+
+extole sftp-destinations get <id>                          # full configuration
+
+extole sftp-destinations create --type LOCAL --key-ids <key-id>
+extole sftp-destinations create --type EXTERNAL --key-id <key-id> --username partner --host sftp.partner.com
+
+extole sftp-destinations update <id> --name "New Name"
+extole sftp-destinations update <id> --key-ids <key-id-1>,<key-id-2>
+
+extole sftp-destinations delete <id> --yes
+
+extole sftp-destinations validate <id>                     # connectivity test, EXTERNAL only
+extole sftp-destinations sync <id>                         # trigger an immediate sync, EXTERNAL only
+
+extole sftp-destinations entries <id>                      # list files/directories at the root
+extole sftp-destinations entries <id> --path dropbox       # a specific subdirectory
+extole sftp-destinations entries <id> --entry-type FILE    # ALL (default), DIRECTORY, or FILE
+```
+
+`--key-ids`/`--key-id` reference existing Client Keys by id. `create`/`update` validate which flags apply to which type before any network call (`--host`/`--username`/`--port`/`--dropbox-path`/`--key-id` are `EXTERNAL`-only; `--key-ids`/`--file-processing-enabled` are `LOCAL`-only); `update` reads the destination's existing type automatically, so you only need to pass the fields you're changing. `entries` auto-paginates past the endpoint's own page size using its `offset_token`.
+
 ## Reports
 
 **Discovery → describe → run** is the self-documenting flow — each step's output feeds the next:
@@ -800,7 +861,7 @@ extole reports run --type summary --days 30 \
 
 ## Health
 
-Domain and email deliverability checks. The base command is read-only — validates email domains (SPF, DMARC, DKIM, MX, A records) and program domains (CNAME/A resolution) against Extole's validation API. Nothing is created or modified by `extole health` itself; the `provision-dkim` subcommand is the only write operation, and it requires explicit confirmation.
+Domain and email deliverability checks. The base command is read-only — it validates email domains (SPF, DMARC, DKIM, MX, A records) and program domains (CNAME/A resolution) against Extole's validation API. The `provision-dkim` subcommand is the only write operation, and it requires explicit confirmation.
 
 ```
 extole health                       # check all email domains + program domains
@@ -834,7 +895,7 @@ extole chat "explain the reward supplier types available"
 extole chat "what's the difference between causeEventIds and rootEventIds on steps?"
 ```
 
-Uses your stored Extole token; no separate login.
+Uses your stored Extole token; no separate login. The agent processes the prompt asynchronously — the CLI submits it, then polls for the reply (showing a spinner with the agent's current step), typically 15-60 seconds depending on how many tool calls the agent makes. `--verbose` logs every request, including the poll calls.
 
 ## Feedback
 
@@ -875,9 +936,9 @@ extole api /v1/components/123 --jq '.variables[0].name'
 
 GET by default. `--method` to override, `--body` for POST/PUT/PATCH, `--auth-base` for the auth API (`api.extole.com`). `--query key=value` (repeatable) URL-encodes and appends query parameters, so a query value with characters a shell would otherwise mangle doesn't have to be hand-embedded in the path string. Output is JSON-formatted and supports `--compact`.
 
-Added `--jq <filter>` to project or trim large responses without piping to a separate process — it shells out to `jq` on your `PATH` (install it if missing; the error message says how) and prints its output directly, so any jq filter you'd normally run against the raw JSON works unchanged. `--query jq=...` is rejected with a pointer to `--jq` instead of being silently forwarded — no endpoint actually supports `jq` as a server-side query parameter, so that form previously just returned the full unfiltered payload with no warning.
+`--jq <filter>` projects or trims large responses without piping to a separate process — it shells out to `jq` on your `PATH` (install it if missing; the error message says how) and prints its output directly, so any jq filter you'd normally run against the raw JSON works unchanged. `--query jq=...` is rejected with a pointer to `--jq` instead — no endpoint accepts `jq` as a server-side query parameter.
 
-Every call also prints the response size to stderr (e.g. `← 24.5 MB`), added so an unexpectedly large payload — the kind that chokes a naive parser or an external tool's own size cap — is visible at a glance instead of requiring a manual `| wc -c` to notice. It's on stderr so it never mixes into piped stdout output; redirect it away (`2>/dev/null`) if it's not wanted.
+Every call also prints the response size to stderr (e.g. `← 24.5 MB`), so a large payload is visible at a glance instead of requiring a manual `| wc -c`. It's on stderr so it never mixes into piped stdout output; redirect it away (`2>/dev/null`) if it's not wanted.
 
 ## Output Conventions
 
