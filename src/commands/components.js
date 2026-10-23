@@ -326,12 +326,17 @@ export function componentsCommand() {
     .option('--state <state>', 'Filter by owning campaign state (e.g. LIVE, NOT_LAUNCHED)')
     .option('--parent <id>', 'Server-side filter to descendants of this component (flat list, not nested — pair with --max-depth)')
     .option('--max-depth <n>', 'With --parent, how many levels down to include: a number, or "all" (default: 1, direct children only)')
+    .option('--external-element <type:id>', 'Server-side filter to components whose built configuration references this external element (e.g. AUDIENCE:7001234567890123)')
     .option('--built', 'Show resolved buildtime values instead of raw javascript@buildtime:... expressions, for every listed component')
     .option('--filter <substr>', 'Filter by name substring (case-insensitive)')
     .enablePositionalOptions()
     .action(async (opts) => {
       if (opts.maxDepth && !opts.parent) {
         console.error('Error: --max-depth requires --parent.');
+        process.exit(2);
+      }
+      if (opts.externalElement && !opts.externalElement.includes(':')) {
+        console.error('Error: --external-element must be in the form <type>:<id>, e.g. AUDIENCE:7001234567890123.');
         process.exit(2);
       }
 
@@ -342,6 +347,7 @@ export function componentsCommand() {
       if (opts.state) params.state = opts.state;
       if (opts.parent) params.parent_component_id = opts.parent;
       if (opts.maxDepth) params.max_depth = opts.maxDepth;
+      if (opts.externalElement) params.external_element = opts.externalElement;
 
       let list = await fetchAllComponents(token, params, opts.verbose, opts.built);
 
@@ -374,6 +380,7 @@ export function componentsCommand() {
       'extole components --parent <component-id>',
       'extole components --parent <component-id> --max-depth all',
       'extole components --having-any-types reward-supplier-v10.0 --built --json',
+      'extole components --external-element AUDIENCE:7001234567890123',
     ],
   });
 
