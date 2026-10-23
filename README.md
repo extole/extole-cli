@@ -915,11 +915,11 @@ Search across all published Extole API endpoints by keyword — useful when you 
 ```
 extole api search batch                        # find all batch job endpoints
 extole api search person --spec integration    # search integration spec only
-extole api search erasure --detail             # show full description + request fields
+extole api search erasure                      # one match — shows full description + request fields
 extole api search reward --spec integration    # reward state-transition endpoints
 ```
 
-Searches path, summary, description, and tags across the management and integration-server specs. Results update automatically as Extole publishes spec changes — no CLI update required.
+Searches path, summary, description, and tags across the management and integration-server specs. A search matching exactly one endpoint shows its full description, request body fields, and query parameters; multiple matches show a summary table. A polymorphic request body (e.g. `POST /v2/settings/security/keys`, which varies by `algorithm`) lists its variant names instead of a flat field list; a `multipart/form-data` request body (e.g. file uploads) shows its fields the same as a JSON body. Results update automatically as Extole publishes spec changes — no CLI update required.
 
 ### Direct API Access
 
