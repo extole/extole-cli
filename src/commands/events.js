@@ -254,18 +254,26 @@ export function eventsCommand() {
           return foundJourneyBlocker ? 'journey' : null;
         };
 
-        // Cache webhook id → name lookup; one bulk fetch
+        // Cache webhook id → name lookup; one bulk fetch, auto-paginated
+        const WEBHOOKS_PAGE_SIZE = 200;
         let _webhookNameCache = undefined;
         const getWebhookName = async (webhookId) => {
           if (_webhookNameCache === undefined) {
             try {
-              const data = await apiJson(
-                '/v6/webhooks/built?limit=200',
-                token,
-                { verbose: opts.verbose, baseUrl: API_BASE }
-              );
-              const list = Array.isArray(data) ? data : (data?.webhooks || data?.results || []);
-              _webhookNameCache = new Map(list.map(w => [w.id || w.webhook_id, w.name]));
+              const all = [];
+              let offset = 0;
+              for (;;) {
+                const data = await apiJson(
+                  `/v6/webhooks/built?limit=${WEBHOOKS_PAGE_SIZE}&offset=${offset}`,
+                  token,
+                  { verbose: opts.verbose, baseUrl: API_BASE }
+                );
+                const page = Array.isArray(data) ? data : (data?.webhooks || data?.results || []);
+                all.push(...page);
+                if (page.length < WEBHOOKS_PAGE_SIZE) break;
+                offset += WEBHOOKS_PAGE_SIZE;
+              }
+              _webhookNameCache = new Map(all.map(w => [w.id || w.webhook_id, w.name]));
             } catch {
               _webhookNameCache = new Map();
             }

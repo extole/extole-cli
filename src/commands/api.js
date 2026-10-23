@@ -78,7 +78,42 @@ function searchSpec(spec, specName, term) {
   return results;
 }
 
-function printSearchResults(results, { json, detail } = {}) {
+export function describeRequestBody(requestBodySchema, schemas = {}) {
+  if (!requestBodySchema) return null;
+  const resolve = (schema) => (schema?.$ref ? (schemas[schema.$ref.split('/').pop()] || {}) : schema) || {};
+  const resolved = resolve(requestBodySchema);
+
+  if (resolved.oneOf) {
+    const variantTitle = (variant) => {
+      if (variant.title) return variant.title;
+      if (variant.$ref) return resolve(variant).title || variant.$ref.split('/').pop();
+      if (variant.allOf) return variant.allOf.find(part => part.title)?.title || null;
+      return null;
+    };
+    return {
+      kind: 'oneOf',
+      variantCount: resolved.oneOf.length,
+      discriminator: resolved.discriminator?.propertyName || null,
+      titles: resolved.oneOf.map(variantTitle).filter(Boolean),
+    };
+  }
+
+  if (resolved.properties && Object.keys(resolved.properties).length) {
+    return {
+      kind: 'properties',
+      fields: Object.entries(resolved.properties).map(([name, def]) => ({
+        name,
+        type: def.type || (def.$ref ? def.$ref.split('/').pop() : ''),
+        format: def.format || null,
+        description: def.description || null,
+      })),
+    };
+  }
+
+  return null;
+}
+
+function printSearchResults(results, { json } = {}) {
   if (json) {
     printJson(results.map(({ method, path, summary, tags, description }) =>
       ({ method, path, summary, tags, description })));
@@ -90,7 +125,7 @@ function printSearchResults(results, { json, detail } = {}) {
     return;
   }
 
-  if (detail && results.length === 1) {
+  if (results.length === 1) {
     const match = results[0];
     console.log(`${match.method} ${match.path}  [${match.tags.join(', ')}]`);
     if (match.summary) console.log(`  ${match.summary}`);
@@ -99,17 +134,22 @@ function printSearchResults(results, { json, detail } = {}) {
       for (const line of match.description.split('\n')) console.log(`  ${line}`);
     }
 
-    const requestBodySchema = match.operation.requestBody?.content?.['application/json']?.schema;
-    if (requestBodySchema) {
-      const schemas = match._schemas || {};
-      const properties = requestBodySchema.properties || (requestBodySchema.$ref ? (schemas[requestBodySchema.$ref.split('/').pop()] || {}).properties : null);
-      if (properties && Object.keys(properties).length) {
-        console.log('\nRequest body:');
-        for (const [fieldName, fieldDef] of Object.entries(properties)) {
-          const fieldType = fieldDef.type || (fieldDef.$ref ? fieldDef.$ref.split('/').pop() : '');
-          const fieldDesc = fieldDef.description ? `  — ${fieldDef.description}` : '';
-          console.log(`  ${fieldName} (${fieldType})${fieldDesc}`);
-        }
+    const requestBodyContent = match.operation.requestBody?.content || {};
+    const contentType = ['application/json', 'multipart/form-data'].find(ct => requestBodyContent[ct]);
+    const requestBodySchema = contentType ? requestBodyContent[contentType].schema : null;
+    const label = contentType === 'multipart/form-data' ? 'Request body (multipart/form-data)' : 'Request body';
+    const description = describeRequestBody(requestBodySchema, match._schemas || {});
+
+    if (description?.kind === 'oneOf') {
+      const discriminator = description.discriminator ? ` (discriminator: ${description.discriminator})` : '';
+      console.log(`\n${label}: polymorphic, ${description.variantCount} variant${description.variantCount === 1 ? '' : 's'}${discriminator}`);
+      if (description.titles.length) console.log(`  ${description.titles.join(', ')}`);
+    } else if (description?.kind === 'properties') {
+      console.log(`\n${label}:`);
+      for (const field of description.fields) {
+        const fieldFormat = field.format ? `, ${field.format}` : '';
+        const fieldDesc = field.description ? `  — ${field.description}` : '';
+        console.log(`  ${field.name} (${field.type}${fieldFormat})${fieldDesc}`);
       }
     }
 
@@ -142,9 +182,8 @@ export function apiCommand() {
     .description('Search Extole API endpoints by keyword')
     .argument('<term>', 'Search term matched against path, summary, description, and tags')
     .option('--spec <name>', 'Limit to one spec: management or integration')
-    .option('--detail', 'Show full description and fields (most useful with a single result)')
     .action(async function (term) {
-      const { spec: specFilter, detail } = this.opts();
+      const { spec: specFilter } = this.opts();
       const opts = this.optsWithGlobals();
 
       const names = specFilter ? [specFilter] : ['management', 'integration'];
@@ -163,7 +202,7 @@ export function apiCommand() {
         return matches;
       });
 
-      printSearchResults(results, { json: opts.json, detail });
+      printSearchResults(results, { json: opts.json });
     });
 
   addGlobalOptions(search, {
@@ -172,7 +211,7 @@ export function apiCommand() {
       'extole api search batch',
       'extole api search person data',
       'extole api search reward --spec integration',
-      'extole api search webhook --detail',
+      'extole api search erasure',
     ],
   });
 
