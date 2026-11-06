@@ -8,7 +8,7 @@ import { Command } from 'commander';
 import { resolveToken, API_BASE } from '../config.js';
 import { apiJson, apiFetch, formatApiErrorBody } from '../api.js';
 import { printJson } from '../output.js';
-import { addGlobalOptions, printDiff } from '../utils.js';
+import { addGlobalOptions, printDiff, sleep, POLL_INTERVAL_MS } from '../utils.js';
 
 function confirm(question) {
   return new Promise((resolve) => {
@@ -768,6 +768,178 @@ export function componentsCommand() {
   });
 
   components.addCommand(duplicateCmd);
+
+  // ── connect ────────────────────────────────────────────────────────────────
+
+  const connectCmd = new Command('connect')
+    .argument('<component-id>', 'Component to connect')
+    .argument('<origin-id>', 'Component to connect it to — usually the one this one was copied from')
+    .description('Set a component\'s origin to another component\'s current version, so it can take that origin\'s later upgrades. Requires every child component the origin has to be present, by name, with matching types/install/elements — otherwise the server refuses and lists each structural difference. Replaces an existing origin; refused if the component already has this origin at an older version (upgrade instead). Saves the campaign\'s draft.')
+    .option('-y, --yes', 'Skip confirmation prompt')
+    .option('--dry-run', 'Print the request payload without connecting anything')
+    .action(async function (componentId, originId) {
+      const opts = this.optsWithGlobals();
+      const token = resolveToken(opts);
+
+      const component = await fetchComponent(componentId, token, opts.verbose);
+      const origin = await fetchComponent(originId, token, opts.verbose);
+
+      const name = component.display_name || component.name || componentId;
+      const originName = origin.display_name || origin.name || originId;
+      const currentOrigin = component.origin;
+
+      console.log(`component:      ${component.id}  (${name})`);
+      console.log(`current origin: ${currentOrigin ? `${currentOrigin.component_id}  version ${currentOrigin.component_version}` : '(none)'}`);
+      console.log(`new origin:     ${origin.id}  (${originName})`);
+
+      if (opts.dryRun) {
+        console.log(`\nPUT /v1/components/${componentId}/origin`);
+        console.log(JSON.stringify({ component_id: originId }, null, 2));
+        console.log('\nDry run — nothing connected. The server still validates the structure match on the real call.');
+        return;
+      }
+
+      if (!opts.yes) {
+        const ok = await confirm(currentOrigin
+          ? '\nReplace the existing origin and save the campaign draft? (y/N) '
+          : '\nConnect this origin and save the campaign draft? (y/N) ');
+        if (!ok) { console.log('Aborted.'); process.exit(0); }
+      }
+
+      const res = await apiFetch(`/v1/components/${componentId}/origin`, token, {
+        method: 'PUT',
+        body: JSON.stringify({ component_id: originId }),
+        verbose: opts.verbose,
+        baseUrl: API_BASE,
+      });
+      const text = await res.text();
+      if (!res.ok) {
+        console.error(`Error ${res.status}: ${formatApiErrorBody(text)}`);
+        process.exit(1);
+      }
+      let updated;
+      try { updated = JSON.parse(text); } catch {
+        console.error(`Unexpected non-JSON response: ${text.slice(0, 200)}`);
+        process.exit(1);
+      }
+
+      if (opts.json) { printJson(updated, opts); return; }
+      console.log(`\nconnected: ${updated.id} → origin ${updated.origin?.component_id}  version ${updated.origin?.component_version}`);
+    });
+
+  addGlobalOptions(connectCmd, {
+    output: true,
+    examples: [
+      'extole components connect <component-id> <origin-id>',
+      'extole components connect <component-id> <origin-id> --dry-run',
+      'extole components connect <component-id> <origin-id> --yes',
+    ],
+  });
+
+  components.addCommand(connectCmd);
+
+  // ── upgrade ────────────────────────────────────────────────────────────────
+
+  const upgradeCmd = new Command('upgrade')
+    .argument('<component-id>', 'Component to upgrade')
+    .description('Bring a component, and every component under it, to the latest published version of its origin, keeping the client\'s own changes. Can take several minutes and keeps running on the server even if this command\'s own wait gives up or errors — --poll-timeout only controls how long this command waits for confirmation, not the upgrade itself.')
+    .option('-y, --yes', 'Skip confirmation prompt')
+    .option('--dry-run', 'Show the component and its origin without upgrading. The platform has no upgrade preview — see `extole api /v1/components/<id>/available-upgrades` for exact targets.')
+    .option('--poll-timeout <seconds>', 'How long to keep checking campaign versions for confirmation after the upgrade call returns or errors', '900')
+    .action(async function (componentId) {
+      const opts = this.optsWithGlobals();
+      const token = resolveToken(opts);
+
+      const component = await fetchComponent(componentId, token, opts.verbose);
+      const name = component.display_name || component.name || componentId;
+      const isRoot = component.name === 'root';
+      const campaignId = component.campaign_id;
+
+      console.log(`component:  ${component.id}  (${name})`);
+      console.log(`origin:     ${component.origin ? `${component.origin.component_id}  version ${component.origin.component_version}` : '(none)'}`);
+      if (campaignId) console.log(`campaign:   ${campaignId}`);
+      if (isRoot) console.log('\nWarning: this is the root component — upgrading it rebuilds the entire campaign tree server-side and can take several minutes.');
+
+      if (opts.dryRun) {
+        console.log(`\nDry run — nothing upgraded.`);
+        return;
+      }
+
+      if (!component.origin) {
+        console.error('\nError: this component has no origin — nothing to upgrade from. Use `components connect` to give it one.');
+        process.exit(2);
+      }
+
+      if (!opts.yes) {
+        const ok = await confirm('\nProceed? (y/N) ');
+        if (!ok) { console.log('Aborted.'); process.exit(0); }
+      }
+
+      let baselineVersion = null;
+      if (campaignId) {
+        const latest = await apiJson(`/v2/campaigns/${campaignId}/versions?limit=1&offset=0`, token, { verbose: opts.verbose, baseUrl: API_BASE });
+        baselineVersion = latest[0] ? parseInt(latest[0].version, 10) : null;
+      }
+
+      console.log('\nUpgrading — this can take several minutes...');
+      let res = null;
+      try {
+        res = await apiFetch(`/v1/components/${componentId}/upgrade`, token, {
+          method: 'POST',
+          verbose: opts.verbose,
+          baseUrl: API_BASE,
+        });
+      } catch (error) {
+        console.log(`Request did not complete locally (${error.message}) — the upgrade may still be running on the server. Checking campaign versions...`);
+      }
+
+      if (res) {
+        const text = await res.text();
+        if (res.ok) {
+          let upgraded;
+          try { upgraded = JSON.parse(text); } catch { upgraded = null; }
+          if (opts.json) { printJson(upgraded ?? { upgraded: componentId }, opts); return; }
+          console.log(`\nupgraded: ${componentId}${upgraded?.origin ? `  → origin version ${upgraded.origin.component_version}` : ''}`);
+          return;
+        }
+        // A synchronous structured rejection (no upgrade available, restricted elements, or a failure found
+        // mid-run) — none of these leave a version to poll for, since a failed upgrade adds no version.
+        console.error(`\nError ${res.status}: ${formatApiErrorBody(text)}`);
+        process.exit(1);
+      }
+
+      if (!campaignId || baselineVersion === null) {
+        console.error('\nError: could not determine the owning campaign to check for completion. Check manually.');
+        process.exit(1);
+      }
+
+      const pollTimeoutMs = Number(opts.pollTimeout) * 1000;
+      const deadline = Date.now() + pollTimeoutMs;
+      while (Date.now() < deadline) {
+        await sleep(POLL_INTERVAL_MS);
+        const recent = await apiJson(`/v2/campaigns/${campaignId}/versions?limit=20&offset=0`, token, { verbose: opts.verbose, baseUrl: API_BASE });
+        const completed = recent.find(v => parseInt(v.version, 10) > baselineVersion && /- upgrade completed/.test(v.message || ''));
+        if (completed) {
+          if (opts.json) { printJson(completed, opts); return; }
+          console.log(`\nConfirmed: ${completed.message}`);
+          return;
+        }
+      }
+
+      console.error(`\nCould not confirm completion within ${opts.pollTimeout}s — it may still be running. Check with \`extole campaigns versions ${campaignId}\` for a message containing "upgrade completed".`);
+      process.exit(1);
+    });
+
+  addGlobalOptions(upgradeCmd, {
+    output: true,
+    examples: [
+      'extole components upgrade <component-id>',
+      'extole components upgrade <component-id> --dry-run',
+      'extole components upgrade <component-id> --yes --poll-timeout 1200',
+    ],
+  });
+
+  components.addCommand(upgradeCmd);
 
   // ── references ─────────────────────────────────────────────────────────────
 
