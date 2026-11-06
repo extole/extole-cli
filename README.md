@@ -472,6 +472,24 @@ Passing `--target-campaign` duplicates just the one component and installs the c
 
 `--target-socket` requires `--target-component`, the component in the target campaign that owns the socket. The CLI resolves `--target-component`'s id to its absolute path automatically.
 
+### Connecting and Upgrading Components
+
+A component copied from another one (via `duplicate`, or installed from a library template) carries an **origin** — the component and version it was copied from. `upgrade` brings a component, and everything under it, to its origin's latest published version, keeping the client's own changes. `connect` sets or replaces a component's origin, so a component that currently has none (or has drifted too far to upgrade) can take upgrades again.
+
+```
+extole components connect <component-id> <origin-id>              # prompts for confirmation
+extole components connect <component-id> <origin-id> --dry-run    # show the request without connecting
+extole components connect <component-id> <origin-id> --yes        # skip prompt (for scripts)
+
+extole components upgrade <component-id>                          # prompts for confirmation
+extole components upgrade <component-id> --dry-run                # show origin info without upgrading
+extole components upgrade <component-id> --yes --poll-timeout 1200
+```
+
+`connect` requires every child component the origin has to be present, by name, with matching types/install/elements — otherwise the server refuses and lists each structural difference. It replaces an existing origin outright; if the component already has this exact origin at an older version, the server refuses and says to upgrade instead.
+
+`upgrade` can take several minutes — on a component with many descendants (especially the root component, which rebuilds the entire campaign tree) it routinely runs past a single HTTP request's timeout. The command accounts for this: if the upgrade call itself times out or errors, it falls back to polling the campaign's version history for the completion message instead of reporting failure. The upgrade keeps running on the server regardless of whether this command's own wait gives up — `--poll-timeout` only controls how long the CLI keeps checking, not the upgrade itself. A rejected upgrade (no upgrade available, restricted external elements) returns immediately with no polling, since a failed upgrade never adds a version to wait for.
+
 ### Installing a Component into a Socket
 
 `components socket add`/`remove` wraps a separate, purpose-built socket-installation endpoint — an alternative to `components duplicate --target-socket` above that only needs the component that owns the socket, not the target campaign.
